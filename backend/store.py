@@ -68,7 +68,7 @@ def seed():
             password=secrets.token_urlsafe(14)
             c.execute('INSERT INTO users(name,email,password,role,created_at) VALUES(?,?,?,?,?)',(name,email,password_hash(password),role,now()))
             credentials.append((role,email,password))
-        for name,mi,ma,cap,color in [('Sementinhas',2,3,12,'#f2cf87'),('Pequenos Exploradores',4,6,18,'#c8d6f0'),('Geração Kids',7,11,24,'#d6e5ae')]:
+        for name,mi,ma,cap,color in [('Sementinhas',2,3,12,'#18181b'),('Pequenos Exploradores',4,6,18,'#27272a'),('Geração Kids',7,11,24,'#3f3f46')]:
             c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color) VALUES(?,?,?,?,?)',(name,mi,ma,cap,color))
         c.execute('INSERT INTO teacher_rooms VALUES(2,2)')
         kids=[('Lucas Oliveira','2021-05-12',2,3),('Sofia Oliveira','2023-02-18',1,3),('Helena Santos','2020-07-08',2,4),('Theo Santos','2021-03-10',2,4),('Alice Santos','2018-09-15',3,4),('Miguel Oliveira','2017-08-04',3,3)]
