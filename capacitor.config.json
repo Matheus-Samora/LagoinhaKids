@@ -1,1 +1,9 @@
-{"appId":"com.lagoinha.kids","appName":"Lagoinha Kids","webDir":"dist"}
+{
+  "appId": "com.lagoinha.kids",
+  "appName": "Lagoinha Kids",
+  "webDir": "dist",
+  "server": {
+    "url": "https://however-boots-populations-differential.trycloudflare.com",
+    "cleartext": true
+  }
+}

@@ -9,10 +9,16 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.getenv('KIDS_DATA_DIR', str(ROOT / 'runtime'))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / 'kids.sqlite3'
-key_file = DATA / 'biometric.key'
-if not key_file.exists():
-    with key_file.open('xb') as stream: stream.write(Fernet.generate_key())
-CIPHER = Fernet(key_file.read_bytes())
+env_key = os.getenv('KIDS_BIOMETRIC_KEY') or os.getenv('KIDS_MASTER_KEY')
+if env_key:
+    raw_key = env_key.strip().encode('utf-8') if isinstance(env_key, str) else env_key
+    CIPHER = Fernet(raw_key)
+else:
+    key_file = DATA / 'biometric.key'
+    if not key_file.exists():
+        with key_file.open('xb') as stream: stream.write(Fernet.generate_key())
+    CIPHER = Fernet(key_file.read_bytes())
+
 
 @contextmanager
 def db():
@@ -43,6 +49,83 @@ def password_ok(password, stored):
 def audit(conn, user, action, child=None):
     conn.execute('INSERT INTO audit(actor,action,child_id,created_at) VALUES(?,?,?,?)', (user,action,child,now()))
 
+CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+def generate_claim_code(length=4):
+    return ''.join(secrets.choice(CLAIM_ALPHABET) for _ in range(length))
+
+def migrate_safety_and_health(conn):
+    """Additive migration for allergies, medical conditions, security claim tags and LGPD records."""
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if 'children' in tables:
+        c_fields = {r[1] for r in conn.execute('PRAGMA table_info(children)')}
+        for col in ('allergies', 'medical_conditions', 'emergency_medication', 'special_needs', 'authorized_pickups'):
+            if col not in c_fields:
+                conn.execute(f'ALTER TABLE children ADD COLUMN {col} TEXT NOT NULL DEFAULT ""')
+    if 'users' in tables:
+        u_fields = {r[1] for r in conn.execute('PRAGMA table_info(users)')}
+        if 'phone' not in u_fields:
+            conn.execute('ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ""')
+    if 'attendance' in tables:
+        a_fields = {r[1] for r in conn.execute('PRAGMA table_info(attendance)')}
+        if 'claim_code' not in a_fields:
+            conn.execute('ALTER TABLE attendance ADD COLUMN claim_code TEXT NOT NULL DEFAULT ""')
+        if 'checkout_guardian' not in a_fields:
+            conn.execute('ALTER TABLE attendance ADD COLUMN checkout_guardian TEXT NOT NULL DEFAULT ""')
+    if 'audit' in tables:
+        aud_fields = {r[1] for r in conn.execute('PRAGMA table_info(audit)')}
+        if 'ip' not in aud_fields:
+            conn.execute('ALTER TABLE audit ADD COLUMN ip TEXT NOT NULL DEFAULT ""')
+        if 'prev_hash' not in aud_fields:
+            conn.execute('ALTER TABLE audit ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ""')
+    conn.execute('''CREATE TABLE IF NOT EXISTS terms_consents(
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        child_id INTEGER,
+        term_version TEXT NOT NULL,
+        term_type TEXT NOT NULL,
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS device_tokens(
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        token TEXT NOT NULL UNIQUE,
+        platform TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )''')
+
+def migrate_school():
+    """Transactional, additive migration; preserve children, attendance and templates."""
+    conn=sqlite3.connect(DB,timeout=20)
+    try:
+        conn.execute('PRAGMA foreign_keys=OFF')
+        conn.execute('BEGIN IMMEDIATE')
+        fields={r[1] for r in conn.execute('PRAGMA table_info(rooms)')}
+        if 'created_by' not in fields: conn.execute('ALTER TABLE rooms ADD COLUMN created_by INTEGER REFERENCES users(id)')
+        if 'active' not in fields: conn.execute('ALTER TABLE rooms ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
+        info={r[1]:r for r in conn.execute('PRAGMA table_info(children)')}
+        if info.get('room_id') and info['room_id'][3]:
+            conn.execute('CREATE TABLE children_nullable_v2(id INTEGER PRIMARY KEY,name TEXT NOT NULL,birthday TEXT NOT NULL,room_id INTEGER REFERENCES rooms(id),parent_id INTEGER REFERENCES users(id),face_allowed INTEGER NOT NULL DEFAULT 0,face_template BLOB,consent_at TEXT,created_at TEXT NOT NULL,archived INTEGER NOT NULL DEFAULT 0,allergies TEXT NOT NULL DEFAULT "",medical_conditions TEXT NOT NULL DEFAULT "",emergency_medication TEXT NOT NULL DEFAULT "",special_needs TEXT NOT NULL DEFAULT "",authorized_pickups TEXT NOT NULL DEFAULT "")')
+            columns='id,name,birthday,room_id,parent_id,face_allowed,face_template,consent_at,created_at'
+            if 'archived' in info: columns+=',archived'
+            conn.execute(f'INSERT INTO children_nullable_v2({columns}) SELECT {columns} FROM children')
+            conn.execute('DROP TABLE children')
+            conn.execute('ALTER TABLE children_nullable_v2 RENAME TO children')
+        elif 'archived' not in info: conn.execute('ALTER TABLE children ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+        conn.execute('CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,room_id INTEGER NOT NULL REFERENCES rooms(id),title TEXT NOT NULL,starts_at TEXT NOT NULL,ends_at TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,created_by INTEGER NOT NULL REFERENCES users(id))')
+        conn.execute('CREATE TABLE IF NOT EXISTS reservations(lesson_id INTEGER NOT NULL REFERENCES lessons(id),child_id INTEGER NOT NULL REFERENCES children(id),confirmed INTEGER NOT NULL DEFAULT 1,created_by INTEGER NOT NULL REFERENCES users(id),updated_at TEXT NOT NULL,PRIMARY KEY(lesson_id,child_id))')
+        conn.execute('CREATE INDEX IF NOT EXISTS lessons_schedule ON lessons(starts_at,ends_at)')
+        conn.execute('CREATE INDEX IF NOT EXISTS reservations_child ON reservations(child_id,confirmed)')
+        conn.execute('UPDATE rooms SET created_by=coalesce((SELECT user_id FROM teacher_rooms WHERE room_id=rooms.id ORDER BY user_id LIMIT 1),(SELECT id FROM users WHERE role="admin" ORDER BY id LIMIT 1)) WHERE created_by IS NULL')
+        migrate_safety_and_health(conn)
+        if conn.execute('PRAGMA foreign_key_check').fetchone(): raise RuntimeError('Migration aborted: database reference integrity failed.')
+        conn.execute('PRAGMA user_version=3')
+        conn.commit()
+    except BaseException:
+        conn.rollback();raise
+    finally:conn.close()
+
 def init():
     with db() as c:
         c.executescript('''
@@ -57,6 +140,7 @@ def init():
         CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),child_id INTEGER REFERENCES children(id),kind TEXT NOT NULL,title TEXT NOT NULL,message TEXT NOT NULL,sender INTEGER REFERENCES users(id),created_at TEXT NOT NULL,read_at TEXT);
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,actor INTEGER REFERENCES users(id),action TEXT NOT NULL,child_id INTEGER,created_at TEXT NOT NULL);
         ''')
+    migrate_school()
 
 def seed():
     init()
@@ -71,6 +155,7 @@ def seed():
         for name,mi,ma,cap,color in [('Sementinhas',2,3,12,'#18181b'),('Pequenos Exploradores',4,6,18,'#27272a'),('Geração Kids',7,11,24,'#3f3f46')]:
             c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color) VALUES(?,?,?,?,?)',(name,mi,ma,cap,color))
         c.execute('INSERT INTO teacher_rooms VALUES(2,2)')
+        c.execute('UPDATE rooms SET created_by=CASE WHEN id=2 THEN 2 ELSE 1 END')
         kids=[('Lucas Oliveira','2021-05-12',2,3),('Sofia Oliveira','2023-02-18',1,3),('Helena Santos','2020-07-08',2,4),('Theo Santos','2021-03-10',2,4),('Alice Santos','2018-09-15',3,4),('Miguel Oliveira','2017-08-04',3,3)]
         for name,birthday,room,parent in kids: c.execute('INSERT INTO children(name,birthday,room_id,parent_id,created_at) VALUES(?,?,?,?,?)',(name,birthday,room,parent,now()))
         c.execute('INSERT INTO attendance VALUES(?,?,?,?,?,?,?)',(1,today(),'present',now(),None,'Gabriel Oliveira',2))

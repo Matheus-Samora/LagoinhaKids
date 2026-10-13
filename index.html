@@ -1,1 +1,41 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="theme-color" content="#141b18"/><title>Lagoinha Kids · Cuidado que conecta</title><meta name="description" content="Turmas, presença e comunicação com as famílias no Lagoinha Kids."/></head><body><div id="app"><div class="boot">Preparando um lugar especial…</div></div><div id="toast" role="status" aria-live="polite"></div><dialog id="modal"><div id="modal-content"></div></dialog><script type="module" src="/src/main.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>Lagoinha Kids · Cuidado que conecta</title>
+    <meta name="description" content="Turmas, presença e comunicação com as famílias no Lagoinha Kids." />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Lagoinha Kids" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot">Preparando um lugar especial…</div>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="modal"><div id="modal-content"></div></dialog>
+    <script type="module" src="/src/main.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+            navigator.serviceWorker.getRegistrations().then((regs) => {
+              for (const r of regs) r.unregister();
+            });
+            if ('caches' in window) {
+              caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+            }
+          } else {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

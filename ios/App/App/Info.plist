@@ -66,5 +66,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>A câmera é utilizada para conferência facial auxiliar autorizada dos alunos no ministério infantil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Permite selecionar fotos autorizadas para o cadastro do aluno no ministério infantil.</string>
 </dict>
 </plist>

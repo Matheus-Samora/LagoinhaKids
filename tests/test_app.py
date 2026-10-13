@@ -14,12 +14,12 @@ def records(monkeypatch):
     monkeypatch.delenv('GOOGLE_CLIENT_ID',raising=False)
     monkeypatch.delenv('GOOGLE_CLIENT_SECRET',raising=False)
     with s.db() as c:
-        for table in ['audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
+        for table in ['terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
             c.execute(f'DELETE FROM {table}')
         for uid,role in [(1,'admin'),(2,'teacher'),(3,'parent'),(4,'parent')]:
             c.execute('INSERT INTO users(id,name,email,password,role,created_at) VALUES(?,?,?,?,?,?)',(uid,f'User {uid}',f'user{uid}@example.test',s.password_hash(PASSWORD),role,s.now()))
-        c.execute('INSERT INTO rooms VALUES(1,"Turma A",2,6,10,"#d6e5ae")')
-        c.execute('INSERT INTO rooms VALUES(2,"Turma B",2,6,10,"#d6e5ae")')
+        c.execute('INSERT INTO rooms(id,name,min_age,max_age,capacity,color) VALUES(1,"Turma A",2,6,10,"#d6e5ae")')
+        c.execute('INSERT INTO rooms(id,name,min_age,max_age,capacity,color) VALUES(2,"Turma B",2,6,10,"#d6e5ae")')
         c.execute('INSERT INTO teacher_rooms VALUES(2,1)')
         c.execute('INSERT INTO children(id,name,birthday,room_id,parent_id,created_at) VALUES(1,"Aluno fictício A","2021-01-01",1,3,?)',(s.now(),))
         c.execute('INSERT INTO children(id,name,birthday,room_id,parent_id,created_at) VALUES(2,"Aluno fictício B","2021-01-01",2,4,?)',(s.now(),))

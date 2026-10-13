@@ -1,0 +1,119 @@
+/* Mobile layout shared by the web app and Capacitor live server. */
+@media (max-width: 760px) {
+ .shell,.shell main,.page-content,.panel,.login-form,.login-form-wrap {min-width:0;max-width:100%}
+ .sidebar {position:relative;width:100%;padding:calc(12px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));border-right:0;border-bottom:1px solid var(--line)}
+ .sidebar .brand {margin:0}
+ .sidebar-caption,.sidebar-bottom,.sidebar nav {display:none}
+ .nav-link {width:auto;flex:none;margin:0;min-height:44px;padding:10px 12px;font-size:13px}
+ .shell main {margin:0}
+ .topbar {height:auto;min-height:56px;padding:8px 16px;gap:8px;flex-wrap:wrap}
+ .breadcrumbs {flex:1;min-width:100px;font-size:12px;overflow-wrap:anywhere}
+ .breadcrumbs span {padding:0 4px}
+ .top-actions {gap:6px;margin-left:auto}
+ .top-actions .date,.top-actions [data-action="install-modal"] {display:none}
+ .top-actions > .avatar {display:grid}
+ .top-actions button {min-width:44px;min-height:44px;margin:0!important}
+ .logout-top-btn span {display:none}
+ .page-content {padding:18px max(16px,env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom, 12px)) max(16px,env(safe-area-inset-left))}
+ .page-heading {align-items:stretch;flex-direction:column;gap:16px;margin-bottom:22px}
+ .page-heading h1 {font-size:28px;line-height:1.15;overflow-wrap:anywhere}
+ .page-heading p,.simple-next p,.simple-room-card>p,.lesson-card p,.muted-note {font-size:14px;line-height:1.6}
+ .page-heading>.btn {width:100%;min-height:48px;font-size:14px}
+ .btn,.mini-button,.icon-button,.text-link,summary {min-height:44px}
+ .btn {white-space:normal;line-height:1.4}
+ .text-link,summary {display:inline-flex;align-items:center}
+ input,select,textarea {font-size:16px!important;max-width:100%;min-width:0;min-height:48px}
+ input[type="checkbox"],input[type="radio"] {min-height:22px;width:22px;height:22px;flex-shrink:0}
+ label,fieldset {min-width:0}
+ .form-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ dialog {position:fixed!important;inset:auto 0 0 0!important;margin:0!important;width:100%!important;max-width:100%!important;max-height:88dvh!important;border-radius:22px 22px 0 0!important;border:1px solid #27272a!important;border-bottom:none!important;box-shadow:0 -12px 36px rgba(0,0,0,0.35)!important;padding:14px 18px calc(24px + env(safe-area-inset-bottom, 12px)) 18px!important;overscroll-behavior:contain!important;animation:sheet-slide-up 0.24s cubic-bezier(0.16,1,0.3,1)!important}
+ @keyframes sheet-slide-up {from{transform:translateY(100%)}to{transform:translateY(0)}}
+ .modal-heading {gap:10px;margin-bottom:18px}
+ .modal-heading p,.soft-info {font-size:13px}
+ .modal-heading>.icon-button {margin:0;flex-shrink:0}
+ .mobile-bottom-nav {position:fixed;bottom:0;left:0;right:0;background:#000000;color:#ffffff;border-top:1px solid #27272a;display:flex;justify-content:space-around;align-items:center;min-height:60px;padding-bottom:env(safe-area-inset-bottom,4px);z-index:1000;box-shadow:0 -4px 20px rgba(0,0,0,0.25)}
+ .mobile-bottom-btn {flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:transparent;border:none;color:#71717a;font-size:11px;font-weight:600;padding:6px 2px;min-height:50px;cursor:pointer;position:relative;transition:color .15s ease}
+ .mobile-bottom-btn.active {color:#ffffff;font-weight:700}
+ .mobile-bottom-btn.active svg {stroke:#ffffff}
+ .mobile-bottom-btn .badge {position:absolute;top:4px;right:calc(50% - 15px);background:#ffffff;color:#000000;font-size:10px;font-weight:800;border-radius:999px;padding:1px 5px;min-width:15px;text-align:center}
+ .simple-family-grid,.simple-room-grid,.lesson-cards,.room-cards,.stats {grid-template-columns:1fr;gap:16px}
+ .simple-child-card,.simple-room-card,.lesson-card,.simple-next {padding:20px}
+ .simple-child-card h2,.simple-room-card h2,.lesson-card h2 {overflow-wrap:anywhere;line-height:1.3}
+ .simple-child-card p,.simple-room-card header .text-link,.child-extra,.child-extra .text-link {font-size:13px}
+ .simple-room-actions .btn,.simple-child-actions .btn,.lesson-card .btn {font-size:14px;min-height:48px}
+ .simple-room-actions {gap:10px}
+ .simple-room-actions .btn {white-space:normal;min-width:110px}
+ .lesson-toolbar {flex-direction:column;align-items:stretch;gap:12px}
+ .lesson-toolbar label {max-width:none;font-size:14px}
+ .schedule-zone,.schedule-row span {font-size:12px}
+ .schedule-row {display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}
+ .schedule-row strong {font-size:13px}
+ .table-wrap {overflow:visible}
+ table,tbody {display:block;width:100%;white-space:normal}
+ thead {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ tbody tr {display:block;padding:16px;border-bottom:1px solid var(--line)}
+ tbody tr:last-child {border-bottom:0}
+ td {display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 0;border:0;font-size:14px;overflow-wrap:anywhere;min-width:0}
+ td[data-label]::before {content:attr(data-label);font-size:11px;font-weight:600;color:#71717a;min-width:74px}
+ td:first-child {display:block;padding-bottom:12px}
+ td:first-child::before {display:none}
+ td .person {min-width:0}
+ .person strong {font-size:15px;overflow-wrap:anywhere}
+ .person small {font-size:12px}
+ .row-actions {flex-wrap:wrap;gap:8px}
+ .row-actions .mini-button {min-height:44px;font-size:13px}
+ .notification {flex-wrap:wrap;padding:18px;gap:12px}
+ .notification>div {min-width:0;flex:1 1 180px;overflow-wrap:anywhere}
+ .notification h3 {font-size:16px}
+ .notification p,.notification-meta {font-size:13px;line-height:1.6}
+ .notification>.mini-button {margin-left:0}
+ .app-footer {padding:16px 16px calc(22px + env(safe-area-inset-bottom));flex-direction:column;gap:8px}
+ .login-layout {grid-template-columns:1fr;min-height:100dvh}
+ .login-story {min-height:180px;padding:calc(20px + env(safe-area-inset-top)) 20px 20px}
+ .story-copy {padding:12px 0 0;margin:0}
+ .story-copy h1 {font-size:28px}
+ .story-copy>p,.login-story footer,.story-tags {display:none}
+ .story-art {width:150px;height:150px;right:-25px;bottom:0}
+ .login-form-wrap {padding:28px 20px calc(28px + env(safe-area-inset-bottom))}
+ .login-form h2 {font-size:28px}
+ .saved-account-main,.saved-account-del {min-height:44px}
+ #toast {max-width:calc(100vw - 32px);width:max-content;white-space:normal;bottom:calc(20px + env(safe-area-inset-bottom));font-size:14px}
+}
+@media (max-width:360px) {
+ .form-grid {grid-template-columns:1fr}
+ .simple-child-actions {flex-direction:column}
+ .simple-room-actions {flex-direction:column}
+ .schedule-row {grid-template-columns:minmax(0,1fr) auto}
+ .schedule-row>div {grid-column:1/-1}
+ .page-content {padding-left:12px;padding-right:12px}
+}
+
+@media (max-width:760px) {
+ .sidebar:not([data-role="admin"]) nav {overflow:visible;gap:4px}
+ .sidebar:not([data-role="admin"]) .nav-link {flex:1;min-width:0;padding:10px 6px;justify-content:center;font-size:12px;gap:6px;white-space:normal;text-align:center}
+ .sidebar:not([data-role="admin"]) .nav-link svg {width:17px;flex-shrink:0}
+}
+
+@media (max-width: 840px) {
+  .breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .back-nav-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 14px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .crumb-trail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+}
