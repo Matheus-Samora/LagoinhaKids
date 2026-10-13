@@ -1,0 +1,9 @@
+node_modules/
+dist/
+runtime/
+.venv/
+.env
+__pycache__/
+.pytest_cache/
+local.properties
+ACESSOS-LOCAIS.md

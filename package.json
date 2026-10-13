@@ -1,0 +1,7 @@
+{
+  "name":"lagoinha-kids","version":"0.1.0","private":true,"type":"module",
+  "scripts":{"dev":"vite --host 127.0.0.1","build":"vite build","mobile:android":"npm run build && cap sync android","mobile:ios":"npm run build && cap sync ios"},
+  "dependencies":{"@capacitor/core":"8.5.3","@capacitor/camera":"8.2.5","@capacitor/android":"8.5.3","@capacitor/ios":"8.5.3"},
+  "devDependencies":{"@capacitor/cli":"8.5.3","vite":"8.3.4"},
+  "overrides":{"xcode":{"uuid":"11.1.1"}}
+}
