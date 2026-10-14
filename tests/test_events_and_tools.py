@@ -89,6 +89,32 @@ def test_events_crud_and_registration():
     events_after_cancel = parent_c.get('/api/events').json()
     assert 1 not in events_after_cancel[0]['user_registered_children']
 
+    # 10. Update event: staff can update, parents cannot
+    update_data = {
+        'title': 'EBF de Férias 2026 (Atualizado)',
+        'description': 'Nova descrição atualizada para o evento.',
+        'category': 'EBF',
+        'target_audience': 'kids',
+        'min_age': 3,
+        'max_age': 11,
+        'starts_at': (datetime.now(TZ) + timedelta(days=5)).isoformat(),
+        'ends_at': (datetime.now(TZ) + timedelta(days=7)).isoformat(),
+        'location': 'Auditório Kids',
+        'price': 'Gratuito',
+        'max_capacity': 50,
+        'banner_url': 'https://example.com/banner.jpg'
+    }
+    assert parent_c.patch(f'/api/events/{event_id}', json=update_data).status_code == 403
+    assert teacher_c.patch(f'/api/events/{event_id}', json=update_data).status_code == 200
+    assert admin_c.patch(f'/api/events/{event_id}', json=update_data | {'title': 'EBF - Editado pela Admin'}).status_code == 200
+    ev_check = admin_c.get('/api/events').json()
+    assert ev_check[0]['title'] == 'EBF - Editado pela Admin'
+
+    # 11. Delete event: staff can delete, parents cannot
+    assert parent_c.delete(f'/api/events/{event_id}').status_code == 403
+    assert admin_c.delete(f'/api/events/{event_id}').status_code == 200
+    assert len(admin_c.get('/api/events').json()) == 0
+
 def test_discipleship_curriculum():
     teacher_c = client(2)
     parent_c = client(3)

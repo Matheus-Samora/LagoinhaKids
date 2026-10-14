@@ -79,7 +79,7 @@ def room_allowed(c,user,room):
     if user['role']!='teacher' or room is None:return False
     record=c.execute('SELECT created_by FROM rooms WHERE id=?',(room,)).fetchone()
     if not record:return False
-    if record['created_by'] is not None:return record['created_by']==user['id']
+    if record['created_by']==user['id']:return True
     return c.execute('SELECT 1 FROM teacher_rooms WHERE user_id=? AND room_id=?',(user['id'],room)).fetchone() is not None
 def child_visible(c,user,row):
     allowed=user['role']=='admin' or (user['role']=='parent' and (row['parent_id']==user['id'] or c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',(row['id'],user['id'])).fetchone()))

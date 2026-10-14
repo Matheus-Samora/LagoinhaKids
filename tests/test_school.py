@@ -39,6 +39,9 @@ def test_teacher_owns_created_classroom_and_cannot_edit_another():
     assert t.patch(f'/api/rooms/{foreign}',json=data).status_code==403
     assert t.post('/api/rooms',json=data|{'owner_id':1}).status_code==403
     assert client(3).post('/api/rooms',json=data).status_code==403
+    assert client(3).patch(f'/api/rooms/{foreign}',json=data).status_code==403
+    with s.db() as c:c.execute('INSERT INTO teacher_rooms VALUES(2,?)',(foreign,))
+    assert t.patch(f'/api/rooms/{foreign}',json=data|{'name':'Foreign editada por professor designado'}).status_code==200
     assert a.patch(f'/api/rooms/{rid}',json=data|{'name':'Editada pela administração'}).status_code==200
     with s.db() as c:assert c.execute('SELECT created_by FROM rooms WHERE id=?',(rid,)).fetchone()[0]==2
 

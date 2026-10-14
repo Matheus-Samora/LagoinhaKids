@@ -132,6 +132,48 @@ def create_event(data: EventCreate, user=Depends(staff)):
         s.audit(c, user['id'], 'create_event')
         return {'id': event_id, 'ok': True}
 
+@router.patch('/events/{event_id}')
+def update_event(event_id: int, data: EventCreate, user=Depends(staff)):
+    if data.max_age < data.min_age:
+        fail('event', 'Faixa etária inválida: idade máxima menor que idade mínima.')
+
+    audience = data.target_audience.lower()
+    if audience not in ('all', 'kids', 'teens'):
+        audience = 'all'
+
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        ev = c.execute('SELECT * FROM events WHERE id = ? AND active = 1', (event_id,)).fetchone()
+        if not ev:
+            fail('event_not_found', 'Evento não encontrado ou inativo.', 404)
+
+        c.execute('''
+            UPDATE events SET
+                title = ?, description = ?, category = ?, target_audience = ?,
+                min_age = ?, max_age = ?, starts_at = ?, ends_at = ?,
+                location = ?, price = ?, max_capacity = ?, banner_url = ?
+            WHERE id = ?
+        ''', (
+            data.title.strip(), data.description.strip(), data.category.strip(),
+            audience, data.min_age, data.max_age,
+            data.starts_at, data.ends_at, data.location.strip(),
+            data.price.strip(), data.max_capacity, data.banner_url.strip(),
+            event_id
+        ))
+        s.audit(c, user['id'], 'update_event')
+        return {'id': event_id, 'ok': True}
+
+@router.delete('/events/{event_id}')
+def delete_event(event_id: int, user=Depends(staff)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        ev = c.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
+        if not ev:
+            fail('event_not_found', 'Evento não encontrado.', 404)
+        c.execute('UPDATE events SET active = 0 WHERE id = ?', (event_id,))
+        s.audit(c, user['id'], 'delete_event')
+        return {'ok': True}
+
 @router.post('/events/{event_id}/register')
 def register_for_event(event_id: int, data: EventRegisterIn, user=Depends(session)):
     now = s.now()

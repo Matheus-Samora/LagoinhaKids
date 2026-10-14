@@ -79,7 +79,7 @@ function navItems(){
 function mobileNavItems(){
  if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell'],['settings','Conta','settings']];
  if(S.user.role==='teacher')return [['rooms','Turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
- return [['overview','Visão','home'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ return [['overview','Visão','home'],['rooms','Turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
 }
 const navHistory=[];
 let lastBackTime=0;
@@ -257,6 +257,10 @@ function eventsPage(){
      <span class="event-price">${escape(ev.price)}</span>
      ${isRegistered?`<button class="btn secondary" data-action="cancel-event-reg" data-id="${ev.id}">Inscrito ✓ (Cancelar)</button>`:`<button class="btn primary" data-action="register-event" data-id="${ev.id}" ${regCount>=cap?'disabled':''}>${regCount>=cap?'Esgotado':'Inscrever'}</button>`}
     </div>
+    ${staff?`<div class="event-staff-actions">
+     <button class="mini-button" data-action="edit-event" data-id="${ev.id}">${icon('settings',14)} Editar</button>
+     <button class="mini-button danger-button" data-action="delete-event" data-id="${ev.id}">${icon('trash',14)||''} Excluir</button>
+    </div>`:''}
    </div>
   </article>`;
  }).join('')}</div>`:empty('Nenhum evento nesta categoria','Acompanhe o mural para ficar por dentro dos próximos encontros!')}`;
@@ -291,7 +295,7 @@ function renderInnerPage(){
  const p=S.user.role==='parent';
  if(S.page==='overview'){
   const present=S.children.filter(ch=>ch.status==='present').length,departed=S.children.filter(ch=>ch.status==='departed').length;
-   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
+   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div><button class="text-link" data-page="rooms">Gerenciar turmas ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
  }
  if(S.page==='events')return eventsPage();
  if(S.page==='notifications'){
@@ -429,44 +433,39 @@ function guestCheckinModal(){
  </form>`);
 }
 
-function eventFormModal(){
+function eventFormModal(ev=null){
  const now=new Date();
- const d1=new Date(now.getTime()+86400000*7).toISOString().slice(0,16);
- const d2=new Date(now.getTime()+86400000*7+3600000*3).toISOString().slice(0,16);
- showModal('Novo Evento','Publique acampamentos, EBFs ou encontros para Kids e Teens.',`<form data-form="create-event">
-  <label>Título do evento<input name="title" required minlength="2" maxlength="120" placeholder="Ex.: EBF Heróis da Fé"/></label>
-  <label>Descrição completa<textarea name="description" rows="3" required minlength="5" maxlength="2000" placeholder="Conte os detalhes do evento, o que levar, programação..."></textarea></label>
+ const d1=ev?ev.starts_at.slice(0,16):new Date(now.getTime()+86400000*7).toISOString().slice(0,16);
+ const d2=ev?ev.ends_at.slice(0,16):new Date(now.getTime()+86400000*7+3600000*3).toISOString().slice(0,16);
+ showModal(ev?'Editar Evento':'Novo Evento',ev?'Atualize as informações deste evento.':'Publique acampamentos, EBFs ou encontros para Kids e Teens.',`<form data-form="create-event" ${ev?`data-id="${ev.id}"`:''}>
+  <label>Título do evento<input name="title" required minlength="2" maxlength="120" value="${escape(ev?.title||'')}" placeholder="Ex.: EBF Heróis da Fé"/></label>
+  <label>Descrição completa<textarea name="description" rows="3" required minlength="5" maxlength="2000" placeholder="Conte os detalhes do evento, o que levar, programação...">${escape(ev?.description||'')}</textarea></label>
   <div class="form-grid">
    <label>Categoria<select name="category" required>
-    <option value="EBF">EBF</option>
-    <option value="Acampamento">Acampamento</option>
-    <option value="Culto Especial">Culto Especial</option>
-    <option value="Batismo">Batismo</option>
-    <option value="Musical">Musical</option>
-    <option value="Passeio">Passeio</option>
+    ${['EBF','Acampamento','Culto Especial','Batismo','Musical','Passeio'].map(cat=>`<option value="${cat}" ${(ev?.category||'EBF')===cat?'selected':''}>${cat}</option>`).join('')}
    </select></label>
    <label>Público-alvo<select name="target_audience" required>
-    <option value="all">Todos / Família</option>
-    <option value="kids">Kids (0 a 11 anos)</option>
-    <option value="teens">Teens (12 a 17 anos)</option>
+    <option value="all" ${(ev?.target_audience||'all')==='all'?'selected':''}>Todos / Família</option>
+    <option value="kids" ${(ev?.target_audience)==='kids'?'selected':''}>Kids (0 a 11 anos)</option>
+    <option value="teens" ${(ev?.target_audience)==='teens'?'selected':''}>Teens (12 a 17 anos)</option>
    </select></label>
   </div>
   <div class="form-grid">
-   <label>Idade mínima<input name="min_age" type="number" min="0" max="17" value="0" required/></label>
-   <label>Idade máxima<input name="max_age" type="number" min="0" max="17" value="17" required/></label>
+   <label>Idade mínima<input name="min_age" type="number" min="0" max="17" value="${ev?.min_age??0}" required/></label>
+   <label>Idade máxima<input name="max_age" type="number" min="0" max="17" value="${ev?.max_age??17}" required/></label>
   </div>
   <div class="form-grid">
    <label>Início<input name="starts_at" type="datetime-local" value="${d1}" required/></label>
    <label>Término<input name="ends_at" type="datetime-local" value="${d2}" required/></label>
   </div>
   <div class="form-grid">
-   <label>Local<input name="location" placeholder="Ex.: Templo Principal / Sítio"/></label>
-   <label>Valor / Preço<input name="price" value="Gratuito" required/></label>
+   <label>Local<input name="location" value="${escape(ev?.location||'')}" placeholder="Ex.: Templo Principal / Sítio"/></label>
+   <label>Valor / Preço<input name="price" value="${escape(ev?.price||'Gratuito')}" required/></label>
   </div>
-  <label>Capacidade máxima de vagas<input name="max_capacity" type="number" min="1" max="1000" value="100" required/></label>
-  <label>URL do banner (opcional)<input name="banner_url" placeholder="https://..."/></label>
+  <label>Capacidade máxima de vagas<input name="max_capacity" type="number" min="1" max="1000" value="${ev?.max_capacity??100}" required/></label>
+  <label>URL do banner (opcional)<input name="banner_url" value="${escape(ev?.banner_url||'')}" placeholder="https://..."/></label>
   <p class="form-error" role="alert"></p>
-  <button class="btn primary full" type="submit">Publicar Evento & Notificar Pais</button>
+  <button class="btn primary full" type="submit">${ev?'Salvar Alterações':'Publicar Evento & Notificar Pais'}</button>
  </form>`);
 }
 
@@ -497,6 +496,13 @@ document.addEventListener('click',async e=>{
  if(await school.action(action,el,ch))return;
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
+ if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}
+ if(action==='delete-event'){
+  const ev=S.events.find(x=>x.id===Number(el.dataset.id));
+  if(!ev)return;
+  showModal('Excluir evento?','Confirmação de exclusão',`<form data-form="delete-event" data-id="${ev.id}"><p style="margin-bottom:12px;font-size:14px;color:#3f3f46;">Deseja realmente excluir o evento <strong>${escape(ev.title)}</strong>? Ele sairá imediatamente do mural.</p><label class="checkbox-label"><input type="checkbox" required/>Confirmo a exclusão deste evento.</label><p class="form-error" role="alert"></p><button class="btn danger full" type="submit">Excluir Evento</button></form>`);
+  return;
+ }
  if(action==='register-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventRegisterModal(ev);return;}
  if(action==='cancel-event-reg'){
   const ev=S.events.find(x=>x.id===Number(el.dataset.id));
@@ -600,22 +606,33 @@ document.addEventListener('submit',async e=>{
   if(kind==='reset'){if(values.password!==values.confirm)throw new Error('As senhas não conferem.');await api('/auth/reset',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);renderLogin();toast('Senha atualizada. Entre com sua nova senha.');return;}
   if(kind==='family-invite'){const r=await api(`/children/${cid}/family/invites`,{method:'POST',body:values});showModal('Convite criado','Envie este link à pessoa autorizada. Válido por 48 horas.',`<label>Link do convite<input readonly value="${escape(r.url)}"/></label>`);return;}
   const schoolResult=await school.submit(form,values);if(schoolResult){modal.close();await load();toast(schoolResult.message||schoolResult);if(schoolResult.roomId)school.lessonForm(schoolResult.roomId);return;}
-  if(kind==='create-event'){
-   await api('/events',{method:'POST',body:{
+  if(kind==='create-event'||kind==='event-form'){
+   const evId=form.dataset.id;
+   const payload={
     title:values.title,
     description:values.description,
     category:values.category,
     target_audience:values.target_audience,
     min_age:Number(values.min_age),
     max_age:Number(values.max_age),
-    starts_at:values.starts_at+':00-03:00',
-    ends_at:values.ends_at+':00-03:00',
+    starts_at:values.starts_at.length===16?values.starts_at+':00-03:00':values.starts_at,
+    ends_at:values.ends_at.length===16?values.ends_at+':00-03:00':values.ends_at,
     location:values.location||'',
     price:values.price||'Gratuito',
     max_capacity:Number(values.max_capacity)||100,
     banner_url:values.banner_url||''
-   }});
-   modal.close();await load();toast('Evento publicado! Pais notificados no aplicativo.');return;
+   };
+   if(evId){
+    await api(`/events/${evId}`,{method:'PATCH',body:payload});
+    modal.close();await load();toast('Evento atualizado com sucesso!');return;
+   }else{
+    await api('/events',{method:'POST',body:payload});
+    modal.close();await load();toast('Evento publicado! Pais notificados no aplicativo.');return;
+   }
+  }
+  if(kind==='delete-event'){
+   await api(`/events/${form.dataset.id}`,{method:'DELETE'});
+   modal.close();await load();toast('Evento excluído com sucesso.');return;
   }
   if(kind==='register-event-child'){
    await api(`/events/${form.dataset.id}/register`,{method:'POST',body:{child_id:Number(values.child_id),notes:values.notes||''}});

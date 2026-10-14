@@ -27,15 +27,17 @@ class RoomIn(BaseModel):
     max_age:int=Field(ge=0,le=17)
     capacity:int=Field(ge=1,le=100)
     owner_id:int|None=None
-def validate_room(c,data,user):
+def validate_room(c,data,user,is_edit=False):
     if not data.name.strip() or data.max_age<data.min_age:fail('room','Confira o nome e a faixa etária.')
     owner=data.owner_id or user['id']
-    if user['role']!='admin' and owner!=user['id']:fail('owner','Você só pode criar turmas em seu próprio nome.',403)
+    if not is_edit and user['role']!='admin' and owner!=user['id']:fail('owner','Você só pode criar turmas em seu próprio nome.',403)
     if not c.execute('SELECT 1 FROM users WHERE id=? AND role IN ("teacher","admin") AND active=1',(owner,)).fetchone():fail('owner','Escolha um professor ou administrador ativo.')
     return owner
 def sync_owner(c,rid,owner):
     c.execute('DELETE FROM teacher_rooms WHERE room_id=?',(rid,))
-    if c.execute('SELECT role FROM users WHERE id=?',(owner,)).fetchone()[0]=='teacher':c.execute('INSERT INTO teacher_rooms VALUES(?,?)',(owner,rid))
+    role_row = c.execute('SELECT role FROM users WHERE id=?',(owner,)).fetchone()
+    if role_row and role_row[0]=='teacher':
+        c.execute('INSERT INTO teacher_rooms VALUES(?,?)',(owner,rid))
 
 @router.get('/rooms')
 def rooms(user=Depends(session)):
@@ -53,7 +55,7 @@ def rooms(user=Depends(session)):
 @router.post('/rooms')
 def create_room(data:RoomIn,user=Depends(staff)):
     with s.db() as c:
-        owner=validate_room(c,data,user)
+        owner=validate_room(c,data,user,is_edit=False)
         rid=c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color,created_by) VALUES(?,?,?,?,?,?)',(data.name.strip(),data.min_age,data.max_age,data.capacity,'#27272a',owner)).lastrowid
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_created')
     return {'id':rid}
@@ -62,8 +64,12 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         existing=room_for_edit(c,user,rid)
-        if user['role']=='admin' and data.owner_id is None:data=data.model_copy(update={'owner_id':existing['created_by'] or user['id']})
-        owner=validate_room(c,data,user)
+        if user['role']!='admin':
+            owner=existing['created_by'] or user['id']
+        else:
+            owner=data.owner_id or existing['created_by'] or user['id']
+        data=data.model_copy(update={'owner_id':owner})
+        owner=validate_room(c,data,user,is_edit=True)
         maximum=c.execute('SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1 GROUP BY l.id)',(rid,s.now())).fetchone()[0]
         if maximum>data.capacity:fail('capacity','Já existem aulas com mais confirmações que essa capacidade.',409)
         booked=c.execute('SELECT ch.birthday,l.starts_at FROM reservations b JOIN lessons l ON l.id=b.lesson_id JOIN children ch ON ch.id=b.child_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchall()

@@ -2677,6 +2677,15 @@ button:active,
   font-weight: 800;
   color: #09090b;
 }
+.event-staff-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f4f4f5;
+}
 
 /* Telão Alert Banner */
 .paging-banner {
