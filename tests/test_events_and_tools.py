@@ -208,6 +208,19 @@ def test_paging_system_and_guest_checkin():
     active_after = parent_c.get('/api/paging/active').json()
     assert not any(p['id'] == pid for p in active_after)
 
+    # Calling on-my-way for an already resolved paging succeeds gracefully
+    ack_res_resolved = parent_c.post('/api/paging/on-my-way', json={'paging_id': pid})
+    assert ack_res_resolved.status_code == 200
+    assert ack_res_resolved.json()['status'] == 'resolved'
+
+    # Calling on-my-way with no active paging (e.g. test notification) notifies admin and succeeds gracefully
+    admin_c = client(1)
+    ack_res_demo = parent_c.post('/api/paging/on-my-way', json={})
+    assert ack_res_demo.status_code == 200
+    assert ack_res_demo.json()['ok'] is True
+    admin_notifs = admin_c.get('/api/notifications').json()
+    assert any(n['kind'] == 'arriving' for n in admin_notifs)
+
     # Guest fast-track check-in
     guest_res = teacher_c.post('/api/guests/checkin', json={
         'child_name': 'Criança Visitante',

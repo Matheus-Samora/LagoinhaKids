@@ -76,16 +76,24 @@ self.addEventListener('notificationclick', (event) => {
     // Parent clicked "Estou a caminho" directly from the OS notification bar!
     const ackPromise = fetch('/api/paging/on-my-way', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Worker': '1'
+      },
       body: JSON.stringify({
-        child_id: notifData.child_id,
-        paging_id: notifData.paging_id
+        child_id: notifData.child_id || null,
+        paging_id: notifData.paging_id || null
       }),
       credentials: 'include'
     })
-      .then(() => {
+      .then(async (response) => {
+        let childName = 'seu filho';
+        try {
+          const res = await response.json();
+          if (res.child_name) childName = res.child_name;
+        } catch {}
         return self.registration.showNotification('Lagoinha Kids · Resposta Confirmada', {
-          body: 'A salinha e os professores já foram avisados que você está a caminho!',
+          body: `A salinha e o administrativo já foram avisados que você está a caminho de ${childName}!`,
           icon: '/logo.png',
           badge: '/logo.png',
           tag: 'ack-confirmed',

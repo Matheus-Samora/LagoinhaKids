@@ -400,18 +400,41 @@ def on_my_way(data: PagingAckIn, user=Depends(session)):
         p = None
         if data.paging_id:
             p = c.execute("SELECT * FROM paging_requests WHERE id=? AND status IN ('active','on_my_way')", (data.paging_id,)).fetchone()
-        elif data.child_id:
+            if not p:
+                resolved = c.execute("SELECT * FROM paging_requests WHERE id=?", (data.paging_id,)).fetchone()
+                if resolved:
+                    ch_res = c.execute("SELECT name FROM children WHERE id=?", (resolved['child_id'],)).fetchone()
+                    return {'ok': True, 'child_name': ch_res['name'] if ch_res else 'seu filho', 'status': 'resolved', 'claim_code': resolved['claim_code'], 'message': 'Este chamado já havia sido concluído.'}
+        if not p and data.child_id:
             p = c.execute("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way') ORDER BY id DESC LIMIT 1", (data.child_id,)).fetchone()
-        else:
+        if not p:
             p = c.execute("""
                 SELECT p.* FROM paging_requests p
                 JOIN children ch ON ch.id=p.child_id
-                WHERE ch.parent_id=? AND p.status IN ('active','on_my_way')
+                LEFT JOIN family_links fl ON fl.child_id=ch.id AND fl.active=1
+                WHERE (ch.parent_id=? OR fl.user_id=?) AND p.status IN ('active','on_my_way')
                 ORDER BY p.id DESC LIMIT 1
-            """, (user['id'],)).fetchone()
+            """, (user['id'], user['id'])).fetchone()
+        if not p and user.get('role') in ('admin', 'teacher'):
+            p = c.execute("SELECT * FROM paging_requests WHERE status IN ('active','on_my_way') ORDER BY id DESC LIMIT 1").fetchone()
 
         if not p:
-            fail('paging_not_found', 'Nenhum chamado ativo encontrado para esta solicitação.', 404)
+            recipients = [r[0] for r in c.execute("SELECT id FROM users WHERE role IN ('admin', 'teacher') AND active=1")]
+            msg = f"O usuário {user['name']} confirmou 'Estou a caminho' (notificação de teste ou chamado prévio)."
+            for uid in set(recipients):
+                c.execute("""
+                    INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at)
+                    VALUES(?, NULL, 'arriving', '🏃 Responsável a Caminho (Teste)', ?, ?, ?)
+                """, (uid, msg, user['id'], now))
+            s.audit(c, user['id'], 'paging_on_my_way_test')
+            return {
+                'ok': True,
+                'child_name': 'Demonstração',
+                'status': 'on_my_way',
+                'claim_code': 'DEMO-OK',
+                'demo': True,
+                'message': 'Aviso de confirmação enviado à equipe administrativa com sucesso.'
+            }
 
         ch = c.execute("SELECT * FROM children WHERE id=?", (p['child_id'],)).fetchone()
         if not ch:

@@ -563,11 +563,11 @@ document.addEventListener('click',async e=>{
  if(action==='digital-id'){if(ch)digitalIdModal(ch);return;}
  if(action==='paging-call'){if(ch)pagingModal(ch);return;}
  if(action==='on-my-way'){
-  const cid=Number(el.dataset.childId||0);
-  const pid=Number(el.dataset.id||0);
+  const cid=Number(el.dataset.childId||0)||null;
+  const pid=Number(el.dataset.id||0)||null;
   try{
     const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:cid,paging_id:pid}});
-    toast(`🏃 Resposta confirmada! A equipe da salinha foi avisada que você está a caminho de ${res.child_name||'seu filho'}.`);
+    toast(`🏃 Resposta confirmada! A equipe e o administrativo foram avisados que você está a caminho de ${res.child_name||'seu filho'}.`);
     await load();
   }catch(err){
     toast(err.message||'Erro ao avisar a equipe.',true);
@@ -783,7 +783,12 @@ async function syncLive(){
   const editing=modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
   if(!editing){liveRevision=revision;if(changed)render();}
   if(newNotices.length > 0){
-    toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
+    const arrivingNotice = newNotices.find(n=>n.kind==='arriving');
+    if(arrivingNotice){
+      toast(arrivingNotice.message||'🏃 Responsável confirmou que está a caminho!');
+    }else{
+      toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
+    }
     for(const n of newNotices){
       sendSystemNotification({
         title: n.title || 'Lagoinha Kids',
@@ -791,6 +796,7 @@ async function syncLive(){
         tag: n.kind === 'urgent_call' ? `urgent-call-${n.child_id||n.id}` : `notice-${n.id}`,
         id: n.id,
         child_id: n.child_id,
+        paging_id: n.paging_id || null,
         kind: n.kind,
         isPaging: n.kind === 'urgent_call'
       });
@@ -906,8 +912,11 @@ async function initNativeNotifications(){
       if(action.actionId==='on_my_way'){
         const extra=action.notification.extra||{};
         try{
-          const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:extra.child_id,paging_id:extra.paging_id}});
-          toast(`🏃 Resposta confirmada! A salinha foi avisada que você está a caminho de ${res.child_name||'seu filho'}.`);
+          if(!S.user){
+            try{const me=await api('/me');S.user=me.user;S.csrf=me.csrf;saveAccount(me.user);}catch{}
+          }
+          const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:extra.child_id||null,paging_id:extra.paging_id||null}});
+          toast(`🏃 Resposta confirmada! A salinha e o administrativo foram avisados que você está a caminho de ${res.child_name||'seu filho'}.`);
           await load();
         }catch(err){
           toast(err.message||'Erro ao avisar a salinha.',true);
@@ -1136,12 +1145,17 @@ function testSystemNotification(){
     promptPushPermissionModal();
     return;
   }
+  const defaultChild = (S.children && S.children.length) ? S.children[0] : null;
+  const childId = defaultChild ? defaultChild.id : 1;
+  const childName = defaultChild ? defaultChild.name : 'Lucas Oliveira';
   sendSystemNotification({
-    title:'⚠️ Chamado da Salinha (Demonstração)',
-    message:'Lucas Oliveira precisa da sua presença na salinha dos Pequenos. Toque em Estou a caminho!',
+    title:`⚠️ Chamado da Salinha - ${childName}`,
+    message:`${childName} precisa da sua presença na salinha. Toque em Estou a caminho!`,
     tag:'test-notification-'+Date.now(),
     isPaging:true,
-    kind:'urgent_call'
+    kind:'urgent_call',
+    child_id:childId,
+    paging_id:null
   });
   toast('🔔 Alerta prioritário enviado para o topo do celular!');
 }

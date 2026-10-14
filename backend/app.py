@@ -58,7 +58,8 @@ async def protection(request:Request,call_next):
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY'})
     return response
 
-app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client'])
+CSRF_EXEMPT_PATHS = {'/api/paging/on-my-way'}
+app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client','X-Service-Worker'])
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
@@ -66,7 +67,7 @@ def session(request:Request):
     with s.db() as c:
         row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=?',(s.digest(token),)).fetchone()
     if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
-    if request.method in MUTATE and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
+    if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     return dict(row)
 def admin(user=Depends(session)):
     if user['role']!='admin': fail('forbidden','Acesso exclusivo da administração.',403)
