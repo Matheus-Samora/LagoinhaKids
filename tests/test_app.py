@@ -95,6 +95,8 @@ def test_bidirectional_notifications_and_read_isolation():
     assert parent.post('/api/children/1/notify',json={'kind':'pickup_ready'}).status_code==200
     assert teacher.get('/api/notifications').json()[0]['kind']=='pickup_ready'
     assert parent.post('/api/children/1/notify',json={'kind':'please_pickup'}).status_code==403
+    assert teacher.post('/api/notifications/read-all').status_code==200
+    assert teacher.get('/api/notifications').json()[0]['read_at'] is not None
 
 def test_admin_roles_rooms_and_disabling_invalidates_sessions():
     a=client();t=client(2)

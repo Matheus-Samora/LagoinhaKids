@@ -343,6 +343,11 @@ def notify(cid:int,data:Notify,user=Depends(session)):
 @app.get('/api/notifications')
 def notifications(user=Depends(session)):
     with s.db() as c: return [dict(r) for r in c.execute('SELECT n.*,ch.name child_name,u.name sender_name FROM notifications n LEFT JOIN children ch ON ch.id=n.child_id LEFT JOIN users u ON u.id=n.sender WHERE n.user_id=? ORDER BY n.id DESC LIMIT 100',(user['id'],))]
+@app.post('/api/notifications/read-all')
+def read_all_notifications(user=Depends(session)):
+    with s.db() as c:
+        c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE user_id=? AND read_at IS NULL',(s.now(),user['id']))
+    return {'ok':True}
 @app.post('/api/notifications/{nid}/read')
 def read_notification(nid:int,user=Depends(session)):
     with s.db() as c:
