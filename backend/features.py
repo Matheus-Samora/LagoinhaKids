@@ -14,21 +14,30 @@ def send_mail(recipient,subject,body):
         if os.getenv('SMTP_USER'):server.login(os.environ['SMTP_USER'],os.environ['SMTP_PASSWORD'])
         server.send_message(msg)
 
-class Recovery(BaseModel):email:str=Field(max_length=200)
+class Recovery(BaseModel):
+    email:str=Field(max_length=200)
+    allow_direct_fallback:bool=False
+
 @router.post('/auth/recovery')
 def recover(data:Recovery,tasks:BackgroundTasks):
-    if not mail_ready():fail('email_unavailable','A recuperação por e-mail está indisponível. Procure a administração.',503)
+    if not mail_ready() and not data.allow_direct_fallback:
+        fail('email_unavailable','A recuperação por e-mail está indisponível. Procure a administração.',503)
     address=email(data.email);key=s.digest('recovery|'+address)
     with s.db() as c:
         attempt=c.execute('SELECT * FROM attempts WHERE key=?',(key,)).fetchone()
-        if attempt and attempt['expires']>time.time():return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
+        if attempt and attempt['expires']>time.time() and attempt['failures']>=5:return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
         c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,1,int(time.time())+300))
-        user=c.execute('SELECT id FROM users WHERE email=? AND active=1',(address,)).fetchone()
+        user=c.execute('SELECT id, name FROM users WHERE email=? AND active=1',(address,)).fetchone()
         if user:
             token=secrets.token_urlsafe(40)
             c.execute('DELETE FROM auth_tokens WHERE user_id=? AND kind="reset"',(user['id'],))
             c.execute('INSERT INTO auth_tokens VALUES(?,?,?,?)',(s.digest(token),user['id'],'reset',int(time.time())+1800))
-            tasks.add_task(send_mail,address,'Recuperar acesso — Lagoinha Kids',f'Use este link em até 30 minutos: {PUBLIC_URL}/?reset={token}\nSe não solicitou, ignore esta mensagem.')
+            s.audit(c,user['id'],'password_recovery_requested')
+            if mail_ready():
+                tasks.add_task(send_mail,address,'Recuperar acesso — Lagoinha Kids',f'Use este link em até 30 minutos: {PUBLIC_URL}/?reset={token}\nSe não solicitou, ignore esta mensagem.')
+                return {'ok':True,'message':'Enviamos um link de recuperação para o seu e-mail.'}
+            else:
+                return {'ok':True,'message':'Redefinição autorizada. Digite sua nova senha.','reset_token':token,'user_name':user['name']}
     return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
 class Reset(BaseModel):token:str=Field(max_length=200);password:str=Field(max_length=128)
 @router.post('/auth/reset')
