@@ -177,3 +177,13 @@ def test_checkout_attempt_limit():
     data['action']='out'
     for _ in range(6):assert t.post('/api/children/1/attendance',json=data).status_code==403
     assert t.post('/api/children/1/attendance',json=data).status_code==429
+
+def test_logout_keeps_other_device_notifications():
+    one=client(3);two=client(3)
+    one.post('/api/devices/token',json={'token':'device-one-'+'x'*24,'platform':'android'})
+    two.post('/api/devices/token',json={'token':'device-two-'+'x'*24,'platform':'android'})
+    one.post('/api/auth/logout')
+    with s.db() as c:
+        tokens=[r['token'] for r in c.execute('SELECT token FROM device_tokens')]
+        assert tokens==['device-two-'+'x'*24]
+    assert two.get('/api/me').status_code==200

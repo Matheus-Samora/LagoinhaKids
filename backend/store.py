@@ -125,6 +125,9 @@ def migrate_safety_and_health(conn):
         updated_at TEXT NOT NULL
     )''')
 
+    if 'session_token' not in {r[1] for r in conn.execute('PRAGMA table_info(device_tokens)')}:
+        conn.execute('ALTER TABLE device_tokens ADD COLUMN session_token TEXT NOT NULL DEFAULT ""')
+
 def migrate_school():
     """Transactional, additive migration; preserve children, attendance and templates."""
     conn=sqlite3.connect(DB,timeout=20)

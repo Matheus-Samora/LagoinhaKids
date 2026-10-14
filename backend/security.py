@@ -29,7 +29,7 @@ def confirm(data:Confirm,user=Depends(admin)):
     try:
         uid,expires,secret=s.CIPHER.decrypt(data.secret.encode(),ttl=600).decode().split('|')
         if int(uid)!=user['id'] or int(expires)<time.time():raise ValueError()
-        if not hmac.compare_digest(totp(secret),data.code.strip()):raise ValueError()
+        if not any(hmac.compare_digest(totp(secret,time.time()+offset),data.code.strip()) for offset in (-30,0,30)):raise ValueError()
     except Exception:fail('code','Código inválido ou configuração expirada.',400)
     codes=[secrets.token_hex(6) for _ in range(8)]
     with s.db() as c:

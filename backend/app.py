@@ -167,7 +167,7 @@ def me(user=Depends(session)): return {'user':public_user(user),'csrf':user['csr
 def logout(response:Response,user=Depends(session)):
     with s.db() as c:
         c.execute('DELETE FROM sessions WHERE token=?',(user['token'],))
-        c.execute('DELETE FROM device_tokens WHERE user_id=?',(user['id'],))
+        c.execute('DELETE FROM device_tokens WHERE user_id=? AND session_token=?',(user['id'],user['token']))
     response.delete_cookie(COOKIE,path='/');return {'ok':True}
 class PasswordChange(BaseModel):
     current:str=Field(max_length=128)
@@ -319,7 +319,8 @@ class DeviceTokenIn(BaseModel):
 @app.post('/api/devices/token')
 def register_device_token(data:DeviceTokenIn,user=Depends(session)):
     with s.db() as c:
-        c.execute('INSERT INTO device_tokens(user_id,token,platform,updated_at) VALUES(?,?,?,?) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,platform=excluded.platform,updated_at=excluded.updated_at',(user['id'],data.token.strip(),data.platform,s.now()))
+        c.execute('INSERT INTO device_tokens(user_id,token,platform,updated_at,session_token) VALUES(?,?,?,?,?) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,platform=excluded.platform,updated_at=excluded.updated_at,session_token=excluded.session_token',(user['id'],data.token.strip(),data.platform,s.now(),user['token']))
+        c.execute('UPDATE outbox SET next_attempt=0 WHERE status="pending" AND notification_id IN(SELECT id FROM notifications WHERE user_id=?)',(user['id'],))
     return {'ok':True}
 class Notify(BaseModel):
     kind:str
