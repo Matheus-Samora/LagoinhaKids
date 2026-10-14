@@ -1,4 +1,5 @@
 import {createSchoolUI} from './school.js';
+import {generateQR, openScannerModal, initUSBScannerListener} from './scanner.js';
 import './style.css';
 import './mobile.css';
 import './auth.css';
@@ -156,43 +157,13 @@ window.addEventListener('popstate',()=>{
  function render(){
   if(!S.user)return renderLogin();
   const unread=S.notifications.filter(n=>!n.read_at).length;
-  app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><button class="nav-link" data-action="install-modal" style="margin-bottom:8px;">${icon('arrow',16)}<span>Baixar App (APK / iOS)</span></button><div class="care-note"><span>✳</span><p>Pequenos passos.<br><strong>Grandes descobertas.</strong></p></div><button class="account" data-page="settings"><span class="avatar">${initials(S.user.name)}</span><span><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]}</small></span></button><button class="logout" data-action="logout">${icon('out',17)} Sair do aplicativo</button></div></aside><main><header class="topbar"><div class="topbar-left">${canGoBack()?`<button type="button" class="back-nav-btn" data-action="go-back" title="Voltar para a tela anterior" aria-label="Voltar para a tela anterior">${icon('back',16)}<span>Voltar</span></button>`:`<div class="topbar-brand" data-page="${initialPage()}"><img src="/logo.png" alt="Lagoinha" class="topbar-logo"/><div class="topbar-brand-text">lagoinha <strong>kids</strong></div></div>`}<div class="crumb-trail"><span class="crumb-prefix">Nosso espaço</span><span class="crumb-sep">/</span><strong>${S.user.role==='parent'&&S.page==='overview'?'Meus filhos':(paths[S.page]||'Aulinhas')}</strong></div></div><div class="top-actions"><button class="mini-button" data-action="install-modal" title="Instalar aplicativo móvel" style="margin-right:8px;font-weight:600;">📱 Baixar App</button><span class="date">${new Intl.DateTimeFormat('pt-BR',{day:'numeric',month:'long',timeZone:'America/Sao_Paulo'}).format(new Date())}</span><button class="bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',20)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button class="avatar small" data-page="settings" title="Minha conta" aria-label="Minha conta">${initials(S.user.name)}</button><button class="logout-top-btn" data-action="logout" title="Sair da conta / Trocar de usuário" aria-label="Sair da conta">${icon('out',15)}<span>Sair</span></button></div></header><div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
+  app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><button class="nav-link" data-action="install-modal" style="margin-bottom:8px;">${icon('arrow',16)}<span>Baixar App (APK / iOS)</span></button><div class="care-note"><span>✳</span><p>Pequenos passos.<br><strong>Grandes descobertas.</strong></p></div><button class="account" data-page="settings"><span class="avatar">${initials(S.user.name)}</span><span><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]}</small></span></button><button class="logout" data-action="logout">${icon('out',17)} Sair do aplicativo</button></div></aside><main><header class="topbar"><div class="topbar-left">${canGoBack()?`<button type="button" class="back-nav-btn" data-action="go-back" title="Voltar para a tela anterior" aria-label="Voltar para a tela anterior">${icon('back',16)}<span>Voltar</span></button>`:`<div class="topbar-brand" data-page="${initialPage()}"><img src="/logo.png" alt="Lagoinha" class="topbar-logo"/><div class="topbar-brand-text">lagoinha <strong>kids</strong></div></div>`}<div class="crumb-trail"><span class="crumb-prefix">Nosso espaço</span><span class="crumb-sep">/</span><strong>${S.user.role==='parent'&&S.page==='overview'?'Meus filhos':(paths[S.page]||'Aulinhas')}</strong></div></div><div class="top-actions">${S.user.role!=='parent'?`<button class="mini-button scanner-top-btn" data-action="open-scanner" title="Escanear Carteirinha QR" style="margin-right:8px;font-weight:600;">${icon('qrcode',15)} Check-in QR</button>`:''}<button class="mini-button" data-action="install-modal" title="Instalar aplicativo móvel" style="margin-right:8px;font-weight:600;">📱 Baixar App</button><span class="date">${new Intl.DateTimeFormat('pt-BR',{day:'numeric',month:'long',timeZone:'America/Sao_Paulo'}).format(new Date())}</span><button class="bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',20)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button class="avatar small" data-page="settings" title="Minha conta" aria-label="Minha conta">${initials(S.user.name)}</button><button class="logout-top-btn" data-action="logout" title="Sair da conta / Trocar de usuário" aria-label="Sair da conta">${icon('out',15)}<span>Sair</span></button></div></header><div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
  app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
 }
 function title(title,subtitle,button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</div>`;}
 function stat(label,value,helper,i,color){return `<article class="stat"><div><span>${label}</span><strong>${value}</strong><small>${helper}</small></div><span class="stat-icon" style="background:${color}">${icon(i,23)}</span></article>`;}
 function filtered(){return S.children.filter(ch=>(S.room==='all'||String(ch.room_id)===S.room)&&ch.name.toLowerCase().includes(S.search.toLowerCase()));}
 function filters(){return `<div class="filters"><label class="search">${icon('search',18)}<input id="student-search" placeholder="Buscar aluno pelo nome" value="${escape(S.search)}" aria-label="Buscar aluno pelo nome"/></label><select id="room-filter" aria-label="Filtrar turma"><option value="all">Todas as minhas turmas</option>${S.rooms.map(r=>`<option value="${r.id}" ${String(r.id)===S.room?'selected':''}>${escape(r.name)}</option>`).join('')}</select></div>`;}
-function generateQR(code){
- const hash=Array.from(String(code)).reduce((acc,c)=>(acc*31+c.charCodeAt(0))>>>0, 42);
- const size=21;
- const grid=Array.from({length:size},()=>Array(size).fill(false));
- function drawFinder(r0,c0){
-  for(let r=0;r<7;r++)for(let c=0;c<7;c++){
-   if(r===0||r===6||c===0||c===6||(r>=2&&r<=4&&c>=2&&c<=4)) grid[r0+r][c0+c]=true;
-  }
- }
- drawFinder(0,0);
- drawFinder(0,size-7);
- drawFinder(size-7,0);
- for(let i=8;i<size-8;i++){
-  grid[6][i]=(i%2===0);
-  grid[i][6]=(i%2===0);
- }
- for(let r=0;r<size;r++){
-  for(let c=0;c<size;c++){
-   if((r<8&&c<8)||(r<8&&c>=size-8)||(r>=size-8&&c<8)||(r===6)||(c===6)) continue;
-   grid[r][c]=(((hash ^ (r * 13 + c * 37)) % 3) === 0);
-  }
- }
- let rects='';
- for(let r=0;r<size;r++){
-  for(let c=0;c<size;c++){
-   if(grid[r][c]) rects+=`<rect x="${c*7}" y="${r*7}" width="7" height="7" fill="#09090b"/>`;
-  }
- }
- return `<svg class="qr-code-svg" viewBox="0 0 ${size*7} ${size*7}" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff;padding:4px;border-radius:8px;">${rects}</svg>`;
-}
 
 function pagingAlertBanner(){
  if(!S.activePaging||!S.activePaging.length)return '';
@@ -485,7 +456,19 @@ function eventRegisterModal(ev){
  </form>`:`<p class="soft-info">Você não tem filhos cadastrados na faixa etária deste evento (${ev.min_age} a ${ev.max_age} anos). Cadastre seu filho em Meus filhos primeiro.</p><button type="button" class="btn primary full" data-action="close">Entendido</button>`);
 }
 
-const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo});
+const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age})});
+initUSBScannerListener(S, (child, code) => {
+ if (S.user && S.user.role !== 'parent') {
+  openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age });
+  setTimeout(() => {
+   const inp = document.getElementById('scanner-usb-input');
+   if (inp) {
+    inp.value = code;
+    document.getElementById('scanner-usb-submit')?.click();
+   }
+  }, 100);
+ }
+});
 document.addEventListener('change',event=>school.change(event));
 document.addEventListener('click',async e=>{
  const el=e.target.closest('[data-page],[data-action]');if(!el)return;
@@ -494,6 +477,7 @@ document.addEventListener('click',async e=>{
  const action=el.dataset.action,ch=S.children.find(x=>x.id===Number(el.dataset.id));
  try{
  if(await school.action(action,el,ch))return;
+ if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age});return;}
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
  if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}
