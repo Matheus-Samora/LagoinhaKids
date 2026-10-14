@@ -7,6 +7,7 @@ import {Capacitor} from '@capacitor/core';
 import {Camera,CameraResultType,CameraSource,CameraDirection} from '@capacitor/camera';
 import {App} from '@capacitor/app';
 import {PushNotifications} from '@capacitor/push-notifications';
+import {LocalNotifications} from '@capacitor/local-notifications';
 
 const app=document.getElementById('app'), modal=document.getElementById('modal');
 const NATIVE=Capacitor.isNativePlatform();
@@ -166,15 +167,36 @@ function filters(){return `<div class="filters"><label class="search">${icon('se
 
 function pagingAlertBanner(){
  if(!S.activePaging||!S.activePaging.length)return '';
- return `<div class="paging-banner">
+ const hasAck = S.activePaging.some(p=>p.status==='on_my_way');
+ return `<div class="paging-banner ${hasAck?'acknowledged':''}">
   <div class="paging-left">
-   <span class="paging-dot"></span>
+   <span class="paging-dot ${hasAck?'green-dot':''}"></span>
    <div class="paging-details">
     <strong>📢 CHAMADO ATIVO NO TELÃO (${S.activePaging.length})</strong>
-    ${S.activePaging.map(p=>`<span><strong>${escape(p.child_name)}</strong> (${escape(p.room_name||'Salinha')}) · Motivo: ${escape(p.reason)} · <span class="paging-code">${escape(p.claim_code)}</span></span>`).join('<br>')}
+    ${S.activePaging.map(p=>`
+      <div style="margin-top:4px;">
+        <span><strong>${escape(p.child_name)}</strong> (${escape(p.room_name||'Salinha')}) · Motivo: ${escape(p.reason)} · <span class="paging-code">${escape(p.claim_code)}</span></span>
+        ${p.status==='on_my_way'?`<span style="display:inline-block;margin-left:6px;background:#22c55e;color:#000000;font-weight:700;font-size:10.5px;padding:2px 7px;border-radius:9999px;">🏃 Pais a caminho (${escape(p.ack_user_name||'Confirmado')})</span>`:`<span style="display:inline-block;margin-left:6px;background:#fef08a;color:#713f12;font-weight:700;font-size:10.5px;padding:2px 7px;border-radius:9999px;">⏳ Aguardando pais</span>`}
+      </div>
+    `).join('')}
    </div>
   </div>
-  ${S.user.role!=='parent'?`<div style="display:flex;gap:8px;flex-wrap:wrap;">${S.activePaging.map(p=>`<button class="mini-button" data-action="resolve-paging" data-id="${p.id}" style="background:#ffffff;color:#09090b;font-weight:700;">Concluir #${p.id}</button>`).join('')}</div>`:''}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+   ${S.user.role==='parent'?`
+     ${S.activePaging.map(p=>`
+       ${p.status==='on_my_way'?`
+         <span style="font-size:12px;color:#22c55e;font-weight:700;display:flex;align-items:center;gap:4px;background:rgba(34,197,94,0.15);padding:6px 12px;border-radius:8px;">✓ Você avisou que está a caminho!</span>
+       `:`
+         <button type="button" class="btn on-my-way-btn" data-action="on-my-way" data-id="${p.id}" data-child-id="${p.child_id}" style="background:#ffffff;color:#09090b;font-weight:700;font-size:13px;padding:9px 16px;border-radius:8px;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 3px 12px rgba(0,0,0,0.3);">
+           🏃 Estou a caminho!
+         </button>
+       `}
+     `).join('')}
+   `:''}
+   ${S.user.role!=='parent'?`
+     ${S.activePaging.map(p=>`<button class="mini-button" data-action="resolve-paging" data-id="${p.id}" style="background:#ffffff;color:#09090b;font-weight:700;">Concluir #${p.id}</button>`).join('')}
+   `:''}
+  </div>
  </div>`;
 }
 
@@ -271,12 +293,40 @@ function renderInnerPage(){
  if(S.page==='notifications'){
   const unread=S.notifications.filter(n=>!n.read_at).length;
   const markAllBtn = unread ? `<button class="btn secondary" data-action="mark-all-read">${icon('check',16)} Marcar todas como lidas</button>` : '';
-  return `${title('Avisos','Recados da equipe e da família.', markAllBtn)}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta"><span class="notification-tag">${escape(n.child_name||'Lagoinha Kids')}</span> · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section><p class="muted-note">Com o aplicativo aberto, os avisos são atualizados automaticamente. Notificações com o app fechado ainda não estão ativadas.</p>`;
+  const pushActive = hasPushPermission();
+  const pushBanner = pushActive ? `
+    <div class="push-status-card enabled">
+      <div class="push-card-content">
+        <div class="push-icon-bubble active">${icon('check', 20)}</div>
+        <div>
+          <strong>Notificações no celular ativadas ✓</strong>
+          <p>Você receberá alertas na tela de bloqueio mesmo com o aplicativo fechado.</p>
+        </div>
+      </div>
+      <div class="push-card-actions">
+        <button class="mini-button secondary" data-action="test-push-notification" title="Testar envio de notificação">${icon('bell', 14)} Testar alerta</button>
+      </div>
+    </div>
+  ` : `
+    <div class="push-status-card">
+      <div class="push-card-content">
+        <div class="push-icon-bubble">${icon('bell', 22)}</div>
+        <div>
+          <strong>Ativar notificações no celular</strong>
+          <p>Receba avisos instantâneos de check-in, saída e chamadas das professoras fora do app.</p>
+        </div>
+      </div>
+      <div class="push-card-actions">
+        <button class="btn primary push-action-btn" data-action="open-push-modal">${icon('bell', 16)} Ativar agora</button>
+      </div>
+    </div>
+  `;
+  return `${title('Avisos','Recados da equipe e da família.', markAllBtn)}${pushBanner}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta"><span class="notification-tag">${escape(n.child_name||'Lagoinha Kids')}</span> · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section>`;
  }if(S.page==='users'&&S.user.role==='admin')return `${title('Pessoas que cuidam.','Gerencie os acessos e as turmas da sua equipe.',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'Nenhuma atribuída':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
  if(S.page==='settings')return settingsPage();
  return '';
 }
-function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile"><span class="avatar big">${initials(S.user.name)}</span><div><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><span class="tag">${roles[S.user.role]}</span></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button>${NATIVE?'<button class="btn secondary full" data-action="enable-push" style="margin-top:12px">Ativar notificações neste celular</button>':''}${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
+function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile"><span class="avatar big">${initials(S.user.name)}</span><div><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><span class="tag">${roles[S.user.role]}</span></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #e4e4e7;border-radius:10px;background:#fafafa;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><strong style="font-size:13px;display:flex;align-items:center;gap:6px;color:#09090b;">${icon('bell', 16)} Notificações no celular</strong><span class="push-status-pill">${hasPushPermission() ? 'Ativadas ✓' : 'Desativadas'}</span></div><p style="font-size:11.5px;color:#71717a;margin:0 0 10px 0;line-height:1.4;">Alertas de check-in, saída e chamadas das tias fora do app.</p><button type="button" class="btn secondary full" data-action="${hasPushPermission() ? 'test-push-notification' : 'open-push-modal'}">${hasPushPermission() ? '🔔 Enviar notificação de teste' : '🔔 Configurar e Ativar Notificações'}</button></div>${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
 
 function showModal(title,subtitle,html){modal.querySelector('#modal-content').innerHTML=`<div class="modal-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-button" data-action="close" aria-label="Fechar">${icon('close')}</button></div>${html}`;modal.showModal();}
 async function privacyModal(){
@@ -501,6 +551,18 @@ document.addEventListener('click',async e=>{
  }
  if(action==='digital-id'){if(ch)digitalIdModal(ch);return;}
  if(action==='paging-call'){if(ch)pagingModal(ch);return;}
+ if(action==='on-my-way'){
+  const cid=Number(el.dataset.childId||0);
+  const pid=Number(el.dataset.id||0);
+  try{
+    const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:cid,paging_id:pid}});
+    toast(`🏃 Resposta confirmada! A equipe da salinha foi avisada que você está a caminho de ${res.child_name||'seu filho'}.`);
+    await load();
+  }catch(err){
+    toast(err.message||'Erro ao avisar a equipe.',true);
+  }
+  return;
+ }
  if(action==='resolve-paging'){await api(`/paging/${el.dataset.id}/resolve`,{method:'POST'});await load();toast('Chamado no telão resolvido.');return;}
  if(action==='guest-checkin'){guestCheckinModal();return;}
  if(action==='go-back'){handleBackButton();return;}
@@ -541,6 +603,11 @@ document.addEventListener('click',async e=>{
   toast('Conta removida da lista deste aparelho.');
  }
  if(action==='logout'){await api('/auth/logout',{method:'POST'}).catch(()=>{});S.user=null;S.csrf='';S.token='';navHistory.length=0;renderLogin();toast('Sessão encerrada com sucesso.');}
+ if(action==='open-push-modal')promptPushPermissionModal();
+ if(action==='activate-notifications')await requestNotificationPermission(true);
+ if(action==='dismiss-push-modal'){localStorage.setItem('lagoinha_push_dismissed_until',String(Date.now()+86400000*3));sessionStorage.setItem('lagoinha_push_session_dismissed','true');modal.close();}
+ if(action==='test-push-notification')testSystemNotification();
+ if(action==='enable-push')await requestNotificationPermission(true);
  if(action==='install-modal')installModal();
  if(action==='privacy-terms')privacyModal();
  if(action==='pwa-prompt'){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;});}else{toast('No Chrome, toque no menu (⋮) e selecione "Instalar aplicativo".');}}
@@ -668,9 +735,10 @@ if(Capacitor.isNativePlatform()){
 }
 async function start(){
  void checkLiveUpdate();
+ void initNativeNotifications();
  if(NATIVE&&!S.apiOrigin){renderLogin();return;}
  try{const health=await api('/health');S.google=health.google_enabled;}catch{renderLogin();toast('Não foi possível conectar. Verifique sua internet e tente entrar novamente.',true);return;}
- try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();}catch{renderLogin();}
+ try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();checkAutoPromptPush();}catch{renderLogin();}
  const params=new URL(location.href).searchParams;if(params.get('reset'))resetModal(params.get('reset'));
  if(params.get('verify'))showModal('Confirmar e-mail','Confirme o endereço associado à sua conta.',`<form data-form="verify-email"><input type="hidden" name="token" value="${escape(params.get('verify'))}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar e-mail</button></form>`);
  const err=params.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
@@ -684,19 +752,53 @@ async function checkLiveUpdate(){
 }
 let syncing=false,liveRevision=null;
 async function syncLive(){
- if(!S.user||document.hidden||S.busy||syncing)return;
+ if(!S.user||S.busy||syncing)return;
  syncing=true;const uid=S.user.id;
  try{
   const revision=(await api('/sync')).revision;if(revision===liveRevision)return;
   const {notifications,lessons,rooms,children,events,activePaging,activeGuests}=await api('/snapshot');
   if(S.user?.id!==uid)return;
   const previous=new Set(S.notifications.map(n=>n.id));
-  const newNotice=notifications.some(n=>!n.read_at&&!previous.has(n.id));
+  const newNotices=notifications.filter(n=>!n.read_at&&!previous.has(n.id));
   const changed=JSON.stringify([notifications,lessons,rooms,children,events,activePaging,activeGuests])!==JSON.stringify([S.notifications,S.lessons,S.rooms,S.children,S.events,S.activePaging,S.activeGuests]);
   Object.assign(S,{notifications,lessons,rooms,children,events,activePaging,activeGuests});
   const editing=modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
   if(!editing){liveRevision=revision;if(changed)render();}
-  if(newNotice)toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
+  if(newNotices.length > 0){
+    toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
+    for(const n of newNotices){
+      sendSystemNotification({
+        title: n.title || 'Lagoinha Kids',
+        message: n.message || (n.child_name ? `Aviso sobre ${n.child_name}` : 'Você recebeu um novo comunicado.'),
+        tag: n.kind === 'urgent_call' ? `urgent-call-${n.child_id||n.id}` : `notice-${n.id}`,
+        id: n.id,
+        child_id: n.child_id,
+        kind: n.kind,
+        isPaging: n.kind === 'urgent_call'
+      });
+    }
+  }
+  if(S.user.role==='parent' && activePaging && activePaging.length > 0){
+    for(const p of activePaging){
+      if(p.status==='active'){
+        const key='seen_p_'+p.id;
+        if(!sessionStorage.getItem(key)){
+          sessionStorage.setItem(key,'true');
+          sendSystemNotification({
+            title:'⚠️ Chamado da Salinha - '+p.child_name,
+            message:`Atenção: Por favor, compareça à salinha (${p.reason}). Código no telão: ${p.claim_code}`,
+            tag:'urgent-call-'+p.id,
+            id:p.id,
+            child_id:p.child_id,
+            paging_id:p.id,
+            kind:'urgent_call',
+            isPaging:true,
+            url:'/?page=overview'
+          });
+        }
+      }
+    }
+  }
  }catch{}finally{syncing=false;}
 }
 setInterval(()=>void syncLive(),5000);
@@ -740,3 +842,315 @@ function allowDiscard(){if(S.busy)return false;if(formDirty&&!confirm("Descartar
 document.addEventListener('input',event=>{if(event.target.closest('form'))formDirty=true;});
 modal.addEventListener('close',()=>{formDirty=false;});
 window.addEventListener('beforeunload',event=>{if(formDirty){event.preventDefault();event.returnValue='';}});
+
+
+function hasPushPermission(){
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted')return true;
+  if(localStorage.getItem('lagoinha_push_enabled')==='true')return true;
+  return false;
+}
+
+let nativeNotifReady=false;
+async function initNativeNotifications(){
+  if(!NATIVE||nativeNotifReady)return;
+  nativeNotifReady=true;
+  try{
+    await LocalNotifications.createChannel({
+      id:'lagoinha_urgent',
+      name:'Chamados Urgentes & Telão',
+      description:'Alertas prioritários para os pais durante o culto',
+      importance:5,
+      visibility:1,
+      vibration:true,
+      lights:true,
+      lightColor:'#ffffff'
+    });
+    await LocalNotifications.createChannel({
+      id:'lagoinha_general',
+      name:'Avisos Gerais',
+      description:'Avisos da salinha, check-in e eventos',
+      importance:4,
+      visibility:1,
+      vibration:true
+    });
+    await LocalNotifications.registerActionTypes({
+      types:[
+        {
+          id:'PAGING_ACTIONS',
+          actions:[
+            { id:'on_my_way', title:'🏃 Estou a caminho' },
+            { id:'view_details', title:'Ver detalhes' }
+          ]
+        }
+      ]
+    });
+    LocalNotifications.addListener('localNotificationActionPerformed',async (action)=>{
+      if(action.actionId==='on_my_way'){
+        const extra=action.notification.extra||{};
+        try{
+          const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:extra.child_id,paging_id:extra.paging_id}});
+          toast(`🏃 Resposta confirmada! A salinha foi avisada que você está a caminho de ${res.child_name||'seu filho'}.`);
+          await load();
+        }catch(err){
+          toast(err.message||'Erro ao avisar a salinha.',true);
+        }
+      }else{
+        S.page='overview';
+        render();
+      }
+    });
+    await PushNotifications.addListener('registration',async ({value})=>{
+      try{await api('/devices/token',{method:'POST',body:{token:value,platform:Capacitor.getPlatform()}});}catch{}
+    });
+    await PushNotifications.addListener('pushNotificationReceived',(notification)=>{
+      void sendSystemNotification({
+        title:notification.title||'Lagoinha Kids',
+        message:notification.body||'Você recebeu um novo aviso.',
+        isPaging:notification.data?.kind==='urgent_call'
+      });
+      void syncLive();
+    });
+    await PushNotifications.addListener('pushNotificationActionPerformed',()=>{
+      S.page='notifications';
+      void load();
+    });
+  }catch(err){
+    console.warn('Falha ao inicializar notificações nativas:',err);
+  }
+}
+
+async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging }){
+  const notifTitle=title||'Lagoinha Kids';
+  const urgent=kind==='urgent_call'||isPaging;
+  const notifBody=message||'Você recebeu um novo comunicado.';
+
+  // 1. Se estiver no app nativo (APK Android / iOS)
+  if(NATIVE){
+    try{
+      const perm=await LocalNotifications.checkPermissions();
+      if(perm.display!=='granted'){
+        await LocalNotifications.requestPermissions();
+      }
+      const notifId=Math.abs(Number(id||Date.now()) % 100000);
+      await LocalNotifications.schedule({
+        notifications:[
+          {
+            title:notifTitle,
+            body:notifBody,
+            id:notifId,
+            channelId:urgent?'lagoinha_urgent':'lagoinha_general',
+            actionTypeId:urgent?'PAGING_ACTIONS':undefined,
+            extra:{
+              child_id,
+              paging_id,
+              url:urgent?'/?page=overview':(url||'/?page=notifications')
+            },
+            iconColor:'#000000'
+          }
+        ]
+      });
+      return;
+    }catch(err){
+      console.warn('Erro ao disparar LocalNotification:',err);
+    }
+  }
+
+  // 2. Se estiver na Web / PWA no navegador
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  const options={
+    body:notifBody,
+    icon:'/logo.png',
+    badge:'/logo.png',
+    tag:tag||(urgent?'urgent-call-'+(child_id||Date.now()):'lagoinha-notice-'+Date.now()),
+    renotify:true,
+    requireInteraction:urgent,
+    data:{
+      url:url||(urgent?'/?page=overview':'/?page=notifications'),
+      id:id||null,
+      child_id:child_id||null,
+      paging_id:paging_id||null,
+      kind:kind||'general',
+      isPaging:urgent
+    },
+    vibrate:urgent?[300,150,300,150,300,150,400]:[200,100,200]
+  };
+
+  if(urgent){
+    options.actions=[
+      { action:'on_my_way', title:'🏃 Estou a caminho' },
+      { action:'open_app', title:'Ver detalhes' }
+    ];
+  }
+
+  try{
+    if('serviceWorker' in navigator&&navigator.serviceWorker.controller){
+      navigator.serviceWorker.ready.then(reg=>{
+        reg.showNotification(notifTitle,options).catch(()=>{
+          try{new Notification(notifTitle,options);}catch{}
+        });
+      }).catch(()=>{
+        try{new Notification(notifTitle,options);}catch{}
+      });
+    }else{
+      new Notification(notifTitle,options);
+    }
+  }catch(err){
+    console.warn('Erro ao emitir notificação de sistema:',err);
+  }
+}
+
+function promptPushPermissionModal(){
+  sessionStorage.setItem('lagoinha_push_session_dismissed','true');
+  const html=`<div class="push-permission-card">
+    <div class="push-modal-badge">
+      <img src="/logo.png" alt="Lagoinha Kids" class="push-modal-logo"/>
+      <span class="push-badge-indicator">${icon('bell',15)}</span>
+    </div>
+    <h3 class="push-modal-title">Ativar Notificações no Celular</h3>
+    <p class="push-modal-subtitle">Receba os avisos do seu filho na tela de bloqueio e central de notificações, mesmo com o aplicativo fechado.</p>
+    <div class="push-features-list">
+      <div class="push-feature-item">
+        <div class="push-feature-icon">${icon('check',18)}</div>
+        <div class="push-feature-text">
+          <strong>Check-in & Saída Segura</strong>
+          <p>Receba confirmação imediata quando seu filho entrar na salinha ou for retirado com o QR Code.</p>
+        </div>
+      </div>
+      <div class="push-feature-item">
+        <div class="push-feature-icon">${icon('speaker',18)}</div>
+        <div class="push-feature-text">
+          <strong>Chamada Rápida durante o Culto</strong>
+          <p>Se seu filho precisar de você (troca de fralda, choro ou febre), as tias avisam direto no seu aparelho.</p>
+        </div>
+      </div>
+      <div class="push-feature-item">
+        <div class="push-feature-icon">${icon('calendar',18)}</div>
+        <div class="push-feature-text">
+          <strong>Avisos e Aulinhas</strong>
+          <p>Lembretes de programações especiais, eventos infantis e temas do discipulado familiar.</p>
+        </div>
+      </div>
+    </div>
+    <div class="push-modal-alert">
+      <span style="font-size:18px;">📱</span>
+      <div>
+        <strong>Aparecem fora do aplicativo:</strong>
+        <p>As notificações saltam na tela de bloqueio do celular (Android, iPhone e Computador).</p>
+      </div>
+    </div>
+    <div class="push-modal-actions">
+      <button type="button" class="btn primary full push-confirm-btn" data-action="activate-notifications">${icon('bell',18)}<span>Ativar Notificações no Celular</span></button>
+      <button type="button" class="btn secondary full push-dismiss-btn" data-action="dismiss-push-modal">Agora não, lembrar depois</button>
+    </div>
+    <p class="push-privacy-footer">${icon('shield',13)} Ambiente seguro · Você pode desativar a qualquer momento nas configurações.</p>
+  </div>`;
+  showModal('Notificações no Celular','Avisos importantes em tempo real.',html);
+}
+
+async function requestNotificationPermission(explicit=true){
+  if(Capacitor.isNativePlatform()){
+    try{
+      let perm=await PushNotifications.checkPermissions();
+      if(perm.receive==='prompt')perm=await PushNotifications.requestPermissions();
+      const localPerm=await LocalNotifications.requestPermissions();
+      if(perm.receive==='granted'||localPerm.display==='granted'){
+        await PushNotifications.register();
+        localStorage.setItem('lagoinha_push_enabled','true');
+        modal.close();
+        toast('🔔 Notificações ativadas no seu celular com sucesso!');
+        await sendSystemNotification({
+          title:'Lagoinha Kids · Notificações Ativadas',
+          message:'Tudo pronto! Você receberá os avisos do seu filho no topo da tela do celular.',
+          tag:'welcome-notification'
+        });
+        render();
+        return true;
+      }else{
+        if(explicit)toast('Permissão não concedida. Você pode ativar nas configurações do celular.',true);
+        return false;
+      }
+    }catch(err){
+      if(explicit)toast('Erro ao ativar notificações: '+(err.message||err),true);
+      return false;
+    }
+  }
+
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  const isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;
+
+  if(isIOS&&!isStandalone&&!('Notification' in window)){
+    showModal('Notificações no iPhone','Como ativar os avisos fora do app no iOS:',`<div class="soft-info" style="font-size:13px;line-height:1.6;margin-bottom:16px;"><p>No iPhone (iOS), a Apple exige adicionar à Tela de Início para habilitar notificações:</p><ol style="padding-left:18px;margin:10px 0;"><li style="margin-bottom:6px;">No Safari, toque no botão <strong>Compartilhar</strong> (ícone com quadrado e seta para cima).</li><li style="margin-bottom:6px;">Role a lista e toque em <strong>"Adicionar à Tela de Início"</strong>.</li><li>Abra o aplicativo pelo novo ícone na tela do iPhone e ative as notificações!</li></ol></div><button class="btn primary full" data-action="close">Entendi</button>`);
+    return false;
+  }
+
+  if(!('Notification' in window)){
+    toast('Este navegador não oferece suporte para notificações de sistema.',true);
+    return false;
+  }
+
+  try{
+    const permission=await Notification.requestPermission();
+    if(permission==='granted'){
+      localStorage.setItem('lagoinha_push_enabled','true');
+      modal.close();
+      toast('🔔 Notificações ativadas com sucesso!');
+      sendSystemNotification({
+        title:'Lagoinha Kids · Notificações Ativas',
+        message:'Tudo pronto! Você receberá os avisos do seu filho na tela de bloqueio.',
+        tag:'welcome-notification'
+      });
+      render();
+      return true;
+    }else if(permission==='denied'){
+      if(explicit)toast('Notificações bloqueadas nas permissões do navegador. Toque no ícone de ajustes ao lado da URL para liberar.',true);
+      return false;
+    }else{
+      return false;
+    }
+  }catch(err){
+    if(explicit)toast('Erro ao solicitar permissão: '+(err.message||err),true);
+    return false;
+  }
+}
+
+function testSystemNotification(){
+  if(!hasPushPermission()){
+    promptPushPermissionModal();
+    return;
+  }
+  sendSystemNotification({
+    title:'⚠️ Chamado da Salinha (Demonstração)',
+    message:'Lucas Oliveira precisa da sua presença na salinha dos Pequenos. Toque em Estou a caminho!',
+    tag:'test-notification-'+Date.now(),
+    isPaging:true,
+    kind:'urgent_call'
+  });
+  toast('🔔 Alerta prioritário enviado para o topo do celular!');
+}
+
+function checkAutoPromptPush(){
+  if(!S.user)return;
+  if(hasPushPermission())return;
+  const dismissedUntil=Number(localStorage.getItem('lagoinha_push_dismissed_until')||0);
+  if(Date.now()<dismissedUntil)return;
+  if(sessionStorage.getItem('lagoinha_push_session_dismissed'))return;
+
+  setTimeout(()=>{
+    if(S.user&&!modal.open&&!hasPushPermission()){
+      promptPushPermissionModal();
+    }
+  },1800);
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message',(event)=>{
+    if(event.data?.type==='PAGING_ACKNOWLEDGED'){
+      toast('🏃 Resposta registrada! Os professores e o administrativo já foram avisados que você está a caminho.');
+      void load();
+    }
+    if(event.data?.type==='NAVIGATE_PAGE'){
+      S.page=event.data.page||'notifications';
+      render();
+    }
+  });
+}

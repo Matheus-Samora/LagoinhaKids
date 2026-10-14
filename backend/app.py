@@ -314,7 +314,7 @@ def get_privacy_terms():
 
 class DeviceTokenIn(BaseModel):
     token:str=Field(min_length=20,max_length=4096)
-    platform:str=Field(default='android',pattern='^(android|ios)$')
+    platform:str=Field(default='android',pattern='^(android|ios|web)$')
 
 @app.post('/api/devices/token')
 def register_device_token(data:DeviceTokenIn,user=Depends(session)):

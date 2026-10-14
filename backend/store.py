@@ -188,6 +188,9 @@ def migrate_safety_and_health(conn):
     fields={r[1] for r in conn.execute('PRAGMA table_info(guest_checkins)')}
     for column,definition in [('status',"TEXT NOT NULL DEFAULT 'present'"),('out_at','TEXT'),('checkout_actor','INTEGER')]:
         if column not in fields:conn.execute(f'ALTER TABLE guest_checkins ADD COLUMN {column} {definition}')
+    p_fields={r[1] for r in conn.execute('PRAGMA table_info(paging_requests)')}
+    for column,definition in [('acknowledged_at','TEXT'),('acknowledged_by','INTEGER REFERENCES users(id)')]:
+        if column not in p_fields:conn.execute(f'ALTER TABLE paging_requests ADD COLUMN {column} {definition}')
     if 'version' not in {r[1] for r in conn.execute('PRAGMA table_info(rooms)')}:
         conn.execute('ALTER TABLE rooms ADD COLUMN version INTEGER NOT NULL DEFAULT 1')
     if conn.execute("SELECT 1 FROM sqlite_master WHERE name='notifications'").fetchone():

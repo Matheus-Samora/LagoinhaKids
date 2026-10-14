@@ -185,6 +185,20 @@ def test_paging_system_and_guest_checkin():
     notifs = parent_c.get('/api/notifications').json()
     assert any(n['kind'] == 'urgent_call' for n in notifs)
 
+    # Parent clicks "Estou a caminho"
+    ack_res = parent_c.post('/api/paging/on-my-way', json={'paging_id': pid, 'child_id': 1})
+    assert ack_res.status_code == 200
+    assert ack_res.json()['status'] == 'on_my_way'
+
+    # Active paging now reflects on_my_way status
+    active_mid = parent_c.get('/api/paging/active').json()
+    p_item = next(p for p in active_mid if p['id'] == pid)
+    assert p_item['status'] == 'on_my_way'
+
+    # Staff received arriving notification
+    t_notifs = teacher_c.get('/api/notifications').json()
+    assert any(n['kind'] == 'arriving' for n in t_notifs)
+
     # Teacher resolves paging
     res_resolve = teacher_c.post(f'/api/paging/{pid}/resolve')
     assert res_resolve.status_code == 200

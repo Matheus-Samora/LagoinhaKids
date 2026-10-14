@@ -379,14 +379,63 @@ def trigger_paging(data: PagingCreate, user=Depends(staff)):
 def get_active_paging(user=Depends(session)):
     with s.db() as c:
         rows = c.execute('''
-            SELECT p.*, ch.name AS child_name, rm.name AS room_name
+            SELECT p.*, ch.name AS child_name, rm.name AS room_name, u.name AS ack_user_name
             FROM paging_requests p
             JOIN children ch ON ch.id = p.child_id
             LEFT JOIN rooms rm ON rm.id = p.room_id
-            WHERE p.status = 'active'
+            LEFT JOIN users u ON u.id = p.acknowledged_by
+            WHERE p.status IN ('active', 'on_my_way')
             ORDER BY p.id DESC
         ''').fetchall()
         return [dict(r) for r in rows if child_visible(c,user,c.execute("SELECT * FROM children WHERE id=?",(r["child_id"],)).fetchone())]
+
+class PagingAckIn(BaseModel):
+    child_id: int | None = None
+    paging_id: int | None = None
+
+@router.post('/paging/on-my-way')
+def on_my_way(data: PagingAckIn, user=Depends(session)):
+    now = s.now()
+    with s.db() as c:
+        p = None
+        if data.paging_id:
+            p = c.execute("SELECT * FROM paging_requests WHERE id=? AND status IN ('active','on_my_way')", (data.paging_id,)).fetchone()
+        elif data.child_id:
+            p = c.execute("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way') ORDER BY id DESC LIMIT 1", (data.child_id,)).fetchone()
+        else:
+            p = c.execute("""
+                SELECT p.* FROM paging_requests p
+                JOIN children ch ON ch.id=p.child_id
+                WHERE ch.parent_id=? AND p.status IN ('active','on_my_way')
+                ORDER BY p.id DESC LIMIT 1
+            """, (user['id'],)).fetchone()
+
+        if not p:
+            fail('paging_not_found', 'Nenhum chamado ativo encontrado para esta solicitação.', 404)
+
+        ch = c.execute("SELECT * FROM children WHERE id=?", (p['child_id'],)).fetchone()
+        if not ch:
+            fail('child_not_found', 'Criança não encontrada.', 404)
+
+        c.execute("""
+            UPDATE paging_requests
+            SET status='on_my_way', acknowledged_at=?, acknowledged_by=?
+            WHERE id=?
+        """, (now, user['id'], p['id']))
+
+        recipients = [r[0] for r in c.execute("SELECT DISTINCT user_id FROM teacher_rooms WHERE room_id=?", (p['room_id'],))]
+        recipients += [r[0] for r in c.execute("SELECT id FROM users WHERE role='admin' AND active=1")]
+
+        msg = f"O responsável {user['name']} confirmou que ESTÁ A CAMINHO para atender o chamado de {ch['name']}."
+        for uid in set(recipients):
+            c.execute("""
+                INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at)
+                VALUES(?, ?, 'arriving', '🏃 Responsável a Caminho!', ?, ?, ?)
+            """, (uid, ch['id'], msg, user['id'], now))
+
+        c.execute("UPDATE notifications SET read_at=coalesce(read_at,?) WHERE user_id=? AND child_id=? AND kind='urgent_call'", (now, user['id'], ch['id']))
+        s.audit(c, user['id'], 'paging_on_my_way', ch['id'])
+        return {'ok': True, 'child_name': ch['name'], 'status': 'on_my_way', 'claim_code': p['claim_code']}
 
 @router.post('/paging/{paging_id}/resolve')
 def resolve_paging(paging_id: int, user=Depends(staff)):
@@ -398,7 +447,7 @@ def resolve_paging(paging_id: int, user=Depends(staff)):
         updated = c.execute('''
             UPDATE paging_requests
             SET status = 'resolved', resolved_at = ?
-            WHERE id = ? AND status = 'active'
+            WHERE id = ? AND status IN ('active', 'on_my_way')
         ''', (now, paging_id)).rowcount
         if not updated:
             fail('paging_not_found', 'Chamado não encontrado ou já resolvido.', 404)

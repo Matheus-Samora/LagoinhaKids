@@ -640,6 +640,22 @@
     opacity: 1 !important;
     pointer-events: auto !important;
   }
+
+  .push-status-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 12px 14px !important;
+  }
+
+  .push-card-actions {
+    width: 100% !important;
+  }
+
+  .push-card-actions button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }
 
 @media (max-width: 360px) {

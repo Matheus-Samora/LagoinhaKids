@@ -3245,8 +3245,271 @@ button:active,
   margin-top: 10px;
 }
 
+/* Push Notification Prompt Modal & Status Cards */
+.push-permission-card {
+  padding: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+}
 
+.push-modal-badge {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
+.push-modal-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #000000;
+  border: 3px solid #18181b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.push-badge-indicator {
+  position: absolute;
+  bottom: 0;
+  right: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #09090b;
+  color: #ffffff;
+  border: 2.5px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  animation: bell-pulse 2s infinite ease-in-out;
+}
+
+@keyframes bell-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.push-modal-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #09090b;
+  margin: 0 0 6px 0;
+}
+
+.push-modal-subtitle {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #71717a;
+  margin: 0 0 18px 0;
+  padding: 0 10px;
+}
+
+.push-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.push-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f4f4f5;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+}
+
+.push-feature-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #09090b;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.push-feature-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #09090b;
+}
+
+.push-feature-text p {
+  margin: 2px 0 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #52525b;
+}
+
+.push-modal-alert {
+  background: #09090b;
+  color: #ffffff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.push-modal-alert strong {
+  color: #ffffff;
+}
+
+.push-modal-alert p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #e4e4e7;
+}
+
+.push-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.push-confirm-btn {
+  background: #000000 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.push-confirm-btn:hover {
+  background: #27272a !important;
+}
+
+.push-dismiss-btn {
+  min-height: 42px;
+  font-size: 13px;
+  color: #71717a !important;
+  border: 1px solid #e4e4e7 !important;
+  background: #ffffff !important;
+}
+
+.push-dismiss-btn:hover {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+}
+
+.push-privacy-footer {
+  text-align: center;
+  font-size: 11px;
+  color: #a1a1aa;
+  margin-top: 14px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Push Status Cards in Notifications & Settings */
+.push-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: #ffffff;
+  border: 1.5px solid #e4e4e7;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.push-status-card.enabled {
+  background: #fafafa;
+  border-color: #27272a;
+}
+
+.push-card-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.push-icon-bubble {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #09090b;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.push-icon-bubble.active {
+  background: #18181b;
+}
+
+.push-card-content strong {
+  display: block;
+  font-size: 13.5px;
+  color: #09090b;
+}
+
+.push-card-content p {
+  margin: 3px 0 0 0;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.push-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.push-action-btn {
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.push-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #18181b;
+  background: #f4f4f5;
+  border: 1px solid #d4d4d8;
+  border-radius: 9999px;
+  padding: 4px 10px;
+}
 /* Checklist: keyboard focus, touch targets and reduced motion. */
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #2563eb!important;outline-offset:3px}
 @media(pointer:coarse){button,.mini-button{min-height:44px;min-width:44px}}
