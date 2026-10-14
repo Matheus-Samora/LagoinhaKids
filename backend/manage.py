@@ -1,11 +1,12 @@
 import argparse,getpass,sqlite3,os
+from contextlib import closing
 from pathlib import Path
 from . import store as s
 
 def backup(destination):
     target=Path(destination).resolve();target.parent.mkdir(parents=True,exist_ok=True)
     if target==s.DB:raise ValueError('O backup deve usar outro arquivo.')
-    with sqlite3.connect(s.DB) as source,sqlite3.connect(target) as copy:
+    with closing(sqlite3.connect(s.DB)) as source,closing(sqlite3.connect(target)) as copy:
         source.backup(copy)
         if copy.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise RuntimeError('Backup inválido')
     return target

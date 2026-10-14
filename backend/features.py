@@ -16,17 +16,17 @@ def send_mail(recipient,subject,body):
 
 class Recovery(BaseModel):
     email:str=Field(max_length=200)
-    allow_direct_fallback:bool=False
+
 
 @router.post('/auth/recovery')
 def recover(data:Recovery,tasks:BackgroundTasks):
-    if not mail_ready() and not data.allow_direct_fallback:
+    if not mail_ready():
         fail('email_unavailable','A recuperação por e-mail está indisponível. Procure a administração.',503)
     address=email(data.email);key=s.digest('recovery|'+address)
     with s.db() as c:
         attempt=c.execute('SELECT * FROM attempts WHERE key=?',(key,)).fetchone()
         if attempt and attempt['expires']>time.time() and attempt['failures']>=5:return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
-        c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,1,int(time.time())+300))
+        c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,attempt['failures']+1 if attempt and attempt['expires']>time.time() else 1,int(time.time())+300))
         user=c.execute('SELECT id, name FROM users WHERE email=? AND active=1',(address,)).fetchone()
         if user:
             token=secrets.token_urlsafe(40)
@@ -35,9 +35,7 @@ def recover(data:Recovery,tasks:BackgroundTasks):
             s.audit(c,user['id'],'password_recovery_requested')
             if mail_ready():
                 tasks.add_task(send_mail,address,'Recuperar acesso — Lagoinha Kids',f'Use este link em até 30 minutos: {PUBLIC_URL}/?reset={token}\nSe não solicitou, ignore esta mensagem.')
-                return {'ok':True,'message':'Enviamos um link de recuperação para o seu e-mail.'}
-            else:
-                return {'ok':True,'message':'Redefinição autorizada. Digite sua nova senha.','reset_token':token,'user_name':user['name']}
+                return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
     return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
 class Reset(BaseModel):token:str=Field(max_length=200);password:str=Field(max_length=128)
 @router.post('/auth/reset')
@@ -123,6 +121,16 @@ def sync_revision(user=Depends(session)):
         # Minute boundary updates expiry-derived lists without reloading full lists every poll.
         return {'revision':s.digest(f'{change}|{notice[0]}|{notice[1]}|{int(time.time())//60}')}
 
+@router.get('/snapshot')
+def snapshot(user=Depends(session)):
+    from .school import children,rooms,lessons
+    from .events import list_events,get_active_paging,list_active_guests
+    from .app import notifications
+    return {'children':children(user=user),'rooms':rooms(user=user),'lessons':lessons(user=user),
+            'notifications':notifications(user=user),'events':list_events(user=user),
+            'activePaging':get_active_paging(user=user),
+            'activeGuests':list_active_guests(user=user) if user['role']!='parent' else []}
+
 @router.post('/auth/email/send')
 def send_verification(tasks:BackgroundTasks,user=Depends(session)):
     if not mail_ready():fail('email_unavailable','A verificação por e-mail aguarda configuração da equipe.',503)
@@ -131,7 +139,7 @@ def send_verification(tasks:BackgroundTasks,user=Depends(session)):
         key=s.digest('verify|'+str(user['id']))
         attempt=c.execute('SELECT * FROM attempts WHERE key=?',(key,)).fetchone()
         if attempt and attempt['expires']>time.time():fail('rate','Aguarde alguns minutos antes de pedir outro e-mail.',429)
-        c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,1,int(time.time())+300))
+        c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,attempt['failures']+1 if attempt and attempt['expires']>time.time() else 1,int(time.time())+300))
         c.execute('DELETE FROM auth_tokens WHERE user_id=? AND kind="verify"',(user['id'],))
         c.execute('INSERT INTO auth_tokens VALUES(?,?,?,?)',(s.digest(token),user['id'],'verify',int(time.time())+86400))
     tasks.add_task(send_mail,user['email'],'Confirmar e-mail — Lagoinha Kids',f'Confirme seu e-mail em até 24 horas: {PUBLIC_URL}/?verify={token}')

@@ -57,7 +57,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const lesson=S.lessons.find(l=>l.id===S.selectedLesson);
   if(!lesson)S.selectedLesson=null;
   const children=lesson?S.children.filter(ch=>lesson.confirmed_children.includes(ch.id)):S.children;
-  const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes de Hoje (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável / Contato</th><th>Código de Retirada</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<a href="https://wa.me/55${g.guardian_phone.replace(/\\D/g,'')}" target="_blank" style="color:#22c55e;">WhatsApp: ${e(g.guardian_phone)}</a>`:''}</small></td><td><span class="claim-tag-badge">${e(g.claim_code)}</span></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
+  const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes de Hoje (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável / Contato</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<a href="https://wa.me/55${g.guardian_phone.replace(/\\D/g,'')}" target="_blank" style="color:#22c55e;">WhatsApp: ${e(g.guardian_phone)}</a>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
   return `${title('Chamada','Acompanhe as crianças e faça o check-in.',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} 📷 Ler QR Code (Check-in)</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Check-in Visitante (30s)</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
   <div class="scanner-desk-bar">
     <div class="scanner-desk-info">
@@ -68,7 +68,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
       </div>
     </div>
     <div class="scanner-desk-action">
-      <input id="desk-barcode-input" type="text" placeholder="Bipar código (ex: LK-0007)..." autocomplete="off" />
+      <input id="desk-barcode-input" aria-label="Código da carteirinha ou nome da criança" type="text" placeholder="Bipar código (ex: LK-0007)..." autocomplete="off" />
       <button type="button" class="btn primary" data-action="desk-barcode-search">Check-in</button>
     </div>
   </div>
@@ -162,6 +162,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(type==='simple-room'){
    const data={name:values.name,min_age:Number(values.min_age),max_age:Number(values.max_age),capacity:Number(values.capacity)};
    if(values.owner_id)data.owner_id=Number(values.owner_id);
+   if(id)data.version=S.rooms.find(r=>r.id===Number(id))?.version;
    const result=await api(id?`/rooms/${id}`:'/rooms',{method:id?'PATCH':'POST',body:data});return id?'Turma salva.':{message:'Turma criada. Agora publique o primeiro horário.',roomId:result.id};
   }
   if(type==='lesson'){

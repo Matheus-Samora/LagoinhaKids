@@ -3246,3 +3246,8 @@ button:active,
 }
 
 
+
+/* Checklist: keyboard focus, touch targets and reduced motion. */
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #2563eb!important;outline-offset:3px}
+@media(pointer:coarse){button,.mini-button{min-height:44px;min-width:44px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

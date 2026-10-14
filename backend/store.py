@@ -185,6 +185,15 @@ def migrate_safety_and_health(conn):
         created_at TEXT NOT NULL,
         actor INTEGER NOT NULL REFERENCES users(id)
     )''')
+    fields={r[1] for r in conn.execute('PRAGMA table_info(guest_checkins)')}
+    for column,definition in [('status',"TEXT NOT NULL DEFAULT 'present'"),('out_at','TEXT'),('checkout_actor','INTEGER')]:
+        if column not in fields:conn.execute(f'ALTER TABLE guest_checkins ADD COLUMN {column} {definition}')
+    if 'version' not in {r[1] for r in conn.execute('PRAGMA table_info(rooms)')}:
+        conn.execute('ALTER TABLE rooms ADD COLUMN version INTEGER NOT NULL DEFAULT 1')
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='notifications'").fetchone():
+        conn.execute('CREATE INDEX IF NOT EXISTS notice_user_id ON notifications(user_id,id)')
+    conn.execute('CREATE INDEX IF NOT EXISTS family_user_active ON family_links(user_id,active,child_id)')
+    conn.execute('CREATE INDEX IF NOT EXISTS guest_status_room ON guest_checkins(status,room_id,created_at)')
     conn.execute('CREATE INDEX IF NOT EXISTS events_active ON events(active, target_audience, starts_at)')
     conn.execute('CREATE INDEX IF NOT EXISTS event_reg_event ON event_registrations(event_id, child_id)')
     conn.execute('CREATE INDEX IF NOT EXISTS paging_active ON paging_requests(status, created_at)')
@@ -193,6 +202,7 @@ def migrate_school():
     """Transactional, additive migration; preserve children, attendance and templates."""
     conn=sqlite3.connect(DB,timeout=20)
     try:
+        conn.execute('PRAGMA journal_mode=WAL')
         conn.execute('PRAGMA foreign_keys=OFF')
         conn.execute('BEGIN IMMEDIATE')
         fields={r[1] for r in conn.execute('PRAGMA table_info(rooms)')}

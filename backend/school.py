@@ -27,6 +27,7 @@ class RoomIn(BaseModel):
     max_age:int=Field(ge=0,le=17)
     capacity:int=Field(ge=1,le=100)
     owner_id:int|None=None
+    version:int|None=Field(default=None,ge=1)
 def validate_room(c,data,user,is_edit=False):
     if not data.name.strip() or data.max_age<data.min_age:fail('room','Confira o nome e a faixa etária.')
     owner=data.owner_id or user['id']
@@ -64,6 +65,7 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         existing=room_for_edit(c,user,rid)
+        if data.version is not None and data.version!=existing['version']:fail('conflict','Esta turma foi alterada. Atualize a tela e confira antes de salvar.',409)
         if user['role']!='admin':
             owner=existing['created_by'] or user['id']
         else:
@@ -74,7 +76,7 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
         if maximum>data.capacity:fail('capacity','Já existem aulas com mais confirmações que essa capacidade.',409)
         booked=c.execute('SELECT ch.birthday,l.starts_at FROM reservations b JOIN lessons l ON l.id=b.lesson_id JOIN children ch ON ch.id=b.child_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchall()
         if any(not data.min_age<=age_on(row['birthday'],row['starts_at'])<=data.max_age for row in booked):fail('age','A nova faixa etária exclui alunos já confirmados. Ajuste as confirmações antes.',409)
-        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,created_by=? WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,owner,rid))
+        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,created_by=?,version=version+1 WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,owner,rid))
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_updated')
     return {'ok':True}
 @router.delete('/rooms/{rid}')

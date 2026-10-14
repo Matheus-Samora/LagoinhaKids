@@ -51,8 +51,8 @@ function brand(){return `<div class="brand"><img src="/logo.png" alt="Logo Lagoi
 function renderLogin(register=false,prefillEmail=''){
  const saved=getSavedAccounts();
  const savedSection=(!register&&saved.length)?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos neste dispositivo</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="${escape(a.email)}"><span class="avatar mini">${initials(a.name||a.email)}</span><div class="saved-account-text"><strong>${escape(a.name||a.email)}</strong><small>${escape(roles[a.role]||a.role||'Acesso')}</small></div></button><button type="button" class="saved-account-del" data-action="remove-saved" data-email="${escape(a.email)}" title="Remover conta deste aparelho" aria-label="Remover">✕</button></div>`).join('')}</div></div>`:'';
- const demoSection=(!register&&!saved.length)?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos Rápidos Disponíveis</span><small>Toque para preencher</small></div><div class="saved-accounts-chips"><div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="admin@lagoinha.test" data-pass="Lagoinha2026!"><span class="avatar mini">AC</span><div class="saved-account-text"><strong>Ana Costa</strong><small>Administração</small></div></button></div><div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="professora@lagoinha.test" data-pass="Lagoinha2026!"><span class="avatar mini">MA</span><div class="saved-account-text"><strong>Mariana Alves</strong><small>Professora</small></div></button></div><div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="pai@lagoinha.test" data-pass="Lagoinha2026!"><span class="avatar mini">GO</span><div class="saved-account-text"><strong>Gabriel Oliveira</strong><small>Responsável</small></div></button></div></div></div>`:'';
- app.innerHTML=`<main class="auth-screen"><section class="auth-card">${brand()}<h1>${register?'Criar conta':'Bem-vindo'}</h1><p class="auth-subtitle">${register?'Seu acesso ao Lagoinha Kids.':'Entre para continuar.'}</p>${savedSection||demoSection}<form data-form="${register?'register':'login'}">${register?'<label>Nome<input name="name" autocomplete="name" required minlength="2" maxlength="100"/></label><label>Celular<input name="phone" type="tel" autocomplete="tel" maxlength="30"/></label>':''}<label>E-mail<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${escape(prefillEmail)}"/></label><label>Senha<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="${register?'new-password':'current-password'}" required ${register?'minlength="12"':''} maxlength="128"/><button type="button" data-action="toggle-password" aria-label="Mostrar senha">Ver</button></div></label>${!register?'<label id="login-otp-label" hidden>Código do autenticador<input name="otp" autocomplete="one-time-code" maxlength="40"/></label>':''}${register?'<label class="checkbox-label terms-choice"><input name="terms_accepted" type="checkbox" required/>Li e aceito os <button type="button" class="text-link" data-action="privacy-terms">termos e a política de privacidade</button>.</label>':'<button type="button" class="auth-forgot text-link" data-action="password-help">Esqueci minha senha</button>'}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${register?'Criar conta':'Entrar'}</button></form>${S.google?'<div class="divider"><span>ou</span></div><button class="btn google full" data-action="google"><span class="google-g">G</span> Continuar com Google</button>':''}<p class="signup">${register?'Já tem conta?':'Primeiro acesso?'} <button data-action="${register?'login-screen':'register-screen'}">${register?'Entrar':'Criar conta'}</button></p><footer class="auth-footer"><button class="text-link" data-action="privacy-terms">Privacidade</button><button class="text-link" data-action="install-modal">Instalar app</button>${NATIVE?'<button class="text-link" data-action="server-options">Conexão</button>':''}</footer><p id="connection-status" class="connection-status" role="status" ${navigator.onLine?'hidden':''}>Sem conexão. Verifique sua internet.</p></section></main>`;
+ const demoSection='';
+ app.innerHTML=`<main class="auth-screen"><section class="auth-card">${brand()}<h1>${register?'Criar conta':'Bem-vindo'}</h1><p class="auth-subtitle">${register?'Seu acesso ao Lagoinha Kids.':'Entre para continuar.'}</p>${savedSection||demoSection}<form data-form="${register?'register':'login'}">${register?'<label>Nome<input name="name" autocomplete="name" required minlength="2" maxlength="100"/></label><label>Celular<input name="phone" type="tel" autocomplete="tel" maxlength="30"/></label>':''}<label>E-mail<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${escape(prefillEmail)}"/></label><label>Senha<div class="password-field"><input name="password" id="login-password" aria-label="Senha" type="password" autocomplete="${register?'new-password':'current-password'}" required ${register?'minlength="12"':''} maxlength="128"/><button type="button" data-action="toggle-password" aria-label="Mostrar senha">Ver</button></div></label>${!register?'<label id="login-otp-label" hidden>Código do autenticador<input name="otp" autocomplete="one-time-code" maxlength="40"/></label>':''}${register?'<label class="checkbox-label terms-choice"><input name="terms_accepted" type="checkbox" required/>Li e aceito os <button type="button" class="text-link" data-action="privacy-terms">termos e a política de privacidade</button>.</label>':'<button type="button" class="auth-forgot text-link" data-action="password-help">Esqueci minha senha</button>'}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${register?'Criar conta':'Entrar'}</button></form>${S.google?'<div class="divider"><span>ou</span></div><button class="btn google full" data-action="google"><span class="google-g">G</span> Continuar com Google</button>':''}<p class="signup">${register?'Já tem conta?':'Primeiro acesso?'} <button data-action="${register?'login-screen':'register-screen'}">${register?'Entrar':'Criar conta'}</button></p><footer class="auth-footer"><button class="text-link" data-action="privacy-terms">Privacidade</button><button class="text-link" data-action="install-modal">Instalar app</button>${NATIVE?'<button class="text-link" data-action="server-options">Conexão</button>':''}</footer><p id="connection-status" class="connection-status" role="status" ${navigator.onLine?'hidden':''}>Sem conexão. Verifique sua internet.</p></section></main>`;
 }
 function welcome(){
  app.innerHTML=`<div class="welcome-screen" aria-label="Lagoinha Kids"><img src="/logo.png" alt="Lagoinha Kids"/><strong>lagoinha kids<span>.</span></strong></div>`;
@@ -66,10 +66,7 @@ async function familyModal(ch){
 }
 async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
- const jobs=[api('/children'),api('/rooms'),api('/notifications'),api('/lessons'),api('/events'),api('/paging/active')];
- if(S.user.role==='admin')jobs.push(api('/users'),api('/audit'));
- if(S.user.role!=='parent')jobs.push(api('/guests/active'));
- const [children,rooms,notifications,lessons,events=[],activePaging=[],users=[],audit=[],activeGuests=[]]=await Promise.all(jobs);
+ const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests]=await Promise.all([api('/children'),api('/rooms'),api('/notifications'),api('/lessons'),api('/events'),api('/paging/active'),S.user.role==='admin'?api('/users'):[],S.user.role==='admin'?api('/audit'):[],S.user.role!=='parent'?api('/guests/active'):[]]);
  Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests});render();
 }
 function navItems(){
@@ -95,6 +92,7 @@ function canGoBack(){
 }
 
 function navigateTo(page,replace=false){
+ if(!allowDiscard())return;
  if(!replace&&S.page&&S.page!==page){
   navHistory.push(S.page);
   if(navHistory.length>30)navHistory.shift();
@@ -108,6 +106,7 @@ function navigateTo(page,replace=false){
 }
 
 function handleBackButton(){
+ if(!allowDiscard())return;
  if(modal&&modal.open){
   modal.close();
   return;
@@ -338,7 +337,7 @@ function faceModal(ch,mode){
 function userModal(user){showModal(user?'Gerenciar acesso':'Mais uma pessoa para cuidar.',user?escape(user.name):'Atribua o perfil adequado e as turmas de atuação.',`<form data-form="${user?'edit-user':'user'}" ${user?`data-id="${user.id}"`:''}>${user?`<label class="checkbox-label"><input type="checkbox" name="active" ${user.active?'checked':''}/>Acesso ativo</label>`:`<label>Nome completo<input name="name" required minlength="2" maxlength="100"/></label><label>E-mail<input name="email" type="email" required maxlength="200"/></label><label>Senha inicial<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Pelo menos 12 caracteres"/></label><label>Perfil<select name="role"><option value="teacher">Professor(a)</option><option value="parent">Responsável</option><option value="admin">Administração / desenvolvimento</option></select></label>`}<fieldset><legend>Turmas de atuação (perfil professor)</legend>${S.rooms.map(r=>`<label class="checkbox-label"><input type="checkbox" name="rooms" value="${r.id}" ${user?.rooms.includes(r.id)?'checked':''}/>${escape(r.name)}</label>`).join('')}</fieldset><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${user?'Salvar acesso':'Criar usuário'}</button></form>`);}
 function stopCamera(){S.stream?.getTracks().forEach(t=>t.stop());S.stream=null;}
 modal.addEventListener('close',()=>{stopCamera();S.faceFile=null;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=null;});
-modal.addEventListener('cancel',(e)=>{if(S.busy)e.preventDefault();});
+modal.addEventListener('cancel',(e)=>{if(S.busy||!allowDiscard())e.preventDefault();});
 function selectFace(file){if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8*1024*1024)return toast('Use JPG, PNG ou WebP de até 8 MB.',true);S.faceFile=file;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=URL.createObjectURL(file);document.getElementById('face-preview').src=S.faceUrl;document.getElementById('face-preview').hidden=false;document.getElementById('face-placeholder').hidden=true;}
 document.addEventListener('change',e=>{if(e.target.id==='face-input')selectFace(e.target.files[0]);if(e.target.id==='room-filter'){S.room=e.target.value;updateRoster();}});
 document.addEventListener('input',e=>{if(e.target.id==='student-search'){S.search=e.target.value;updateRoster();}});
@@ -456,10 +455,10 @@ function eventRegisterModal(ev){
  </form>`:`<p class="soft-info">Você não tem filhos cadastrados na faixa etária deste evento (${ev.min_age} a ${ev.max_age} anos). Cadastre seu filho em Meus filhos primeiro.</p><button type="button" class="btn primary full" data-action="close">Entendido</button>`);
 }
 
-const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age})});
+const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
 initUSBScannerListener(S, (child, code) => {
  if (S.user && S.user.role !== 'parent') {
-  openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age });
+  openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age, attendanceModal });
   setTimeout(() => {
    const inp = document.getElementById('scanner-usb-input');
    if (inp) {
@@ -477,7 +476,8 @@ document.addEventListener('click',async e=>{
  const action=el.dataset.action,ch=S.children.find(x=>x.id===Number(el.dataset.id));
  try{
  if(await school.action(action,el,ch))return;
- if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age});return;}
+ if(action==='guest-checkout'){showModal('Saída do visitante','Confira o responsável e o código entregue na chegada.',`<form data-form="guest-checkout" data-id="${Number(el.dataset.id)}"><label>Código de retirada<input name="claim_code" autocomplete="off" required maxlength="30"/></label><label class="checkbox-label"><input type="checkbox" name="confirmed" required/>Conferi presencialmente o responsável.</label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar saída</button></form>`);return;}
+ if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal});return;}
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
  if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}
@@ -544,7 +544,7 @@ document.addEventListener('click',async e=>{
  if(action==='install-modal')installModal();
  if(action==='privacy-terms')privacyModal();
  if(action==='pwa-prompt'){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;});}else{toast('No Chrome, toque no menu (⋮) e selecione "Instalar aplicativo".');}}
- if(action==='close')modal.close();
+ if(action==='close'&&allowDiscard())modal.close();
  if(action==='attendance')await attendanceModal(ch);
  if(action==='notify')notifyModal(ch,el.dataset.kind);
  if(action==='consent')consentModal(ch);
@@ -569,7 +569,7 @@ document.addEventListener('submit',async e=>{
  const form=e.target;if(!form.dataset.form)return;e.preventDefault();if(S.busy)return;
  const kind=form.dataset.form,values=Object.fromEntries(new FormData(form)),cid=Number(form.dataset.id),child=S.children.find(ch=>ch.id===cid),button=form.querySelector('button[type="submit"]');
  const error=form.querySelector('.form-error');if(error)error.textContent='';
- S.busy=true;if(button){button.disabled=true;button.dataset.origHtml=button.innerHTML;button.innerHTML='<span class="spin">●</span> Aguarde...';}
+ S.busy=true;formDirty=false;if(button){button.disabled=true;button.dataset.origHtml=button.innerHTML;button.innerHTML='<span class="spin">●</span> Aguarde...';}
  try{
   if(kind==='verify-email'){await api('/auth/email/verify',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);toast('E-mail confirmado.');return;}
   if(kind==='mfa-setup'){const data=await api('/auth/mfa/setup',{method:'POST',body:values});showModal('Conectar autenticador','Adicione esta chave ao seu aplicativo autenticador.',`<p class="soft-info">${escape(data.secret)}</p><form data-form="mfa-confirm"><input name="secret" type="hidden" value="${escape(data.enrollment)}"/><label>Senha atual<input name="password" type="password" autocomplete="current-password" required/></label><label>Código do autenticador<input name="code" autocomplete="one-time-code" required/></label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar ativação</button></form>`);return;}
@@ -577,7 +577,7 @@ document.addEventListener('submit',async e=>{
   if(kind==='mfa-disable'){await api('/auth/mfa/disable',{method:'POST',body:values});S.user.mfa_enabled=false;modal.close();toast('Dois fatores desativados.');return;}
   if(kind==='accept-invite'){await api('/family/accept',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);await load();toast('Vínculo confirmado.');return;}
   if(kind==='recovery'){
-   const r=await api('/auth/recovery',{method:'POST',body:{...values,allow_direct_fallback:true}});
+   const r=await api('/auth/recovery',{method:'POST',body:values});
    modal.close();
    if(r.reset_token){
     resetModal(r.reset_token);
@@ -626,13 +626,14 @@ document.addEventListener('submit',async e=>{
    await api('/paging',{method:'POST',body:{child_id:cid,reason:values.reason}});
    modal.close();await load();toast('Chamado no telão disparado! Responsável notificado. 📢');return;
   }
+  if(kind==='guest-checkout'){await api(`/guests/${Number(form.dataset.id)}/checkout`,{method:'POST',body:{claim_code:values.claim_code,guardian_confirmed:values.confirmed==='on'}});modal.close();await load();toast('Saída registrada.');return;}
   if(kind==='guest-checkin'){
    const g=await api('/guests/checkin',{method:'POST',body:{child_name:values.child_name,child_age:Number(values.child_age),guardian_name:values.guardian_name,guardian_phone:values.guardian_phone,allergies:values.allergies||'',room_id:Number(values.room_id)}});
    modal.close();await load();
    showModal('Check-in de Visitante Concluído! 🎉','Etiqueta de Segurança emitida',`<div class="pickup-receipt"><span>Código de Retirada do Visitante</span><strong>${escape(g.claim_code)}</strong><small>Entregue este código ao responsável ${escape(g.guardian_name)}.</small></div><button type="button" class="btn primary full" data-action="close" style="margin-top:14px;">Concluir</button>`);
    return;
   }
-  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=S.user.role==='teacher'?'rooms':'overview';await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
+  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){
@@ -653,7 +654,7 @@ document.addEventListener('submit',async e=>{
    S.children=await api('/children');return;
   }
   modal.close();await load();toast(kind==='notify'?'Aviso enviado dentro do aplicativo.':'Tudo certo. Registro salvo.');
- }catch(err){if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}if(error)error.textContent=err.message;else toast(err.message,true);}
+ }catch(err){formDirty=true;if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}if(error)error.textContent=err.message;else toast(err.message,true);}
  finally{S.busy=false;if(button&&button.isConnected){button.disabled=false;if(button.dataset.origHtml)button.innerHTML=button.dataset.origHtml;}}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});
@@ -669,7 +670,7 @@ async function start(){
  void checkLiveUpdate();
  if(NATIVE&&!S.apiOrigin){renderLogin();return;}
  try{const health=await api('/health');S.google=health.google_enabled;}catch{renderLogin();toast('Não foi possível conectar. Verifique sua internet e tente entrar novamente.',true);return;}
- try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=S.user.role==='teacher'?'rooms':'overview';await load();}catch{renderLogin();}
+ try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();}catch{renderLogin();}
  const params=new URL(location.href).searchParams;if(params.get('reset'))resetModal(params.get('reset'));
  if(params.get('verify'))showModal('Confirmar e-mail','Confirme o endereço associado à sua conta.',`<form data-form="verify-email"><input type="hidden" name="token" value="${escape(params.get('verify'))}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar e-mail</button></form>`);
  const err=params.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
@@ -687,12 +688,12 @@ async function syncLive(){
  syncing=true;const uid=S.user.id;
  try{
   const revision=(await api('/sync')).revision;if(revision===liveRevision)return;
-  const [notifications,lessons,rooms,children]=await Promise.all([api('/notifications'),api('/lessons'),api('/rooms'),api('/children')]);
+  const {notifications,lessons,rooms,children,events,activePaging,activeGuests}=await api('/snapshot');
   if(S.user?.id!==uid)return;
   const previous=new Set(S.notifications.map(n=>n.id));
   const newNotice=notifications.some(n=>!n.read_at&&!previous.has(n.id));
-  const changed=JSON.stringify([notifications,lessons,rooms,children])!==JSON.stringify([S.notifications,S.lessons,S.rooms,S.children]);
-  Object.assign(S,{notifications,lessons,rooms,children});
+  const changed=JSON.stringify([notifications,lessons,rooms,children,events,activePaging,activeGuests])!==JSON.stringify([S.notifications,S.lessons,S.rooms,S.children,S.events,S.activePaging,S.activeGuests]);
+  Object.assign(S,{notifications,lessons,rooms,children,events,activePaging,activeGuests});
   const editing=modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
   if(!editing){liveRevision=revision;if(changed)render();}
   if(newNotice)toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
@@ -732,3 +733,10 @@ function setConnection(online){
  if(!banner){banner=document.createElement('div');banner.id='network-banner';banner.className='network-banner';banner.setAttribute('role','status');banner.innerHTML='<span>Sem conexão. Os dados podem estar desatualizados.</span><button class="text-link" data-action="retry-connection">Tentar novamente</button>';document.body.append(banner);}
 }
 window.addEventListener('offline',()=>setConnection(false));
+
+// Keep unfinished work in memory; warn before document navigation.
+let formDirty=false;
+function allowDiscard(){if(S.busy)return false;if(formDirty&&!confirm("Descartar as alterações ainda não salvas?"))return false;formDirty=false;return true;}
+document.addEventListener('input',event=>{if(event.target.closest('form'))formDirty=true;});
+modal.addEventListener('close',()=>{formDirty=false;});
+window.addEventListener('beforeunload',event=>{if(formDirty){event.preventDefault();event.returnValue='';}});

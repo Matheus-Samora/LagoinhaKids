@@ -69,8 +69,9 @@ def test_events_crud_and_registration():
 
     # 6. Cannot register the same child twice
     res_dup = parent_c.post(f'/api/events/{event_id}/register', json={'child_id': 1})
-    assert res_dup.status_code == 400
-    assert res_dup.json()['detail']['code'] == 'already_registered'
+    assert res_dup.status_code == 200
+    assert res_dup.json()["id"] == res.json()["id"]
+    assert res_dup.json()['status'] == 'confirmed'
 
     # 7. Parent 2 registers child 2 (born 2021 -> fills capacity = 2)
     res2 = parent2_c.post(f'/api/events/{event_id}/register', json={'child_id': 2})

@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { Html5Qrcode } from 'html5-qrcode';
+
 
 // Generates 100% compliant, standard scannable QR Code SVG
 export function generateQR(code) {
@@ -25,11 +25,13 @@ export function generateQR(code) {
 }
 
 // Crisp, friendly Web Audio API beep for instant physical confirmation
+function oscCleanup(ctx){setTimeout(()=>void ctx.close(),600);}
 export function playBeep(type = 'success') {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
+    oscCleanup(ctx);
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -90,15 +92,15 @@ export function findChildByCode(S, codeStr) {
   if (byClaim) return byClaim;
 
   // 4. Try matching full or partial name
-  const byName = S.children.find(c => c.name.toUpperCase().includes(clean));
-  if (byName) return byName;
+  const matches = S.children.filter(c => c.name.toUpperCase().includes(clean));
+  if (matches.length===1) return matches[0];
 
   return null;
 }
 
 let activeScanner = null;
 let currentCameraMode = 'environment';
-let isAutoCheckin = true;
+let isAutoCheckin = false;
 let isProcessing = false;
 
 export async function stopScanner() {
@@ -153,7 +155,7 @@ export function initUSBScannerListener(S, onChildResolved) {
   });
 }
 
-export function openScannerModal({ S, api, load, toast, showModal, modal, escape: e, icon, age }) {
+export function openScannerModal({ S, api, load, toast, showModal, modal, escape: e, icon, age, attendanceModal }) {
   void stopScanner();
   isProcessing = false;
 
@@ -161,8 +163,8 @@ export function openScannerModal({ S, api, load, toast, showModal, modal, escape
     <div class="scanner-modal-body">
       <div class="scanner-toolbar-row">
         <label class="scanner-toggle-label">
-          <input type="checkbox" id="scanner-auto-toggle" ${isAutoCheckin ? 'checked' : ''}/>
-          <span><strong>Check-in Automático (1 bip)</strong><br><small>Ao ler a carteirinha, registra a entrada na salinha imediatamente.</small></span>
+          <input disabled type="checkbox" id="scanner-auto-toggle" ${isAutoCheckin ? 'checked' : ''}/>
+          <span><strong>Conferência presencial obrigatória</strong><br><small>Leia a carteirinha e confirme o responsável antes de registrar.</small></span>
         </label>
         <button type="button" class="mini-button" id="scanner-flip-btn" title="Alternar entre câmera frontal e traseira">
           ${icon('settings', 14)} Inverter Câmera
@@ -183,7 +185,7 @@ export function openScannerModal({ S, api, load, toast, showModal, modal, escape
 
       <div class="scanner-usb-bar">
         <span class="scanner-usb-icon">⚡</span>
-        <input id="scanner-usb-input" type="text" placeholder="Bipe com leitor USB ou digite código (ex: LK-0007)..." autocomplete="off" autofocus />
+        <input id="scanner-usb-input" aria-label="Código da carteirinha" type="text" placeholder="Bipe com leitor USB ou digite código (ex: LK-0007)..." autocomplete="off" autofocus />
         <button type="button" class="btn primary" id="scanner-usb-submit">Buscar</button>
       </div>
 
@@ -249,6 +251,7 @@ export function openScannerModal({ S, api, load, toast, showModal, modal, escape
   }
 
   async function startCamera() {
+    const {Html5Qrcode}=await import('html5-qrcode');
     await stopScanner();
     const statusPill = document.getElementById('scanner-camera-status');
     const viewport = document.getElementById('qr-camera-viewport');
@@ -329,152 +332,9 @@ export function openScannerModal({ S, api, load, toast, showModal, modal, escape
   }
 
   async function handleScannedChild(ch, rawCode) {
-    const room = S.rooms.find(r => r.id === ch.room_id)?.name || 'Salinha';
-    const isPresent = ch.status === 'present';
-    const parent = S.users.find(u => u.id === ch.parent_id);
-    const parentName = parent ? parent.name : (ch.parent_name || 'Responsável não vinculado');
-
-    // Auto Check-in flow for absent kids
-    if (!isPresent && isAutoCheckin) {
-      if (!ch.parent_id) {
-        showResult(`
-          <div class="scanner-error-card">
-            <strong>Vincule o Responsável</strong>
-            <p>${e(ch.name)} ainda não tem responsável vinculado. Vincule o responsável antes de dar entrada.</p>
-          </div>
-        `);
-        playBeep('alert');
-        return;
-      }
-
-      try {
-        const attRes = await api(`/children/${ch.id}/attendance`, {
-          method: 'POST',
-          body: {
-            action: 'in',
-            guardian_confirmed: true,
-            guardian_id: ch.parent_id,
-            lesson_id: S.page === 'attendance' ? (S.selectedLesson || null) : null
-          }
-        });
-
-        playBeep('checkin');
-        await load();
-        toast(`Entrada confirmada: ${ch.name}!`);
-
-        showResult(`
-          <div class="scanner-success-card">
-            <div class="scanner-success-badge">✓ ENTRADA CONFIRMADA!</div>
-            <h3>${e(ch.name)} · ${age(ch.birthday)} anos</h3>
-            <p class="scanner-room-pill">${e(room)} · Resp.: ${e(parentName)}</p>
-            ${ch.allergies ? `<div class="scanner-allergy-alert">⚠️ <strong>ALERGIA:</strong> ${e(ch.allergies)}</div>` : ''}
-            <div class="scanner-claim-tag-box">
-              <span>Etiqueta de Segurança Emitida (TAG):</span>
-              <strong>${e(attRes.claim_code || 'CONFIRMADO')}</strong>
-              <small>Informe este código ao responsável no momento da entrega.</small>
-            </div>
-            <p style="font-size:12px;color:#71717a;margin-top:8px;">Pronto para ler a próxima carteirinha...</p>
-          </div>
-        `);
-        return;
-      } catch (err) {
-        playBeep('alert');
-        showResult(`
-          <div class="scanner-error-card">
-            <strong>Falha ao registrar entrada</strong>
-            <p>${e(err.message || 'Erro na requisição')}</p>
-          </div>
-        `);
-        return;
-      }
-    }
-
-    // Manual action view (or checkout when already present)
-    showResult(`
-      <div class="scanner-child-card ${isPresent ? 'present' : 'absent'}">
-        <div class="scanner-child-header">
-          <div>
-            <span class="scanner-status-tag ${isPresent ? 'present' : 'absent'}">${isPresent ? 'Na Salinha' : 'Aguardando Entrada'}</span>
-            <h3>${e(ch.name)}</h3>
-            <p>${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0, 10)} · ${e(room)}</p>
-            <small style="color:#71717a;">Responsável: <strong>${e(parentName)}</strong></small>
-          </div>
-        </div>
-
-        ${ch.allergies ? `<div class="scanner-allergy-alert">⚠️ <strong>ALERGIAS / CUIDADOS:</strong> ${e(ch.allergies)}</div>` : ''}
-        ${ch.medical_conditions ? `<div class="scanner-allergy-alert" style="background:#27272a;color:#f4f4f5;border-color:#3f3f46;">🩺 <strong>CONDIÇÃO:</strong> ${e(ch.medical_conditions)}</div>` : ''}
-
-        ${!isPresent ? `
-          <button type="button" class="btn primary full" id="scanner-confirm-in-btn" style="margin-top:12px;">
-            Confirmar Entrada na Salinha ✓
-          </button>
-        ` : `
-          <div class="scanner-checkout-box" style="margin-top:12px;">
-            <p style="font-size:12px;color:#a1a1aa;margin-bottom:6px;">Código da Etiqueta de Segurança do Aluno: <strong style="color:#ffffff;">${e(ch.claim_code || '—')}</strong></p>
-            <div style="display:flex;gap:8px;">
-              <input id="scanner-out-claim" type="text" maxlength="4" placeholder="Código do Pai" style="text-transform:uppercase;font-size:16px;font-weight:700;text-align:center;max-width:140px;" />
-              <button type="button" class="btn danger" id="scanner-confirm-out-btn" style="flex:1;">
-                Registrar Saída
-              </button>
-            </div>
-          </div>
-        `}
-      </div>
-    `);
-
-    const inBtn = document.getElementById('scanner-confirm-in-btn');
-    if (inBtn) {
-      inBtn.addEventListener('click', async () => {
-        if (!ch.parent_id) return toast('Vincule o responsável antes de dar entrada.', true);
-        try {
-          inBtn.disabled = true;
-          const attRes = await api(`/children/${ch.id}/attendance`, {
-            method: 'POST',
-            body: {
-              action: 'in',
-              guardian_confirmed: true,
-              guardian_id: ch.parent_id,
-              lesson_id: S.page === 'attendance' ? (S.selectedLesson || null) : null
-            }
-          });
-          playBeep('checkin');
-          await load();
-          toast(`Entrada confirmada: ${ch.name}!`);
-          handleScannedChild(S.children.find(c => c.id === ch.id) || ch, rawCode);
-        } catch (err) {
-          playBeep('alert');
-          toast(err.message, true);
-        }
-      });
-    }
-
-    const outBtn = document.getElementById('scanner-confirm-out-btn');
-    if (outBtn) {
-      outBtn.addEventListener('click', async () => {
-        const inp = document.getElementById('scanner-out-claim');
-        const codeVal = inp ? inp.value.trim().toUpperCase() : '';
-        try {
-          outBtn.disabled = true;
-          await api(`/children/${ch.id}/attendance`, {
-            method: 'POST',
-            body: {
-              action: 'out',
-              guardian_confirmed: true,
-              guardian_id: ch.parent_id,
-              claim_code: codeVal,
-              lesson_id: S.page === 'attendance' ? (S.selectedLesson || null) : null
-            }
-          });
-          playBeep('checkin');
-          await load();
-          toast(`Saída registrada: ${ch.name}! Criança entregue aos pais.`);
-          handleScannedChild(S.children.find(c => c.id === ch.id) || ch, rawCode);
-        } catch (err) {
-          playBeep('alert');
-          toast(err.message, true);
-          if (outBtn) outBtn.disabled = false;
-        }
-      });
-    }
+    await stopScanner();
+    modal.close();
+    await attendanceModal(ch);
   }
 }
+document.addEventListener('visibilitychange',()=>{if(document.hidden)void stopScanner();});

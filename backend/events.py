@@ -1,11 +1,38 @@
 from datetime import datetime, date
-import random
+import secrets,time
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from . import store as s
-from .app import session, staff, admin, fail, child_allowed, child_visible
+from .app import session, staff, admin, fail, child_allowed, child_visible, room_allowed
 
 router = APIRouter(prefix='/api')
+
+class GuestCheckout(BaseModel):
+    claim_code:str=Field(min_length=4,max_length=30)
+    guardian_confirmed:bool=False
+
+@router.post('/guests/{guest_id}/checkout')
+def guest_checkout(guest_id:int,data:GuestCheckout,user=Depends(staff)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        guest=c.execute('SELECT * FROM guest_checkins WHERE id=?',(guest_id,)).fetchone()
+        if not guest:fail('missing','Visitante não encontrado.',404)
+        if not room_allowed(c,user,guest['room_id']):fail('scope','Visitante de outra turma.',403)
+        key=s.digest(f'guest-checkout|{user["id"]}|{guest_id}')
+        attempt=c.execute('SELECT * FROM attempts WHERE key=?',(key,)).fetchone()
+        failures=attempt['failures'] if attempt and attempt['expires']>time.time() else 0
+        if failures>=6:fail('rate','Aguarde 15 minutos e procure a administração.',429)
+        if not secrets.compare_digest(data.claim_code.strip().upper(),guest['claim_code']):
+            c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,failures+1,int(time.time())+900))
+            c.commit()
+            fail('code','Código de retirada incorreto.',400)
+        if not data.guardian_confirmed:fail('guardian','Confira presencialmente o responsável antes da saída.')
+        if guest['status']=='departed':return {'ok':True,'status':'departed'}
+        c.execute("UPDATE guest_checkins SET status='departed',out_at=?,checkout_actor=? WHERE id=?",(s.now(),user['id'],guest_id))
+        c.execute('DELETE FROM attempts WHERE key=?',(key,))
+        s.audit(c,user['id'],'guest_checkout')
+    return {'ok':True,'status':'departed'}
 
 def age_on(birth, day):
     try:
@@ -28,6 +55,20 @@ class EventCreate(BaseModel):
     price: str = Field(default="Gratuito", max_length=60)
     max_capacity: int = Field(default=100, ge=1, le=1000)
     banner_url: str = Field(default="", max_length=300)
+
+    @model_validator(mode='after')
+    def validate_schedule(self):
+        try:
+            start=datetime.fromisoformat(self.starts_at)
+            end=datetime.fromisoformat(self.ends_at)
+            zone=ZoneInfo('America/Sao_Paulo')
+            start=start.replace(tzinfo=zone) if start.tzinfo is None else start.astimezone(zone)
+            end=end.replace(tzinfo=zone) if end.tzinfo is None else end.astimezone(zone)
+        except ValueError:raise ValueError('Informe datas e horários válidos.')
+        if end<=start:raise ValueError('O término deve ocorrer depois do início.')
+        if self.banner_url and not self.banner_url.startswith('https://'):raise ValueError('A imagem deve usar HTTPS.')
+        self.starts_at=start.isoformat(timespec='seconds');self.ends_at=end.isoformat(timespec='seconds')
+        return self
 
 class EventRegisterIn(BaseModel):
     child_id: int
@@ -147,6 +188,8 @@ def update_event(event_id: int, data: EventCreate, user=Depends(staff)):
         if not ev:
             fail('event_not_found', 'Evento não encontrado ou inativo.', 404)
 
+        booked=c.execute('SELECT count(*) FROM event_registrations WHERE event_id=?',(event_id,)).fetchone()[0]
+        if data.max_capacity<booked:fail('capacity','A capacidade não pode ser menor que as inscrições existentes.',409)
         c.execute('''
             UPDATE events SET
                 title = ?, description = ?, category = ?, target_audience = ?,
@@ -178,6 +221,7 @@ def delete_event(event_id: int, user=Depends(staff)):
 def register_for_event(event_id: int, data: EventRegisterIn, user=Depends(session)):
     now = s.now()
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         event = c.execute('SELECT * FROM events WHERE id = ? AND active = 1', (event_id,)).fetchone()
         if not event:
             fail('event_not_found', 'Evento não encontrado ou inativo.', 404)
@@ -187,6 +231,9 @@ def register_for_event(event_id: int, data: EventRegisterIn, user=Depends(sessio
         if age < event['min_age'] or age > event['max_age']:
             fail('age_mismatch', f'A idade de {child["name"]} ({age} anos) não está na faixa permitida ({event["min_age"]} a {event["max_age"]} anos).', 400)
 
+        existing=c.execute('SELECT id FROM event_registrations WHERE event_id=? AND child_id=?',(event_id,data.child_id)).fetchone()
+        if existing:return {'id':existing['id'],'ok':True,'status':'confirmed'}
+        if event['ends_at']<s.now():fail('event_ended','Este evento já terminou.')
         count = c.execute('SELECT COUNT(*) FROM event_registrations WHERE event_id = ?', (event_id,)).fetchone()[0]
         if count >= event['max_capacity']:
             fail('capacity_full', 'Vagas esgotadas para este evento.', 400)
@@ -235,6 +282,10 @@ def get_curriculum(lesson_id: int, user=Depends(session)):
         lesson = c.execute('SELECT id, title, room_id, starts_at, theme, memory_verse, family_question FROM lessons WHERE id = ?', (lesson_id,)).fetchone()
         if not lesson:
             fail('lesson_not_found', 'Aula não encontrada.', 404)
+        if user['role']!='parent' and not room_allowed(c,user,lesson['room_id']):fail('scope','Aula de outra turma.',403)
+        if user['role']=='parent':
+            linked=c.execute('SELECT ch.* FROM children ch JOIN reservations r ON r.child_id=ch.id WHERE r.lesson_id=? AND r.confirmed=1',(lesson_id,)).fetchall()
+            if not any(child_visible(c,user,ch) for ch in linked):fail('scope','Aula sem vínculo com sua família.',403)
         return dict(lesson)
 
 @router.post('/lessons/{lesson_id}/curriculum')
@@ -245,6 +296,7 @@ def update_curriculum(lesson_id: int, data: CurriculumIn, user=Depends(staff)):
         if not lesson:
             fail('lesson_not_found', 'Aula não encontrada ou cancelada.', 404)
 
+        if not room_allowed(c,user,lesson['room_id']):fail('scope','Aula de outra turma.',403)
         c.execute('''
             UPDATE lessons
             SET theme = ?, memory_verse = ?, family_question = ?
@@ -283,17 +335,13 @@ def update_curriculum(lesson_id: int, data: CurriculumIn, user=Depends(staff)):
 def trigger_paging(data: PagingCreate, user=Depends(staff)):
     now = s.now()
     with s.db() as c:
-        child = c.execute('SELECT * FROM children WHERE id = ? AND archived = 0', (data.child_id,)).fetchone()
+        child = child_allowed(c, user, data.child_id)
         if not child:
             fail('child_not_found', 'Criança não encontrada.', 404)
 
-        # Buscar claim_code de atendimento ativo ou gerar código de chamada
-        att = c.execute('''
-            SELECT claim_code FROM attendance
-            WHERE child_id = ?
-            ORDER BY day DESC, in_at DESC LIMIT 1
-        ''', (data.child_id,)).fetchone()
-        claim_code = (att['claim_code'] if att and att['claim_code'] else f"LK-{random.randint(100, 999)}")
+        claim_code = 'CH-' + secrets.token_hex(4).upper()
+        existing=c.execute("SELECT * FROM paging_requests WHERE child_id=? AND status='active'",(data.child_id,)).fetchone()
+        if existing:return dict(existing)
 
         cur = c.execute('''
             INSERT INTO paging_requests(child_id, room_id, claim_code, reason, status, created_at, actor)
@@ -338,12 +386,15 @@ def get_active_paging(user=Depends(session)):
             WHERE p.status = 'active'
             ORDER BY p.id DESC
         ''').fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows if child_visible(c,user,c.execute("SELECT * FROM children WHERE id=?",(r["child_id"],)).fetchone())]
 
 @router.post('/paging/{paging_id}/resolve')
 def resolve_paging(paging_id: int, user=Depends(staff)):
     now = s.now()
     with s.db() as c:
+        paging=c.execute('SELECT child_id FROM paging_requests WHERE id=?',(paging_id,)).fetchone()
+        if not paging:fail('paging_not_found','Chamado não encontrado.',404)
+        child_allowed(c,user,paging['child_id'])
         updated = c.execute('''
             UPDATE paging_requests
             SET status = 'resolved', resolved_at = ?
@@ -359,8 +410,11 @@ def resolve_paging(paging_id: int, user=Depends(staff)):
 @router.post('/guests/checkin')
 def guest_checkin(data: GuestCheckinIn, user=Depends(staff)):
     now = s.now()
-    claim_code = f"VIS-{random.randint(100, 999)}"
+    claim_code = 'VIS-' + secrets.token_hex(4).upper()
     with s.db() as c:
+        if data.room_id is None or not room_allowed(c,user,data.room_id):fail('scope','Escolha uma turma sob sua responsabilidade.',403)
+        room=c.execute('SELECT * FROM rooms WHERE id=?',(data.room_id,)).fetchone()
+        if not room['min_age']<=data.child_age<=room['max_age']:fail('age','Idade incompatível com a turma.')
         cur = c.execute('''
             INSERT INTO guest_checkins(
                 child_name, child_age, guardian_name, guardian_phone,
@@ -399,7 +453,7 @@ def list_active_guests(user=Depends(staff)):
             SELECT g.*, rm.name as room_name
             FROM guest_checkins g
             LEFT JOIN rooms rm ON rm.id = g.room_id
-            WHERE g.created_at >= ?
+            WHERE g.created_at >= ? AND g.status='present'
             ORDER BY g.id DESC
         ''', (today,)).fetchall()
-        return [dict(r) for r in rows]
+        return [{k:r[k] for k in r.keys() if k!='claim_code'} for r in rows if room_allowed(c,user,r['room_id'])]
