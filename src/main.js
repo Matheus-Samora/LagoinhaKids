@@ -721,7 +721,14 @@ document.addEventListener('submit',async e=>{
    S.children=await api('/children');return;
   }
   modal.close();await load();toast(kind==='notify'?'Aviso enviado dentro do aplicativo.':'Tudo certo. Registro salvo.');
- }catch(err){formDirty=true;if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}if(error)error.textContent=err.message;else toast(err.message,true);}
+ }catch(err){
+  formDirty=true;
+  if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}
+  if(error)error.textContent=err.message;else toast(err.message,true);
+  form.classList.remove('shake');
+  void form.offsetWidth;
+  form.classList.add('shake');
+ }
  finally{S.busy=false;if(button&&button.isConnected){button.disabled=false;if(button.dataset.origHtml)button.innerHTML=button.dataset.origHtml;}}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});
