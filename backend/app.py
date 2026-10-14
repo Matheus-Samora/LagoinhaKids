@@ -470,6 +470,9 @@ app.include_router(features_router)
 from .school import router as school_router
 app.include_router(school_router)
 
+from .events import router as events_router
+app.include_router(events_router)
+
 WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 
 def get_build_id():

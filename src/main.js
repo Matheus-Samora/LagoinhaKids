@@ -14,13 +14,13 @@ let storedServer='';
 try{storedServer=NATIVE?(localStorage.getItem('kids_server')||DEFAULT_TUNNEL):'';}catch{}
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;});
-const S={apiOrigin:storedServer,token:'',user:null,csrf:'',rooms:[],lessons:[],selectedChild:null,selectedLesson:null,children:[],notifications:[],users:[],audit:[],page:'overview',search:'',room:'all',google:false,busy:false,stream:null,faceFile:null,faceUrl:null,faceMode:'enroll'};
+const S={apiOrigin:storedServer,token:'',user:null,csrf:'',rooms:[],lessons:[],events:[],eventAudience:'all',activePaging:[],activeGuests:[],selectedChild:null,selectedLesson:null,children:[],notifications:[],users:[],audit:[],page:'overview',search:'',room:'all',google:false,busy:false,stream:null,faceFile:null,faceUrl:null,faceMode:'enroll'};
 const roles={admin:'Administração',teacher:'Professora / Professor',parent:'Responsável'};
 const statusName={absent:'Não chegou',present:'Na salinha',departed:'Saída registrada'};
-const paths={overview:'Visão geral',children:'Alunos',rooms:'Turmas',attendance:'Chamada',notifications:'Notificações',users:'Usuários e acessos',settings:'Minha conta'};
+const paths={overview:'Visão geral',children:'Alunos',rooms:'Turmas',attendance:'Chamada',events:'Mural de Eventos',lessons:'Aulinhas',notifications:'Notificações',users:'Usuários e acessos',settings:'Minha conta'};
 const escape=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=(name)=>escape(name.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join(''));
-const icon=(name,size=20)=>{const shapes={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',kids:'<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5v2"/>',rooms:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',check:'<path d="m5 12 4 4L19 6"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-11 12a2 2 0 0 0 4 0"/>',settings:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2M16 8l2-2"/><circle cx="12" cy="12" r="5"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',plus:'<path d="M12 5v14M5 12h14"/>',arrow:'<path d="M4 12h15m-6-6 6 6-6 6"/>',back:'<path d="M19 12H5m7 7-7-7 7-7"/>',face:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="9" cy="10" r=".5"/><circle cx="15" cy="10" r=".5"/><path d="M8 15q4 4 8 0"/>',out:'<path d="M9 4H4v16h5m5-13 5 5-5 5m-5-5h10"/>',shield:'<path d="m12 3 8 3v6q0 6-8 9-8-3-8-9V6Z"/><path d="m8 12 3 3 5-6"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 3"/>',heart:'<path d="M12 21 3 12C-3 4 7-1 12 6 17-1 27 4 21 12Z"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>'};return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[name]||shapes.home}</svg>`;};
+const icon=(name,size=20)=>{const shapes={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',kids:'<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5v2"/>',rooms:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',check:'<path d="m5 12 4 4L19 6"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-11 12a2 2 0 0 0 4 0"/>',calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',speaker:'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',qrcode:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zm4 4h3v3h-3zm-4 4h3v-3h-3zm4-4h3v-3h-3z"/>',whatsapp:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',settings:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2M16 8l2-2"/><circle cx="12" cy="12" r="5"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',plus:'<path d="M12 5v14M5 12h14"/>',arrow:'<path d="M4 12h15m-6-6 6 6-6 6"/>',back:'<path d="M19 12H5m7 7-7-7 7-7"/>',face:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="9" cy="10" r=".5"/><circle cx="15" cy="10" r=".5"/><path d="M8 15q4 4 8 0"/>',out:'<path d="M9 4H4v16h5m5-13 5 5-5 5m-5-5h10"/>',shield:'<path d="m12 3 8 3v6q0 6-8 9-8-3-8-9V6Z"/><path d="m8 12 3 3 5-6"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 3"/>',heart:'<path d="M12 21 3 12C-3 4 7-1 12 6 17-1 27 4 21 12Z"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>'};return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[name]||shapes.home}</svg>`;};
 const age=(birth)=>{const b=new Date(birth+'T12:00:00');const n=new Date();return n.getFullYear()-b.getFullYear()-(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate())?1:0);};
 const time=(v)=>v?new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}).format(new Date(v)):'—';
 function toast(text,error=false){const t=document.getElementById('toast');t.textContent=text;t.className='show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.className='',5000);}
@@ -62,16 +62,21 @@ async function familyModal(ch){
 }
 async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
- const jobs=[api('/children'),api('/rooms'),api('/notifications'),api('/lessons')];
+ const jobs=[api('/children'),api('/rooms'),api('/notifications'),api('/lessons'),api('/events'),api('/paging/active')];
  if(S.user.role==='admin')jobs.push(api('/users'),api('/audit'));
- const [children,rooms,notifications,lessons,users=[],audit=[]]=await Promise.all(jobs);
- Object.assign(S,{children,rooms,notifications,lessons,users,audit});render();
+ if(S.user.role!=='parent')jobs.push(api('/guests/active'));
+ const [children,rooms,notifications,lessons,events=[],activePaging=[],users=[],audit=[],activeGuests=[]]=await Promise.all(jobs);
+ Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests});render();
 }
-function navItems(){if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell']];if(S.user.role==='teacher')return [['rooms','Minhas turmas','rooms'],['attendance','Chamada','check'],['notifications','Avisos','bell']];return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['children','Alunos','kids'],['attendance','Chamada','check'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']];}
+function navItems(){
+ if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell']];
+ if(S.user.role==='teacher')return [['rooms','Minhas turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell']];
+ return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['children','Alunos','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']];
+}
 function mobileNavItems(){
- if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell'],['settings','Conta','settings']];
- if(S.user.role==='teacher')return [['rooms','Turmas','rooms'],['attendance','Chamada','check'],['notifications','Avisos','bell'],['settings','Conta','settings']];
- return [['overview','Visão','home'],['attendance','Chamada','check'],['children','Alunos','kids'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ if(S.user.role==='teacher')return [['rooms','Turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ return [['overview','Visão','home'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
 }
 const navHistory=[];
 let lastBackTime=0;
@@ -155,15 +160,122 @@ function title(title,subtitle,button=''){return `<div class="page-heading"><div>
 function stat(label,value,helper,i,color){return `<article class="stat"><div><span>${label}</span><strong>${value}</strong><small>${helper}</small></div><span class="stat-icon" style="background:${color}">${icon(i,23)}</span></article>`;}
 function filtered(){return S.children.filter(ch=>(S.room==='all'||String(ch.room_id)===S.room)&&ch.name.toLowerCase().includes(S.search.toLowerCase()));}
 function filters(){return `<div class="filters"><label class="search">${icon('search',18)}<input id="student-search" placeholder="Buscar aluno pelo nome" value="${escape(S.search)}" aria-label="Buscar aluno pelo nome"/></label><select id="room-filter" aria-label="Filtrar turma"><option value="all">Todas as minhas turmas</option>${S.rooms.map(r=>`<option value="${r.id}" ${String(r.id)===S.room?'selected':''}>${escape(r.name)}</option>`).join('')}</select></div>`;}
-function roster(children,compact=false){return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th><th>${compact?'Entrada':'Responsável'}</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>`<tr><td><div class="person"><span class="kid-avatar" style="background:${ch.color}">${initials(ch.name)}</span><div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos ${ch.face_enrolled?'· Facial ativo':''}</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Conferência facial auxiliar" aria-label="Conferência facial de ${escape(ch.name)}" data-action="face" data-id="${ch.id}">${icon('face',18)}</button><button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`:empty('Nenhum aluno por aqui','Ajuste a busca ou cadastre o primeiro aluno da turma.');}
+function generateQR(code){
+ const hash=Array.from(String(code)).reduce((acc,c)=>(acc*31+c.charCodeAt(0))>>>0, 42);
+ const size=21;
+ const grid=Array.from({length:size},()=>Array(size).fill(false));
+ function drawFinder(r0,c0){
+  for(let r=0;r<7;r++)for(let c=0;c<7;c++){
+   if(r===0||r===6||c===0||c===6||(r>=2&&r<=4&&c>=2&&c<=4)) grid[r0+r][c0+c]=true;
+  }
+ }
+ drawFinder(0,0);
+ drawFinder(0,size-7);
+ drawFinder(size-7,0);
+ for(let i=8;i<size-8;i++){
+  grid[6][i]=(i%2===0);
+  grid[i][6]=(i%2===0);
+ }
+ for(let r=0;r<size;r++){
+  for(let c=0;c<size;c++){
+   if((r<8&&c<8)||(r<8&&c>=size-8)||(r>=size-8&&c<8)||(r===6)||(c===6)) continue;
+   grid[r][c]=(((hash ^ (r * 13 + c * 37)) % 3) === 0);
+  }
+ }
+ let rects='';
+ for(let r=0;r<size;r++){
+  for(let c=0;c<size;c++){
+   if(grid[r][c]) rects+=`<rect x="${c*7}" y="${r*7}" width="7" height="7" fill="#09090b"/>`;
+  }
+ }
+ return `<svg class="qr-code-svg" viewBox="0 0 ${size*7} ${size*7}" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff;padding:4px;border-radius:8px;">${rects}</svg>`;
+}
+
+function pagingAlertBanner(){
+ if(!S.activePaging||!S.activePaging.length)return '';
+ return `<div class="paging-banner">
+  <div class="paging-left">
+   <span class="paging-dot"></span>
+   <div class="paging-details">
+    <strong>📢 CHAMADO ATIVO NO TELÃO (${S.activePaging.length})</strong>
+    ${S.activePaging.map(p=>`<span><strong>${escape(p.child_name)}</strong> (${escape(p.room_name||'Salinha')}) · Motivo: ${escape(p.reason)} · <span class="paging-code">${escape(p.claim_code)}</span></span>`).join('<br>')}
+   </div>
+  </div>
+  ${S.user.role!=='parent'?`<div style="display:flex;gap:8px;flex-wrap:wrap;">${S.activePaging.map(p=>`<button class="mini-button" data-action="resolve-paging" data-id="${p.id}" style="background:#ffffff;color:#09090b;font-weight:700;">Concluir #${p.id}</button>`).join('')}</div>`:''}
+ </div>`;
+}
+
+function eventsPage(){
+ const staff=S.user.role!=='parent';
+ const audience=S.eventAudience||'all';
+ const filtered=S.events.filter(e=>{
+  if(audience==='kids')return e.target_audience==='kids'||e.target_audience==='all';
+  if(audience==='teens')return e.target_audience==='teens'||e.target_audience==='all';
+  return true;
+ });
+
+ return `${title('Mural de Eventos','Acampamentos, EBF, Cultos e atividades para Kids e Teens.',staff?`<button class="btn primary" data-action="new-event">${icon('plus',17)} Novo evento</button>`:'')}
+ <div class="filter-chips">
+  <button class="filter-chip ${audience==='all'?'active':''}" data-action="filter-events" data-target="all">Todos os eventos</button>
+  <button class="filter-chip ${audience==='kids'?'active':''}" data-action="filter-events" data-target="kids">Kids (0 a 11 anos)</button>
+  <button class="filter-chip ${audience==='teens'?'active':''}" data-action="filter-events" data-target="teens">Teens (12 a 17 anos)</button>
+ </div>
+ ${filtered.length?`<div class="events-grid">${filtered.map(ev=>{
+  const regCount=ev.registrations_count||0;
+  const cap=ev.max_capacity||100;
+  const pct=Math.min(100,Math.round((regCount/cap)*100));
+  const isRegistered=ev.user_registered_children&&ev.user_registered_children.length>0;
+  const audLabel=ev.target_audience==='kids'?'Kids (0 a 11)':ev.target_audience==='teens'?'Teens (12 a 17)':'Família / Todos';
+  const start=new Date(ev.starts_at);
+  const dateStr=new Intl.DateTimeFormat('pt-BR',{weekday:'short',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}).format(start);
+
+  return `<article class="event-card">
+   <div class="event-banner-wrap">
+    ${ev.banner_url?`<img src="${escape(ev.banner_url)}" alt="${escape(ev.title)}" class="event-banner-img"/>`:`<div class="event-banner-placeholder">${icon('calendar',36)}<strong style="font-size:12px;letter-spacing:1px;">LAGOINHA KIDS & TEENS</strong></div>`}
+    <span class="event-audience-tag">${audLabel}</span>
+   </div>
+   <div class="event-body">
+    <span class="event-category">${escape(ev.category)}</span>
+    <h2>${escape(ev.title)}</h2>
+    <p class="event-desc">${escape(ev.description)}</p>
+    <div class="event-meta-list">
+     <div class="event-meta-item">${icon('clock',16)} <span>${dateStr}</span></div>
+     <div class="event-meta-item">${icon('home',16)} <span>${escape(ev.location||'Templo Lagoinha')}</span></div>
+     <div class="event-meta-item">${icon('kids',16)} <span>Faixa etária: ${ev.min_age} a ${ev.max_age} anos</span></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#71717a;margin-bottom:6px;">
+     <span>${regCount} participante${regCount===1?'':'s'}</span>
+     <span>${cap-regCount>0?`${cap-regCount} vagas restantes`:'Vagas esgotadas'}</span>
+    </div>
+    <div class="event-capacity-bar">
+     <div class="event-capacity-fill" style="width:${pct}%"></div>
+    </div>
+    <div class="event-footer">
+     <span class="event-price">${escape(ev.price)}</span>
+     ${isRegistered?`<button class="btn secondary" data-action="cancel-event-reg" data-id="${ev.id}">Inscrito ✓ (Cancelar)</button>`:`<button class="btn primary" data-action="register-event" data-id="${ev.id}" ${regCount>=cap?'disabled':''}>${regCount>=cap?'Esgotado':'Inscrever'}</button>`}
+    </div>
+   </div>
+  </article>`;
+ }).join('')}</div>`:empty('Nenhum evento nesta categoria','Acompanhe o mural para ficar por dentro dos próximos encontros!')}`;
+}
+
+function roster(children,compact=false){return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th><th>${compact?'Entrada':'Responsável'}</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{
+  const parentPhone=ch.parent_phone||'';
+  return `<tr><td><div class="person"><span class="kid-avatar" style="background:${ch.color}">${initials(ch.name)}</span><div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos ${ch.face_enrolled?'· Facial ativo':''}</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Conferência facial auxiliar" aria-label="Conferência facial de ${escape(ch.name)}" data-action="face" data-id="${ch.id}">${icon('face',18)}</button><button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
+}).join('')}</tbody></table></div>`:empty('Nenhum aluno por aqui','Ajuste a busca ou cadastre o primeiro aluno da turma.');}
 function empty(title,sub){return `<div class="empty">${icon('heart',30)}<h3>${title}</h3><p>${sub}</p></div>`;}
 function pageContent(){
+ const body=renderInnerPage();
+ return `<div class="page-enter">${pagingAlertBanner()}${body}</div>`;
+}
+function renderInnerPage(){
  const simplePage=school.page();if(simplePage!==null)return simplePage;
  const p=S.user.role==='parent';
  if(S.page==='overview'){
   const present=S.children.filter(ch=>ch.status==='present').length,departed=S.children.filter(ch=>ch.status==='departed').length;
    return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
  }
+ if(S.page==='events')return eventsPage();
  if(S.page==='notifications')return `${title('Avisos','Recados da equipe e da família.')}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta">${escape(n.child_name||'Lagoinha Kids')} · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section><p class="muted-note">Com o aplicativo aberto, os avisos são atualizados automaticamente. Notificações com o app fechado ainda não estão ativadas.</p>`;
  if(S.page==='users'&&S.user.role==='admin')return `${title('Pessoas que cuidam.','Gerencie os acessos e as turmas da sua equipe.',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'Nenhuma atribuída':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
  if(S.page==='settings')return settingsPage();
@@ -237,6 +349,122 @@ document.addEventListener('input',e=>{if(e.target.id==='student-search'){S.searc
 function updateRoster(){document.getElementById('roster').innerHTML=roster(filtered(),S.page==='attendance');}
 document.addEventListener('keydown',e=>{if(e.target.classList.contains('face-drop')&&['Enter',' '].includes(e.key)){e.preventDefault();document.getElementById('face-input').click();}});
 
+function digitalIdModal(ch){
+ const room=S.rooms.find(r=>r.id===ch.room_id)?.name||'Salinha';
+ const code=ch.claim_code||`LK-${ch.id.toString().padStart(4,'0')}`;
+ showModal('Carteirinha Digital',escape(ch.name),`<div class="digital-id-card">
+  <div class="id-header">
+   <span class="id-brand">LAGOINHA KIDS</span>
+   <span class="id-tag">${escape(room)}</span>
+  </div>
+  <div class="id-person">
+   <div class="id-avatar">${initials(ch.name)}</div>
+   <div class="id-info">
+    <h3>${escape(ch.name)}</h3>
+    <p>${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10)}</p>
+    <p style="font-size:11px;color:#a1a1aa;margin-top:2px;">Resp.: ${escape(ch.parent_name||S.user.name)}</p>
+   </div>
+  </div>
+  <div class="id-qr-box">
+   ${generateQR(code)}
+   <span class="id-claim-code">${code}</span>
+   <small style="color:#71717a;font-size:10px;">Apresente no check-in / check-out</small>
+  </div>
+  ${ch.allergies?`<div class="id-alert-banner" style="margin-bottom:8px;">⚠️ <strong>ALERGIA:</strong> ${escape(ch.allergies)}</div>`:''}
+  ${ch.special_needs?`<div class="id-alert-banner">♿ <strong>CUIDADO:</strong> ${escape(ch.special_needs)}</div>`:''}
+ </div>
+ <button type="button" class="btn secondary full" data-action="close" style="margin-top:14px;">Fechar carteirinha</button>`);
+}
+
+function pagingModal(ch){
+ showModal('Chamar no Telão',escape(ch.name),`<form data-form="paging-call" data-id="${ch.id}">
+  <p class="soft-info">Esta ação exibirá o código da criança e a mensagem nos painéis do auditório e enviará uma notificação urgente no celular do responsável.</p>
+  <label>Motivo da chamada
+   <select name="reason" required>
+    <option value="Acolhimento da família necessário">Acolhimento da família necessário</option>
+    <option value="Chorando com saudades dos pais">Chorando com saudades dos pais</option>
+    <option value="Troca de fralda / roupa necessária">Troca de fralda / roupa necessária</option>
+    <option value="Não está se sentindo bem / febre">Não está se sentindo bem / febre</option>
+    <option value="Solicitação da liderança">Solicitação da liderança</option>
+   </select>
+  </label>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit">${icon('speaker',18)} Disparar chamado no telão</button>
+ </form>`);
+}
+
+function guestCheckinModal(){
+ showModal('Check-in Rápido de Visitante','Emita a etiqueta e o código de retirada em menos de 30 segundos.',`<form data-form="guest-checkin">
+  <label>Nome da criança<input name="child_name" required minlength="2" maxlength="100" placeholder="Nome completo da criança visitante"/></label>
+  <div class="form-grid">
+   <label>Idade da criança<input name="child_age" type="number" min="0" max="17" required placeholder="Idade"/></label>
+   <label>Turma / Salinha<select name="room_id" required>${S.rooms.map(r=>`<option value="${r.id}">${escape(r.name)} (${r.min_age} a ${r.max_age} anos)</option>`).join('')}</select></label>
+  </div>
+  <label>Nome do responsável visitante<input name="guardian_name" required minlength="2" maxlength="100" placeholder="Nome do pai/mãe"/></label>
+  <label>WhatsApp do responsável<input name="guardian_phone" type="tel" required minlength="8" maxlength="30" placeholder="Ex.: 31988887777"/></label>
+  <label>Alergias ou observações importantes<input name="allergies" placeholder="Ex.: Alergia a amendoim (ou deixe em branco)"/></label>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit">Emitir Etiqueta & Código de Retirada</button>
+ </form>`);
+}
+
+function eventFormModal(){
+ const now=new Date();
+ const d1=new Date(now.getTime()+86400000*7).toISOString().slice(0,16);
+ const d2=new Date(now.getTime()+86400000*7+3600000*3).toISOString().slice(0,16);
+ showModal('Novo Evento','Publique acampamentos, EBFs ou encontros para Kids e Teens.',`<form data-form="create-event">
+  <label>Título do evento<input name="title" required minlength="2" maxlength="120" placeholder="Ex.: EBF Heróis da Fé"/></label>
+  <label>Descrição completa<textarea name="description" rows="3" required minlength="5" maxlength="2000" placeholder="Conte os detalhes do evento, o que levar, programação..."></textarea></label>
+  <div class="form-grid">
+   <label>Categoria<select name="category" required>
+    <option value="EBF">EBF</option>
+    <option value="Acampamento">Acampamento</option>
+    <option value="Culto Especial">Culto Especial</option>
+    <option value="Batismo">Batismo</option>
+    <option value="Musical">Musical</option>
+    <option value="Passeio">Passeio</option>
+   </select></label>
+   <label>Público-alvo<select name="target_audience" required>
+    <option value="all">Todos / Família</option>
+    <option value="kids">Kids (0 a 11 anos)</option>
+    <option value="teens">Teens (12 a 17 anos)</option>
+   </select></label>
+  </div>
+  <div class="form-grid">
+   <label>Idade mínima<input name="min_age" type="number" min="0" max="17" value="0" required/></label>
+   <label>Idade máxima<input name="max_age" type="number" min="0" max="17" value="17" required/></label>
+  </div>
+  <div class="form-grid">
+   <label>Início<input name="starts_at" type="datetime-local" value="${d1}" required/></label>
+   <label>Término<input name="ends_at" type="datetime-local" value="${d2}" required/></label>
+  </div>
+  <div class="form-grid">
+   <label>Local<input name="location" placeholder="Ex.: Templo Principal / Sítio"/></label>
+   <label>Valor / Preço<input name="price" value="Gratuito" required/></label>
+  </div>
+  <label>Capacidade máxima de vagas<input name="max_capacity" type="number" min="1" max="1000" value="100" required/></label>
+  <label>URL do banner (opcional)<input name="banner_url" placeholder="https://..."/></label>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit">Publicar Evento & Notificar Pais</button>
+ </form>`);
+}
+
+function eventRegisterModal(ev){
+ const eligible=S.children.filter(ch=>age(ch.birthday)>=ev.min_age&&age(ch.birthday)<=ev.max_age);
+ showModal(`Inscrição: ${escape(ev.title)}`,`Faixa etária: ${ev.min_age} a ${ev.max_age} anos`,eligible.length?`<form data-form="register-event-child" data-id="${ev.id}">
+  <label>Escolha o filho para inscrever
+   <select name="child_id" required>
+    ${eligible.map(ch=>`<option value="${ch.id}">${escape(ch.name)} (${age(ch.birthday)} anos)</option>`).join('')}
+   </select>
+  </label>
+  <label>Observações para os líderes (alergias, cuidados...)
+   <input name="notes" placeholder="Ex.: Leva bombinha para asma"/>
+  </label>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit">Confirmar Inscrição 🎉</button>
+ </form>`:`<p class="soft-info">Você não tem filhos cadastrados na faixa etária deste evento (${ev.min_age} a ${ev.max_age} anos). Cadastre seu filho em Meus filhos primeiro.</p><button type="button" class="btn primary full" data-action="close">Entendido</button>`);
+}
+
 const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo});
 document.addEventListener('change',event=>school.change(event));
 document.addEventListener('click',async e=>{
@@ -246,6 +474,24 @@ document.addEventListener('click',async e=>{
  const action=el.dataset.action,ch=S.children.find(x=>x.id===Number(el.dataset.id));
  try{
  if(await school.action(action,el,ch))return;
+ if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
+ if(action==='new-event'){eventFormModal();return;}
+ if(action==='register-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventRegisterModal(ev);return;}
+ if(action==='cancel-event-reg'){
+  const ev=S.events.find(x=>x.id===Number(el.dataset.id));
+  if(ev&&ev.user_registered_children&&ev.user_registered_children.length){
+   for(const childId of ev.user_registered_children){
+    await api(`/events/${ev.id}/register/${childId}`,{method:'DELETE'});
+   }
+   await load();
+   toast('Inscrição cancelada.');
+  }
+  return;
+ }
+ if(action==='digital-id'){if(ch)digitalIdModal(ch);return;}
+ if(action==='paging-call'){if(ch)pagingModal(ch);return;}
+ if(action==='resolve-paging'){await api(`/paging/${el.dataset.id}/resolve`,{method:'POST'});await load();toast('Chamado no telão resolvido.');return;}
+ if(action==='guest-checkin'){guestCheckinModal();return;}
  if(action==='go-back'){handleBackButton();return;}
  if(action==='set-server'){const url=new URL(document.getElementById('mobile-api').value);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/')throw new Error('Informe apenas a origem HTTPS do servidor.');S.apiOrigin=url.origin;localStorage.setItem('kids_server',S.apiOrigin);const h=await api('/health');S.google=h.google_enabled;renderLogin();toast('Servidor configurado.');}
  if(action==='toggle-password'){const input=el.previousElementSibling;input.type=input.type==='password'?'text':'password';el.textContent=input.type==='password'?'Ver':'Ocultar';}
@@ -316,6 +562,37 @@ document.addEventListener('submit',async e=>{
   if(kind==='reset'){if(values.password!==values.confirm)throw new Error('As senhas não conferem.');await api('/auth/reset',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);renderLogin();toast('Senha atualizada. Entre com sua nova senha.');return;}
   if(kind==='family-invite'){const r=await api(`/children/${cid}/family/invites`,{method:'POST',body:values});showModal('Convite criado','Envie este link à pessoa autorizada. Válido por 48 horas.',`<label>Link do convite<input readonly value="${escape(r.url)}"/></label>`);return;}
   const schoolResult=await school.submit(form,values);if(schoolResult){modal.close();await load();toast(schoolResult.message||schoolResult);if(schoolResult.roomId)school.lessonForm(schoolResult.roomId);return;}
+  if(kind==='create-event'){
+   await api('/events',{method:'POST',body:{
+    title:values.title,
+    description:values.description,
+    category:values.category,
+    target_audience:values.target_audience,
+    min_age:Number(values.min_age),
+    max_age:Number(values.max_age),
+    starts_at:values.starts_at+':00-03:00',
+    ends_at:values.ends_at+':00-03:00',
+    location:values.location||'',
+    price:values.price||'Gratuito',
+    max_capacity:Number(values.max_capacity)||100,
+    banner_url:values.banner_url||''
+   }});
+   modal.close();await load();toast('Evento publicado! Pais notificados no aplicativo.');return;
+  }
+  if(kind==='register-event-child'){
+   await api(`/events/${form.dataset.id}/register`,{method:'POST',body:{child_id:Number(values.child_id),notes:values.notes||''}});
+   modal.close();await load();toast('Inscrição confirmada com sucesso! 🎉');return;
+  }
+  if(kind==='paging-call'){
+   await api('/paging',{method:'POST',body:{child_id:cid,reason:values.reason}});
+   modal.close();await load();toast('Chamado no telão disparado! Responsável notificado. 📢');return;
+  }
+  if(kind==='guest-checkin'){
+   const g=await api('/guests/checkin',{method:'POST',body:{child_name:values.child_name,child_age:Number(values.child_age),guardian_name:values.guardian_name,guardian_phone:values.guardian_phone,allergies:values.allergies||'',room_id:Number(values.room_id)}});
+   modal.close();await load();
+   showModal('Check-in de Visitante Concluído! 🎉','Etiqueta de Segurança emitida',`<div class="pickup-receipt"><span>Código de Retirada do Visitante</span><strong>${escape(g.claim_code)}</strong><small>Entregue este código ao responsável ${escape(g.guardian_name)}.</small></div><button type="button" class="btn primary full" data-action="close" style="margin-top:14px;">Concluir</button>`);
+   return;
+  }
   if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=S.user.role==='teacher'?'rooms':'overview';await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});

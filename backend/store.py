@@ -128,6 +128,67 @@ def migrate_safety_and_health(conn):
     if 'session_token' not in {r[1] for r in conn.execute('PRAGMA table_info(device_tokens)')}:
         conn.execute('ALTER TABLE device_tokens ADD COLUMN session_token TEXT NOT NULL DEFAULT ""')
 
+    if 'lessons' in tables:
+        l_fields = {r[1] for r in conn.execute('PRAGMA table_info(lessons)')}
+        for col in ('theme', 'memory_verse', 'family_question'):
+            if col not in l_fields:
+                conn.execute(f'ALTER TABLE lessons ADD COLUMN {col} TEXT NOT NULL DEFAULT ""')
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS events(
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT NOT NULL,
+        target_audience TEXT NOT NULL DEFAULT "all",
+        min_age INTEGER NOT NULL DEFAULT 0,
+        max_age INTEGER NOT NULL DEFAULT 17,
+        starts_at TEXT NOT NULL,
+        ends_at TEXT NOT NULL,
+        location TEXT NOT NULL DEFAULT "",
+        price TEXT NOT NULL DEFAULT "Gratuito",
+        max_capacity INTEGER NOT NULL DEFAULT 100,
+        banner_url TEXT NOT NULL DEFAULT "",
+        active INTEGER NOT NULL DEFAULT 1,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS event_registrations(
+        id INTEGER PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES events(id),
+        child_id INTEGER NOT NULL REFERENCES children(id),
+        guardian_id INTEGER NOT NULL REFERENCES users(id),
+        status TEXT NOT NULL DEFAULT "confirmed",
+        notes TEXT NOT NULL DEFAULT "",
+        created_at TEXT NOT NULL,
+        UNIQUE(event_id, child_id)
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS paging_requests(
+        id INTEGER PRIMARY KEY,
+        child_id INTEGER NOT NULL REFERENCES children(id),
+        room_id INTEGER REFERENCES rooms(id),
+        claim_code TEXT NOT NULL DEFAULT "",
+        reason TEXT NOT NULL DEFAULT "Acolhimento necessário",
+        status TEXT NOT NULL DEFAULT "active",
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        actor INTEGER NOT NULL REFERENCES users(id)
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS guest_checkins(
+        id INTEGER PRIMARY KEY,
+        child_name TEXT NOT NULL,
+        child_age INTEGER NOT NULL,
+        guardian_name TEXT NOT NULL,
+        guardian_phone TEXT NOT NULL,
+        allergies TEXT NOT NULL DEFAULT "",
+        room_id INTEGER REFERENCES rooms(id),
+        claim_code TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        actor INTEGER NOT NULL REFERENCES users(id)
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS events_active ON events(active, target_audience, starts_at)')
+    conn.execute('CREATE INDEX IF NOT EXISTS event_reg_event ON event_registrations(event_id, child_id)')
+    conn.execute('CREATE INDEX IF NOT EXISTS paging_active ON paging_requests(status, created_at)')
+
 def migrate_school():
     """Transactional, additive migration; preserve children, attendance and templates."""
     conn=sqlite3.connect(DB,timeout=20)
