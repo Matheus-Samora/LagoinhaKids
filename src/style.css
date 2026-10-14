@@ -756,6 +756,24 @@ input::placeholder, textarea::placeholder {
   display: none;
 }
 
+.topbar-logo-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
 .crumb-trail {
   display: flex;
   align-items: center;
