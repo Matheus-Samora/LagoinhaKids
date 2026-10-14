@@ -26,7 +26,46 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    ${errorSlot}<button class="btn primary full" type="submit">${ch?'Salvar alterações':'Cadastrar'} ${icon('check',17)}</button></form>`);
  }
  function roomForm(r){
-  showModal(r?'Editar turma':'Criar turma','Depois, adicione os dias e horários das aulinhas.',`<form data-form="simple-room" ${r?`data-id="${r.id}"`:''}><label>Nome da turma<input name="name" value="${e(r?.name||'')}" required minlength="2" maxlength="80" placeholder="Ex.: Pequenos Exploradores"/></label><div class="form-grid"><label>Idade mínima<input name="min_age" type="number" min="0" max="17" required value="${r?.min_age??2}"/></label><label>Idade máxima<input name="max_age" type="number" min="0" max="17" required value="${r?.max_age??6}"/></label></div><label>Vagas por aulinha<input name="capacity" type="number" min="1" max="100" required value="${r?.capacity??15}"/></label>${S.user.role==='admin'?`<label>Professor responsável<select name="owner_id">${S.users.filter(u=>['admin','teacher'].includes(u.role)&&u.active).map(u=>`<option value="${u.id}" ${u.id===(r?.created_by||S.user.id)?'selected':''}>${e(u.name)}</option>`).join('')}</select></label>`:''}${errorSlot}<button class="btn primary full" type="submit">${r?'Salvar turma':'Criar turma'}</button></form>`);
+  const isEdit=Boolean(r);
+  const currentOwner=r?.created_by||S.user.id;
+  const availableStaff=S.users&&S.users.length?S.users.filter(u=>['admin','teacher'].includes(u.role)&&u.active):[];
+  const staffSelect=availableStaff.length>1?`
+    <label>Professor(a) responsável
+      <select name="owner_id">
+        ${availableStaff.map(u=>`<option value="${u.id}" ${u.id===currentOwner?'selected':''}>${e(u.name)} (${u.role==='admin'?'Coordenação':'Professor(a)'})</option>`).join('')}
+      </select>
+    </label>`:`<input type="hidden" name="owner_id" value="${currentOwner}"/>`;
+
+  showModal(
+    isEdit ? 'Editar turma' : 'Criar nova turma',
+    isEdit ? 'Atualize as informações, faixa etária e vagas da turma.' : 'Defina os detalhes da turma e publique os horários das aulinhas.',
+    `<form data-form="simple-room" ${isEdit?`data-id="${r.id}"`:''}>
+      <label>Nome da turma
+        <input name="name" value="${e(r?.name||'')}" required minlength="2" maxlength="80" placeholder="Ex.: Pequenos Exploradores"/>
+      </label>
+      <div class="form-grid">
+        <label>Idade mínima (anos)
+          <input name="min_age" type="number" min="0" max="17" required value="${r?.min_age??2}"/>
+        </label>
+        <label>Idade máxima (anos)
+          <input name="max_age" type="number" min="0" max="17" required value="${r?.max_age??6}"/>
+        </label>
+      </div>
+      <label>Vagas por aulinha (capacidade)
+        <input name="capacity" type="number" min="1" max="100" required value="${r?.capacity??15}"/>
+      </label>
+      ${staffSelect}
+      ${errorSlot}
+      <button class="btn primary full" type="submit">${isEdit ? 'Salvar alterações' : 'Criar turma'} ${icon('check',17)}</button>
+      ${isEdit ? `
+      <div class="room-modal-danger-box">
+        <p class="soft-info" style="margin:0 0 8px 0;font-size:11.5px;">Deseja remover esta turma do sistema?</p>
+        <button type="button" class="btn danger full" data-action="delete-room" data-id="${r.id}">
+          ${icon('close',15)} Excluir turma
+        </button>
+      </div>` : ''}
+    </form>`
+  );
  }
  function lessonForm(roomId,lesson){
   const tomorrow=new Date(Date.now()+86400000);
@@ -47,7 +86,8 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   return `${title('Aulinhas','Dias e horários publicados pela equipe.',`<button class="btn secondary" data-action="refresh-school">Atualizar horários</button>`)}${ch?`<div class="lesson-toolbar"><label>Para qual filho?<select id="lesson-child">${S.children.map(c=>`<option value="${c.id}" ${c.id===ch.id?'selected':''}>${e(c.name)}</option>`).join('')}</select></label><span class="schedule-zone">Horários de São Paulo</span></div>`:'<p class="soft-info">Você pode consultar os horários abaixo. Cadastre seu filho para confirmar a participação.</p>'}${cards?`<div class="lesson-cards">${cards}</div>`:empty('A equipe ainda não publicou horários','As turmas foram cadastradas, mas cada aulinha precisa de uma data e horário. Peça à equipe para publicar em Minhas turmas → Publicar horário.')}${!S.lessons.length&&S.rooms.length?`<section class="panel"><h2>Turmas cadastradas</h2>${S.rooms.map(r=>`<p><strong>${e(r.name)}</strong> · ${r.min_age} a ${r.max_age} anos · Aguardando publicação de horários</p>`).join('')}</section>`:''}<p class="muted-note">Horários atualizados automaticamente enquanto o app está aberto. A confirmação reserva a participação; a equipe confere a chegada e a saída.</p>`;
  }
  function roomsPage(){
-  return `${title(S.user.role==='admin'?'Turmas':'Minhas turmas','Crie a turma e publique os horários das aulinhas.',`<button class="btn primary" data-action="new-room">${icon('plus',17)} Criar turma</button>`)}${S.rooms.length?`<div class="simple-room-grid">${S.rooms.map(r=>{const lessons=S.lessons.filter(l=>l.room_id===r.id);return `<article class="simple-room-card panel"><header><span class="room-symbol">${icon('rooms',24)}</span><button class="text-link" data-action="edit-room" data-id="${r.id}">Editar turma</button></header><h2>${e(r.name)}</h2><p>${r.min_age} a ${r.max_age} anos · ${r.capacity} vagas por aula</p>${S.user.role==='admin'?`<p class="muted-note">Responsável: ${e(r.owner_name||'Não definido')}</p>`:''}<div class="simple-room-actions"><button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button><button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button></div><section class="room-schedule"><h3>Próximas aulinhas</h3>${lessons.length?lessons.map(l=>`<div class="schedule-row"><div><strong>${dateLabel(l.starts_at)}</strong><span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count} confirmado${l.confirmed_count===1?'':'s'}</span></div><button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}" title="Discipulado Familiar">📖 Discipulado</button><button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button><button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar horário de ${e(r.name)}">${icon('settings',16)}</button></div>`).join(''):'<p class="muted-note">Publique a primeira aulinha para receber confirmações.</p>'}</section><details class="child-extra"><summary>Gerenciar turma</summary><button class="text-link danger-link" data-action="archive-room" data-id="${r.id}">Arquivar turma</button></details></article>`;}).join('')}</div>`:empty('Sua primeira turma começa aqui','Toque em “Criar turma” e depois publique o dia e o horário da aula.')}`;
+  const canManage=S.user.role==='admin'||S.user.role==='teacher';
+  return `${title('Turmas','Crie e gerencie as turmas, horários e equipe da salinha.',canManage?`<button class="btn primary" data-action="new-room">${icon('plus',17)} Criar turma</button>`:'')}${S.rooms.length?`<div class="simple-room-grid">${S.rooms.map(r=>{const lessons=S.lessons.filter(l=>l.room_id===r.id);return `<article class="simple-room-card panel"><header><span class="room-symbol">${icon('rooms',24)}</span><div class="room-card-actions"><button type="button" class="room-action-btn" data-action="edit-room" data-id="${r.id}" title="Editar informações da turma">${icon('settings',14)} <span>Editar</span></button><button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir turma">${icon('close',14)} <span>Excluir</span></button></div></header><h2>${e(r.name)}</h2><p>${r.min_age} a ${r.max_age} anos · ${r.capacity} vagas por aula</p><p class="muted-note">Responsável: ${e(r.owner_name||'Equipe Lagoinha Kids')}</p><div class="simple-room-actions"><button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button><button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button></div><section class="room-schedule"><h3>Próximas aulinhas</h3>${lessons.length?lessons.map(l=>`<div class="schedule-row"><div><strong>${dateLabel(l.starts_at)}</strong><span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count} confirmado${l.confirmed_count===1?'':'s'}</span></div><button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}" title="Discipulado Familiar">📖 Discipulado</button><button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button><button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar horário de ${e(r.name)}">${icon('settings',16)}</button></div>`).join(''):'<p class="muted-note">Publique a primeira aulinha para receber confirmações.</p>'}</section></article>`;}).join('')}</div>`:empty('Nenhuma turma cadastrada','Toque em “Criar turma” para cadastrar a primeira salinha e publicar horários.')}`;
  }
  function rosterRows(children,lesson){
   const today=day(new Date());
@@ -132,8 +172,13 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    showModal(childName(ch),'O que você precisa fazer?',`<div class="student-menu"><button class="btn secondary full" data-action="edit-child" data-id="${id}">Editar cadastro</button><button class="btn secondary full" data-action="face" data-id="${id}">Conferência facial</button><button class="btn secondary full" data-action="notify" data-kind="please_pickup" data-id="${id}">Avisar responsável</button>${S.user.role==='admin'?`<button class="btn secondary full" data-action="link-guardian" data-id="${id}">Vincular responsável</button><button class="text-link danger-link" data-action="archive-child" data-id="${id}">Arquivar aluno</button>`:''}</div>`);return true;
   }
   if(action==='cancel-lesson'){showModal('Cancelar aulinha?','Os responsáveis com presença confirmada receberão um aviso.',`<form data-form="cancel-lesson" data-id="${id}"><label class="checkbox-label"><input type="checkbox" required/>Confirmo o cancelamento.</label>${errorSlot}<button class="btn danger full" type="submit">Cancelar aulinha</button></form>`);return true;}
-  if(action==='archive-room'||action==='archive-child'){
-   showModal(action==='archive-room'?'Arquivar turma?':'Arquivar cadastro?',action==='archive-room'?'O histórico será preservado. A turma não aparecerá nas novas confirmações.':'O cadastro sairá das listas ativas. O descritor facial será excluído.',`<form data-form="${action}" data-id="${id}"><label class="checkbox-label"><input type="checkbox" required/>Confirmo o arquivamento.</label>${errorSlot}<button class="btn danger full" type="submit">Arquivar</button></form>`);return true;
+  if(action==='delete-room'||action==='archive-room'){
+   const r=S.rooms.find(x=>x.id===id);
+   const rName=r?`"${e(r.name)}"`:'a turma';
+   showModal('Excluir turma?',`Deseja realmente excluir ${rName}?`,`<form data-form="delete-room" data-id="${id}"><p class="soft-info">A turma será excluída das turmas ativas. As aulinhas futuras sem presenças confirmadas serão canceladas. O histórico de presenças anteriores permanece seguro.</p><label class="checkbox-label" style="margin:16px 0 18px 0;display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" required style="width:18px;height:18px;cursor:pointer;accent-color:#09090b;"/><span style="font-weight:600;font-size:13.5px;">Confirmo a exclusão desta turma.</span></label>${errorSlot}<div style="display:flex;gap:10px;margin-top:14px;"><button type="button" class="btn secondary" onclick="document.getElementById('modal').close()">Cancelar</button><button type="submit" class="btn danger" style="flex:1;">${icon('close',15)} Excluir turma</button></div></form>`);return true;
+  }
+  if(action==='archive-child'){
+   showModal('Arquivar cadastro?','O cadastro sairá das listas ativas. O descritor facial será excluído.',`<form data-form="archive-child" data-id="${id}"><label class="checkbox-label"><input type="checkbox" required/>Confirmo o arquivamento.</label>${errorSlot}<button class="btn danger full" type="submit">Arquivar</button></form>`);return true;
   }
   if(action==='add-lesson-student'){
    const candidates=S.children.filter(c=>!lesson.confirmed_children.includes(c.id)&&ageAt(c.birthday,lesson.starts_at)>=lesson.min_age&&ageAt(c.birthday,lesson.starts_at)<=lesson.max_age);
@@ -170,7 +215,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   }
   if(type==='lesson-student'){await api(`/lessons/${id}/presence`,{method:'POST',body:{child_id:Number(values.child_id)}});return 'Aluno adicionado à chamada.';}
   if(type==='cancel-lesson'){await api(`/lessons/${id}`,{method:'DELETE'});return 'Aulinha cancelada. Famílias avisadas.';}
-  if(type==='archive-room'){await api(`/rooms/${id}`,{method:'DELETE'});return 'Turma arquivada.';}
+  if(type==='delete-room'||type==='archive-room'){await api(`/rooms/${id}`,{method:'DELETE'});return 'Turma excluída com sucesso.';}
   if(type==='archive-child'){await api(`/children/${id}`,{method:'DELETE'});return 'Cadastro arquivado.';}
   if(type==='lesson-curriculum'){
    await api(`/lessons/${id}/curriculum`,{method:'POST',body:{

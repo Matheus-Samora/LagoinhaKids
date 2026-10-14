@@ -84,9 +84,9 @@ def archive_room(rid:int,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         room_for_edit(c,user,rid)
-        if c.execute('SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchone():fail('bookings','Cancele as aulas com presenças confirmadas antes de arquivar a turma.',409)
-        if c.execute('SELECT 1 FROM attendance a JOIN children ch ON ch.id=a.child_id WHERE ch.room_id=? AND a.day=? AND a.status="present"',(rid,s.today())).fetchone():fail('present','Há crianças na salinha. Confira as saídas antes de arquivar.',409)
-        c.execute('UPDATE rooms SET active=0 WHERE id=?',(rid,));c.execute('UPDATE lessons SET active=0 WHERE room_id=? AND ends_at>?',(rid,s.now()));s.audit(c,user['id'],'room_archived')
+        if c.execute('SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchone():fail('bookings','Cancele as aulas com presenças confirmadas antes de excluir a turma.',409)
+        if c.execute('SELECT 1 FROM attendance a JOIN children ch ON ch.id=a.child_id WHERE ch.room_id=? AND a.day=? AND a.status="present"',(rid,s.today())).fetchone():fail('present','Há crianças na salinha. Confira as saídas antes de excluir.',409)
+        c.execute('UPDATE rooms SET active=0 WHERE id=?',(rid,));c.execute('UPDATE lessons SET active=0 WHERE room_id=? AND ends_at>?',(rid,s.now()));c.execute('DELETE FROM teacher_rooms WHERE room_id=?',(rid,));s.audit(c,user['id'],'room_deleted')
     return {'ok':True}
 
 class ChildIn(BaseModel):
