@@ -902,8 +902,10 @@ input::placeholder, textarea::placeholder {
 }
 
 /* Ensure mobile bottom navigation is strictly hidden on desktop screens (>768px) */
-.mobile-bottom-nav {
-  display: none !important;
+@media (min-width: 769px) {
+  .mobile-bottom-nav {
+    display: none !important;
+  }
 }
 
 .page-content {
