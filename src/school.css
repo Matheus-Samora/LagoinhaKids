@@ -476,3 +476,510 @@
     padding: 18px;
   }
 }
+
+/* ROOM STUDENTS & SCOPED ACTIONS VIEW */
+.room-students-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.room-students-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.room-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1.5px solid #27272a;
+  background: #ffffff;
+  color: #09090b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.room-back-btn:hover {
+  background: #f4f4f5;
+  border-color: #09090b;
+}
+
+.room-selector-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-selector-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #71717a;
+}
+
+.room-select-filter {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1.5px solid #e4e4e7;
+  background: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #09090b;
+  cursor: pointer;
+}
+
+.room-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 28px;
+  border-radius: 18px;
+  border: 1.5px solid #e4e4e7;
+  background: #ffffff;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  flex-wrap: wrap;
+}
+
+.room-hero-content {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.room-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #09090b;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.room-hero-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #71717a;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.room-hero-info h2 {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #09090b;
+  margin: 0 0 6px 0;
+}
+
+.room-hero-meta {
+  font-size: 13px;
+  color: #52525b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.meta-dot {
+  color: #d4d4d8;
+}
+
+.room-hero-actions .btn {
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 12px 20px;
+  border-radius: 12px;
+}
+
+.room-actions-guide {
+  background: #fafafa;
+  border: 1.5px solid #e4e4e7;
+  border-radius: 16px;
+  padding: 18px 22px;
+}
+
+.guide-header {
+  margin-bottom: 12px;
+}
+
+.guide-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #09090b;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.guide-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.guide-card-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.guide-card-text strong {
+  display: block;
+  font-size: 12.5px;
+  color: #09090b;
+  margin-bottom: 3px;
+}
+
+.guide-card-text p {
+  font-size: 11.5px;
+  color: #71717a;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.room-students-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+
+.roster-stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f4f4f5;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.room-students-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.room-student-card {
+  background: #ffffff;
+  border: 1.5px solid #e4e4e7;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 4px 18px -2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease;
+}
+
+.room-student-card:hover {
+  transform: translateY(-2px);
+  border-color: #09090b;
+  box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.09);
+}
+
+.student-card-top .person {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.student-card-bio {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.student-name-row h3 {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: #09090b;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.status-pill.present {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.status-pill.absent {
+  background: #f4f4f5;
+  color: #71717a;
+}
+
+.status-pill.departed {
+  background: #f4f4f5;
+  color: #52525b;
+}
+
+.student-meta {
+  font-size: 12.5px;
+  color: #71717a;
+  margin: 0;
+}
+
+.room-name-tag {
+  display: inline-block;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.claim-tag-highlight {
+  display: inline-block;
+  margin-top: 6px;
+  background: #09090b;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.student-paging-status {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.student-paging-status.green {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.student-paging-status.red {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.student-health-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fafafa;
+  border: 1px solid #f4f4f5;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.allergy-badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  font-weight: 700;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.allergy-badge.medical {
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.allergy-badge.med {
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.allergy-badge.special {
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.pickup-text {
+  font-size: 11.5px;
+  color: #52525b;
+}
+
+.student-family-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #71717a;
+  padding-top: 8px;
+  border-top: 1px solid #f4f4f5;
+}
+
+.student-family-info strong {
+  color: #09090b;
+}
+
+.whatsapp-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.student-actions-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid #f4f4f5;
+}
+
+.student-actions-bar .btn {
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 11px;
+}
+
+.student-actions-bar .student-btn-main {
+  flex: 1 1 auto;
+}
+
+.room-filter-chips-wrap {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.room-filter-chips-wrap .filter-chip {
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1.5px solid #e4e4e7;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #52525b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.room-filter-chips-wrap .filter-chip:hover {
+  border-color: #09090b;
+  color: #09090b;
+}
+
+.room-filter-chips-wrap .filter-chip.active {
+  background: #09090b;
+  border-color: #09090b;
+  color: #ffffff;
+}
+
+.room-empty-card {
+  background: #ffffff;
+  border: 1.5px solid #e4e4e7;
+  border-radius: 18px;
+  padding: 36px 24px;
+  text-align: center;
+}
+
+.room-empty-card .empty-icon-wrap {
+  margin-bottom: 12px;
+  color: #71717a;
+}
+
+.room-empty-card h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #09090b;
+  margin: 0 0 8px 0;
+}
+
+.room-empty-card p {
+  font-size: 13.5px;
+  color: #52525b;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+@media (max-width: 1024px) {
+  .guide-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .room-students-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .room-hero-card {
+    padding: 18px;
+  }
+  .room-hero-content {
+    gap: 12px;
+  }
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .room-students-grid {
+    grid-template-columns: 1fr;
+  }
+  .student-actions-bar .btn {
+    flex: 1 1 calc(50% - 6px);
+    text-align: center;
+    justify-content: center;
+  }
+  .student-actions-bar .student-btn-main {
+    flex: 1 1 100%;
+  }
+}

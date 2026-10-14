@@ -103,7 +103,7 @@ function canGoBack(){
  return (navHistory.length>0)||(S.user&&S.page!==initialPage());
 }
 
-function navigateTo(page,replace=false){
+function navigateTo(page,replace=false,keepRoom=false){
  if(!allowDiscard())return;
  if(!replace&&S.page&&S.page!==page){
   navHistory.push(S.page);
@@ -111,7 +111,7 @@ function navigateTo(page,replace=false){
  }
  S.page=page;
  S.search='';
- S.room='all';
+ if(!keepRoom) S.room='all';
  try{history.pushState({page},'','#'+page);}catch{}
  render();
  void syncLive();
@@ -632,7 +632,7 @@ document.addEventListener('click',async e=>{
  if(action==='face')faceModal(ch);
  if(action==='face-mode'){stopCamera();faceModal(ch,el.dataset.mode);}
  if(action==='request-consent'){modal.close();notifyModal(ch,'consent_request');}
- if(action==='filter-room'){S.room=String(el.dataset.id);navigateTo('attendance');return;}
+ if(action==='filter-room'){S.room=String(el.dataset.id);navigateTo('attendance',false,true);return;}
  if(action==='new-user')userModal();
  if(action==='edit-user')userModal(S.users.find(u=>u.id===Number(el.dataset.id)));
  if(action==='read'){await api(`/notifications/${el.dataset.id}/read`,{method:'POST'});await load();toast('Notificação marcada como lida.');}

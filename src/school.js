@@ -10,12 +10,13 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  const parents=selected=>`<option value="">Vincular depois</option>${S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}" ${u.id===selected?'selected':''}>${e(u.name)} · ${e(u.email)}</option>`).join('')}`;
  const empty=(heading,text)=>`<div class="empty">${icon('rooms',30)}<h3>${heading}</h3><p>${text}</p></div>`;
  const selectedChild=()=>{let ch=S.children.find(c=>c.id===S.selectedChild);if(!ch){ch=S.children[0];S.selectedChild=ch?.id||null;}return ch;};
- function childForm(ch){
+ function childForm(ch,defaultRoomId){
   const parent=S.user.role==='parent';
+  const targetRoom=ch?.room_id || defaultRoomId || (Number(S.room)||null);
   showModal(ch?'Editar cadastro':parent?'Cadastrar meu filho':'Adicionar aluno',parent?'Preencha as informações do seu filho. Alergias e cuidados médicos são fundamentais para a segurança.':'Escolha uma turma sob sua responsabilidade.',`<form data-form="simple-child" ${ch?`data-id="${ch.id}"`:''}>
    <label>Nome da criança<input name="name" value="${e(ch?.name||'')}" required minlength="2" maxlength="100" autocomplete="off" placeholder="Nome completo"/></label>
    <label>Data de nascimento<input name="birthday" type="date" value="${e(ch?.birthday||'')}" required max="${day(new Date())}"/></label>
-   ${parent?'':`<label>Turma<select name="room_id" required>${roomOptions(ch?.room_id)}</select></label>`}
+   ${parent?'':`<label>Turma<select name="room_id" required>${roomOptions(targetRoom)}</select></label>`}
    ${S.user.role==='admin'?`<label>Responsável<select name="parent_id">${parents(ch?.parent_id)}</select></label>`:''}
    <fieldset style="border:1px solid #27272a;border-radius:8px;padding:12px;margin:12px 0;"><legend style="font-size:12px;font-weight:700;padding:0 6px;">🩺 SAÚDE, ALERGIAS E CUIDADOS MÉDICOS</legend>
      <label>Alergias alimentares<input name="allergies" value="${e(ch?.allergies||'')}" placeholder="Ex.: Amendoim, Lactose, Glúten (ou deixe vazio)"/></label>
@@ -114,11 +115,210 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   </div>
   <section class="panel"><div class="lesson-toolbar inside"><label>Aulinha<select id="lesson-filter"><option value="">Todos os alunos das minhas turmas</option>${S.lessons.map(l=>`<option value="${l.id}" ${l.id===S.selectedLesson?'selected':''}>${e(l.room_name)} · ${dateLabel(l.starts_at)} · ${time(l.starts_at)}</option>`).join('')}</select></label></div>${rosterRows(children,lesson)}</section>${guestsSection}<p class="muted-note">A confirmação da família não substitui a conferência presencial do responsável na chegada e na saída.</p>`;
  }
+ function studentCardsList(children, room){
+  if(!children.length){
+    return room ? `
+      <div class="empty room-empty-card">
+        <div class="empty-icon-wrap">${icon('rooms', 36)}</div>
+        <h3>Nenhum aluno matriculado na turma ${e(room.name)}</h3>
+        <p>Esta turma atende crianças de <strong>${room.min_age} a ${room.max_age} anos</strong> (${room.capacity} vagas por aula). Toque no botão abaixo para matricular uma criança diretamente nesta salinha ou transferir um aluno já existente.</p>
+        <div class="empty-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button type="button" class="btn primary" data-action="new-child" data-room="${room.id}">
+            ${icon('plus', 16)} Matricular aluno nesta turma
+          </button>
+          <button type="button" class="btn secondary" data-action="select-room-filter" data-id="all">
+            Ver alunos de todas as turmas
+          </button>
+        </div>
+      </div>
+    ` : empty('Nenhum aluno cadastrado', 'Adicione o primeiro aluno para começar o acompanhamento.');
+  }
+
+  const presentCount = children.filter(ch=>ch.status==='present').length;
+
+  return `
+    <div class="room-students-list-header">
+      <div class="roster-stats-pill">
+        <span>Alunos matriculados: <strong>${children.length}</strong></span>
+        <span class="meta-dot">·</span>
+        <span style="color:#15803d;font-weight:700;">🟢 ${presentCount} na salinha agora</span>
+      </div>
+    </div>
+    <div class="room-students-grid">
+      ${children.map(ch=>{
+        const p = S.activePaging?.find(x=>x.child_id===ch.id);
+        const pagingBadge = p ? (
+          p.status==='on_my_way'
+            ? `<div class="student-paging-status green">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</div>`
+            : `<div class="student-paging-status red">📢 Telão Ativo no Auditório</div>`
+        ) : '';
+        const parentPhone = ch.parent_phone || '';
+
+        return `
+          <article class="room-student-card panel">
+            <div class="student-card-top">
+              <div class="person">
+                <span class="kid-avatar big" style="background:${ch.color||'#09090b'};">${initials(ch.name)}</span>
+                <div class="student-card-bio">
+                  <div class="student-name-row">
+                    <h3>${childName(ch)}</h3>
+                    <span class="status-pill ${ch.status}">
+                      ${ch.status==='present'?'🟢 Na salinha':ch.status==='departed'?'🏁 Saída registrada':'⚪ Não chegou'}
+                    </span>
+                  </div>
+                  <p class="student-meta">${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10)} · <span class="room-name-tag">${e(ch.room_name||room?.name||'Salinha')}</span></p>
+                  ${ch.claim_code && ch.status==='present' ? `<div class="claim-tag-highlight">ETIQUETA DE SEGURANÇA · CÓDIGO: <strong>${e(ch.claim_code)}</strong></div>` : ''}
+                  ${pagingBadge}
+                </div>
+              </div>
+            </div>
+
+            ${(ch.allergies || ch.medical_conditions || ch.emergency_medication || ch.special_needs || ch.authorized_pickups) ? `
+              <div class="student-health-box">
+                ${ch.allergies ? `<span class="allergy-badge warning">⚠️ <strong>ALERGIA:</strong> ${e(ch.allergies)}</span>` : ''}
+                ${ch.medical_conditions ? `<span class="allergy-badge medical">🩺 <strong>SAÚDE:</strong> ${e(ch.medical_conditions)}</span>` : ''}
+                ${ch.emergency_medication ? `<span class="allergy-badge med">💊 <strong>MEDICAÇÃO:</strong> ${e(ch.emergency_medication)}</span>` : ''}
+                ${ch.special_needs ? `<span class="allergy-badge special">♿ <strong>CUIDADO:</strong> ${e(ch.special_needs)}</span>` : ''}
+                ${ch.authorized_pickups ? `<div class="pickup-text"><span>👥 Autorizados para buscar:</span> <strong>${e(ch.authorized_pickups)}</strong></div>` : ''}
+              </div>
+            ` : ''}
+
+            <div class="student-family-info">
+              <span>Responsável: <strong>${e(ch.parent_name || 'Aguardando vínculo')}</strong></span>
+              ${parentPhone ? `<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da salinha ${room?.name||'Lagoinha Kids'} sobre o(a) ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-mini-btn">${icon('whatsapp',14)} WhatsApp</a>` : ''}
+            </div>
+
+            <div class="student-actions-bar">
+              <button type="button" class="btn ${ch.status==='present'?'secondary':'primary'} btn-sm student-btn-main" data-action="attendance" data-id="${ch.id}">
+                ${ch.status==='present' ? `${icon('out', 16)} Registrar saída` : `${icon('check', 16)} Marcar chegada`}
+              </button>
+              <button type="button" class="btn secondary btn-sm" data-action="digital-id" data-id="${ch.id}" title="Carteirinha Digital com QR Code">
+                ${icon('qrcode', 16)} <span>Carteirinha</span>
+              </button>
+              <button type="button" class="btn secondary btn-sm" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no Telão do Auditório e celular">
+                ${icon('speaker', 16)} <span>Telão</span>
+              </button>
+              <button type="button" class="btn secondary btn-sm" data-action="transfer-child" data-id="${ch.id}" title="Mudar de turma / Transferir aluno">
+                🔄 <span>Mudar turma</span>
+              </button>
+              <button type="button" class="btn secondary btn-sm" data-action="student-options" data-id="${ch.id}" title="Editar cadastro, foto facial e opções">
+                ${icon('settings', 16)} <span>Opções</span>
+              </button>
+            </div>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+ }
  function studentsPage(){
   const rid=Number(S.room),room=S.rooms.find(r=>r.id===rid);
   const confirmed=new Set(S.lessons.filter(l=>l.room_id===rid).flatMap(l=>l.confirmed_children));
-  const children=room?S.children.filter(ch=>ch.room_id===rid||confirmed.has(ch.id)):S.children;
-  return `${title(room?`Alunos · ${e(room.name)}`:'Alunos',S.user.role==='admin'?'Gerencie cadastros e vínculos familiares.':'Alunos vinculados às suas turmas.',`<button class="btn secondary" data-action="new-child">${icon('plus',17)} Adicionar aluno</button>`)}<section class="panel">${rosterRows(children,null)}</section>`;
+  const isSpecificRoom = Boolean(room);
+  const children = isSpecificRoom
+    ? S.children.filter(ch=>ch.room_id===rid||confirmed.has(ch.id))
+    : (S.room==='all' ? S.children : S.children.filter(ch=>String(ch.room_id)===S.room));
+
+  if(isSpecificRoom){
+    return `
+      <div class="room-students-page">
+        <div class="room-students-nav">
+          <button type="button" class="btn secondary room-back-btn" data-page="rooms">
+            ${icon('back', 16)} <span>Voltar para Turmas</span>
+          </button>
+          <div class="room-selector-box">
+            <label for="room-select-filter" class="room-selector-label">Alternar turma:</label>
+            <select id="room-select-filter" class="room-select-filter">
+              <option value="all">Todas as turmas (${S.children.length})</option>
+              ${S.rooms.map(r=>`<option value="${r.id}" ${r.id===rid?'selected':''}>${e(r.name)} (${S.children.filter(c=>c.room_id===r.id).length})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <section class="room-hero-card panel">
+          <div class="room-hero-content">
+            <div class="room-hero-icon">${icon('rooms', 26)}</div>
+            <div class="room-hero-info">
+              <div class="room-hero-tag">TURMA SELECIONADA</div>
+              <h2>${e(room.name)}</h2>
+              <p class="room-hero-meta">
+                <span><strong>Faixa etária:</strong> ${room.min_age} a ${room.max_age} anos</span>
+                <span class="meta-dot">·</span>
+                <span><strong>Capacidade:</strong> ${room.capacity} vagas por aula</span>
+                <span class="meta-dot">·</span>
+                <span><strong>Responsável:</strong> ${e(room.owner_name||'Equipe Lagoinha Kids')}</span>
+              </p>
+            </div>
+          </div>
+          <div class="room-hero-actions">
+            <button type="button" class="btn primary" data-action="new-child" data-room="${room.id}">
+              ${icon('plus', 16)} Matricular aluno nesta turma
+            </button>
+          </div>
+        </section>
+
+        <section class="room-actions-guide">
+          <div class="guide-header">
+            <span class="guide-badge">⚡ O QUE VOCÊ PODE FAZER COM OS ALUNOS DESTA TURMA</span>
+          </div>
+          <div class="guide-grid">
+            <div class="guide-card">
+              <div class="guide-card-icon">🏷️</div>
+              <div class="guide-card-text">
+                <strong>Presença & Saída</strong>
+                <p>Marcar chegada no início e conferir a Etiqueta de Segurança (TAG) dos pais no check-out.</p>
+              </div>
+            </div>
+            <div class="guide-card">
+              <div class="guide-card-icon">🪪</div>
+              <div class="guide-card-text">
+                <strong>Carteirinha Digital</strong>
+                <p>Exibir o QR Code do aluno para leitura com leitor USB de mesa ou câmera do celular.</p>
+              </div>
+            </div>
+            <div class="guide-card">
+              <div class="guide-card-icon">📢</div>
+              <div class="guide-card-text">
+                <strong>Chamar no Telão</strong>
+                <p>Chamar os pais ao auditório e enviar notificação push imediata no celular em caso de urgência.</p>
+              </div>
+            </div>
+            <div class="guide-card">
+              <div class="guide-card-icon">🔄</div>
+              <div class="guide-card-text">
+                <strong>Mudar Turma & Ficha</strong>
+                <p>Transferir para outra salinha, editar alergias alimentares, cuidados especiais e foto facial.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        ${studentCardsList(children, room)}
+      </div>
+    `;
+  }
+
+  // All rooms view
+  return `
+    <div class="room-students-page">
+      ${title(
+        'Alunos',
+        S.user.role==='admin' ? 'Gerencie cadastros, turmas e vínculos familiares.' : 'Alunos matriculados nas suas turmas.',
+        `<button class="btn primary" data-action="new-child">${icon('plus', 17)} Adicionar aluno</button>`
+      )}
+      <div class="room-filter-chips-wrap">
+        <button type="button" class="filter-chip ${S.room==='all'?'active':''}" data-action="select-room-filter" data-id="all">
+          Todas as turmas (${S.children.length})
+        </button>
+        ${S.rooms.map(r=>`
+          <button type="button" class="filter-chip ${String(r.id)===S.room?'active':''}" data-action="select-room-filter" data-id="${r.id}">
+            ${e(r.name)} (${S.children.filter(c=>c.room_id===r.id).length})
+          </button>
+        `).join('')}
+      </div>
+      ${studentCardsList(children, null)}
+    </div>
+  `;
  }
  const page=()=>{
   if(S.user.role==='parent'&&S.page==='overview')return parentHome();
@@ -149,7 +349,12 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    return true;
   }
   const lesson=S.lessons.find(l=>l.id===id),room=S.rooms.find(r=>r.id===id);
-  if(action==='new-child'){if(S.user.role!=='parent'&&!S.rooms.length){toast('Crie uma turma primeiro.');return true;}childForm();return true;}
+  if(action==='new-child'){
+    if(S.user.role!=='parent'&&!S.rooms.length){toast('Crie uma turma primeiro.');return true;}
+    const defRoom=el.dataset.room?Number(el.dataset.room):(Number(S.room)||null);
+    childForm(null,defRoom);
+    return true;
+  }
   if(action==='edit-child'){childForm(ch);return true;}
   if(action==='edit-user'){
    const user=S.users.find(u=>u.id===id);
@@ -161,7 +366,24 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='new-lesson'){lessonForm(id);return true;}
   if(action==='edit-lesson'){lessonForm(lesson.room_id,lesson);return true;}
   if(action==='lesson-roster'){S.selectedLesson=id;if(navigateTo)navigateTo('attendance');else{S.page='attendance';render();}return true;}
-  if(action==='room-students'||action==='filter-room'){S.room=String(id);S.selectedLesson=null;if(navigateTo)navigateTo('children');else{S.page='children';render();}return true;}
+  if(action==='room-students'||action==='filter-room'){
+    S.room=String(id);
+    S.selectedLesson=null;
+    if(navigateTo)navigateTo('children',false,true);
+    else{S.page='children';render();}
+    return true;
+  }
+  if(action==='select-room-filter'){
+    S.room=el.dataset.id||'all';
+    render();
+    return true;
+  }
+  if(action==='transfer-child'){
+    const c=S.children.find(x=>x.id===id);
+    if(!c)return true;
+    showModal('Mudar de turma',`${childName(c)} · ${age(c.birthday)} anos`,`<form data-form="transfer-child" data-id="${c.id}"><label>Nova turma<select name="room_id" required>${roomOptions(c.room_id)}</select></label><p class="soft-info">Ao mudar de turma, o aluno passará a constar na lista da nova salinha e nas próximas aulinhas dessa turma.</p>${errorSlot}<button class="btn primary full" type="submit">Salvar transferência</button></form>`);
+    return true;
+  }
   if(action==='confirm-presence'||action==='cancel-presence'){
    if(S.busy)return true;S.busy=true;el.disabled=true;
    try{if(action==='confirm-presence')await api(`/lessons/${id}/presence`,{method:'POST',body:{child_id:Number(el.dataset.child)}});else await api(`/lessons/${id}/presence/${el.dataset.child}`,{method:'DELETE'});await changed(action==='confirm-presence'?'Presença confirmada para a aulinha.':'Confirmação cancelada.');}
@@ -169,7 +391,19 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    return true;
   }
   if(action==='student-options'){
-   showModal(childName(ch),'O que você precisa fazer?',`<div class="student-menu"><button class="btn secondary full" data-action="edit-child" data-id="${id}">Editar cadastro</button><button class="btn secondary full" data-action="face" data-id="${id}">Conferência facial</button><button class="btn secondary full" data-action="notify" data-kind="please_pickup" data-id="${id}">Avisar responsável</button>${S.user.role==='admin'?`<button class="btn secondary full" data-action="link-guardian" data-id="${id}">Vincular responsável</button><button class="text-link danger-link" data-action="archive-child" data-id="${id}">Arquivar aluno</button>`:''}</div>`);return true;
+   showModal(childName(ch),'O que você precisa fazer?',`<div class="student-menu">
+     <button class="btn secondary full" data-action="edit-child" data-id="${id}">${icon('settings',16)} Editar cadastro completo</button>
+     <button class="btn secondary full" data-action="transfer-child" data-id="${id}">🔄 Mudar de turma (Transferir)</button>
+     <button class="btn secondary full" data-action="digital-id" data-id="${id}">${icon('qrcode',16)} Carteirinha Digital</button>
+     <button class="btn secondary full" data-action="paging-call" data-id="${id}">${icon('speaker',16)} Chamar no Telão / Celular</button>
+     <button class="btn secondary full" data-action="face" data-id="${id}">${icon('face',16)} Conferência facial auxiliar</button>
+     <button class="btn secondary full" data-action="notify" data-kind="please_pickup" data-id="${id}">${icon('bell',16)} Avisar responsável no app</button>
+     ${S.user.role==='admin'?`
+       <button class="btn secondary full" data-action="link-guardian" data-id="${id}">${icon('kids',16)} Vincular responsável</button>
+       <button class="text-link danger-link" data-action="archive-child" data-id="${id}">Arquivar cadastro do aluno</button>
+     `:''}
+   </div>`);
+   return true;
   }
   if(action==='cancel-lesson'){showModal('Cancelar aulinha?','Os responsáveis com presença confirmada receberão um aviso.',`<form data-form="cancel-lesson" data-id="${id}"><label class="checkbox-label"><input type="checkbox" required/>Confirmo o cancelamento.</label>${errorSlot}<button class="btn danger full" type="submit">Cancelar aulinha</button></form>`);return true;}
   if(action==='delete-room'||action==='archive-room'){
@@ -199,6 +433,24 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    if(S.user.role==='admin')data.parent_id=values.parent_id?Number(values.parent_id):null;
    await api(id?`/children/${id}`:'/children',{method:id?'PATCH':'POST',body:data});return 'Cadastro salvo.';
   }
+  if(type==='transfer-child'){
+   const c=S.children.find(x=>x.id===id);
+   if(!c)throw new Error('Aluno não encontrado.');
+   await api(`/children/${id}`,{
+     method:'PATCH',
+     body:{
+       name:c.name,
+       birthday:c.birthday,
+       room_id:Number(values.room_id),
+       allergies:c.allergies||'',
+       medical_conditions:c.medical_conditions||'',
+       emergency_medication:c.emergency_medication||'',
+       special_needs:c.special_needs||'',
+       authorized_pickups:c.authorized_pickups||''
+     }
+   });
+   return 'Aluno transferido de turma com sucesso!';
+  }
   if(type==='school-user'){
    const data={name:values.name,email:values.email,role:values.role,active:values.active==='on',rooms:new FormData(form).getAll('rooms').map(Number)};
    if(values.password)data.password=values.password;
@@ -227,7 +479,14 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   }
   return false;
  }
- function change(event){if(event.target.id==='lesson-child'){S.selectedChild=Number(event.target.value);render();}if(event.target.id==='lesson-filter'){S.selectedLesson=Number(event.target.value)||null;render();}}
+ function change(event){
+  if(event.target.id==='lesson-child'){S.selectedChild=Number(event.target.value);render();}
+  if(event.target.id==='lesson-filter'){S.selectedLesson=Number(event.target.value)||null;render();}
+  if(event.target.id==='room-select-filter'||event.target.classList.contains('room-select-filter')){
+    S.room=event.target.value;
+    render();
+  }
+ }
  return {page,action,submit,change,lessonForm};
 }
 
