@@ -14,7 +14,7 @@ def records(monkeypatch):
     monkeypatch.delenv('GOOGLE_CLIENT_ID',raising=False)
     monkeypatch.delenv('GOOGLE_CLIENT_SECRET',raising=False)
     with s.db() as c:
-        for table in ['terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
+        for table in ['mfa_recovery','outbox','attendance_events','family_invites','family_links','waitlist','auth_tokens','terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
             c.execute(f'DELETE FROM {table}')
         for uid,role in [(1,'admin'),(2,'teacher'),(3,'parent'),(4,'parent')]:
             c.execute('INSERT INTO users(id,name,email,password,role,created_at) VALUES(?,?,?,?,?,?)',(uid,f'User {uid}',f'user{uid}@example.test',s.password_hash(PASSWORD),role,s.now()))
@@ -50,12 +50,12 @@ def test_teacher_scope_and_privilege():
     assert [ch['id'] for ch in c.get('/api/children').json()]==[1]
     assert c.post('/api/children/2/notify',json={'kind':'please_pickup'}).status_code==403
     assert c.get('/api/users').status_code==403
-    assert c.post('/api/users',json={'name':'Bad','email':'bad@e.test','password':PASSWORD,'role':'admin'}).status_code==403
+    assert c.post('/api/users',json={'name':'Bad','email':'bad@e.test','password':PASSWORD,'role':'admin','terms_accepted':True,'terms_version':'2026.1'}).status_code==403
     assert c.post('/api/children/1/consent',json={'allowed':True}).status_code==403
 
 def test_signup_never_escalates():
     c=TestClient(app)
-    r=c.post('/api/auth/register',json={'name':'Parent new','email':'new@e.test','password':PASSWORD,'role':'admin'})
+    r=c.post('/api/auth/register',json={'name':'Parent new','email':'new@e.test','password':PASSWORD,'role':'admin','terms_accepted':True,'terms_version':'2026.1'})
     assert r.status_code==200 and r.json()['user']['role']=='parent'
     assert c.get('/api/children').json()==[]
 
@@ -82,7 +82,7 @@ def test_attendance_requires_manual_guardian_and_notifies():
     assert c.post('/api/children/1/attendance',json=payload).status_code==409
     assert c.get('/api/children').json()[0]['status']=='present'
     parent=client(3);assert parent.get('/api/notifications').json()[0]['kind']=='attendance'
-    payload['action']='out';assert c.post('/api/children/1/attendance',json=payload).status_code==200
+    payload['claim_code']=c.get('/api/children').json()[0]['claim_code'];payload['action']='out';assert c.post('/api/children/1/attendance',json=payload).status_code==200
     assert c.get('/api/children').json()[0]['status']=='departed'
 
 def test_bidirectional_notifications_and_read_isolation():

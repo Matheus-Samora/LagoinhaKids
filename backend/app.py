@@ -11,8 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.formparsers import MultiPartParser
 from . import store as s
+from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Kids',version='0.1.0')
+app=FastAPI(title='Lagoinha Kids',version='1.2.0')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=8*1024*1024
@@ -25,17 +26,16 @@ def fail(code,message,status=400): raise HTTPException(status,detail={'code':cod
 def google_ready(): return bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))
 def public_user(row):
     return {k:row[k] for k in ('id','name','email','role','active')} | {
+        'email_verified':bool(row['email_verified']) if 'email_verified' in row.keys() else False,
+        'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in row.keys() else False,
         'phone': row['phone'] if 'phone' in row.keys() else '',
         'google_linked': bool(row['google_sub'])
     }
 
+ALLOWED_ORIGINS={PUBLIC_URL,*NATIVE_ORIGINS,*filter(None,(x.strip().rstrip('/') for x in os.getenv('KIDS_ALLOWED_ORIGINS','').split(',')))}
 def is_allowed_origin(origin, request: Request):
-    if not origin: return True
-    base = f"{request.url.scheme}://{request.url.netloc}".rstrip('/')
-    if origin == base or origin in {PUBLIC_URL, *NATIVE_ORIGINS}: return True
-    if any(origin.startswith(p) for p in ('http://192.168.', 'http://10.', 'http://172.', 'http://localhost', 'http://127.0.0.1')): return True
-    if origin.endswith('.trycloudflare.com') or origin.endswith('.loca.lt') or origin.endswith('.ngrok-free.app'): return True
-    return False
+    if not origin:return True
+    return origin.rstrip('/') in ALLOWED_ORIGINS
 
 @app.middleware('http')
 async def protection(request:Request,call_next):
@@ -52,11 +52,13 @@ async def protection(request:Request,call_next):
                 if length>MAX_UPLOAD+65536: return JSONResponse({'detail':{'code':'size','message':'Requisição excede o limite.'}},413)
                 parts.append(chunk)
             request._body=b''.join(parts)
-    response=await call_next(request)
+    context=s.REQUEST_IP.set(request.client.host if request.client else '')
+    try:response=await call_next(request)
+    finally:s.REQUEST_IP.reset(context)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY'})
     return response
 
-app.add_middleware(CORSMiddleware,allow_origin_regex=r".*",allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client'])
+app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client'])
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
@@ -80,7 +82,7 @@ def room_allowed(c,user,room):
     if record['created_by'] is not None:return record['created_by']==user['id']
     return c.execute('SELECT 1 FROM teacher_rooms WHERE user_id=? AND room_id=?',(user['id'],room)).fetchone() is not None
 def child_visible(c,user,row):
-    allowed=user['role']=='admin' or (user['role']=='parent' and row['parent_id']==user['id'])
+    allowed=user['role']=='admin' or (user['role']=='parent' and (row['parent_id']==user['id'] or c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',(row['id'],user['id'])).fetchone()))
     if user['role']=='teacher':
         linked_rooms=[r[0] for r in c.execute('SELECT DISTINCT l.room_id FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1',(row['id'],))]
         allowed=room_allowed(c,user,row['room_id']) or any(room_allowed(c,user,rid) for rid in linked_rooms)
@@ -110,12 +112,15 @@ def email(value):
 class Login(BaseModel):
     email:str=Field(max_length=200)
     password:str=Field(max_length=128)
+    otp:str=Field(default='',max_length=40)
 class Register(Login):
     name:str=Field(min_length=2,max_length=100)
     phone:str|None=Field(default='',max_length=30)
+    terms_version:str|None=None
+    terms_accepted:bool=False
 
 @app.get('/api/health')
-def health(): return {'status':'ok','application':'Lagoinha Kids','google_enabled':google_ready(),'push_enabled':True,'biometric_liveness':False}
+def health(): return {'status':'ok','application':'Lagoinha Kids','google_enabled':google_ready(),'push_enabled':bool(push_platforms()),'biometric_liveness':False}
 @app.post('/api/auth/login')
 def login(data:Login,request:Request,response:Response):
     addr=request.client.host if request.client else 'unknown'
@@ -129,13 +134,21 @@ def login(data:Login,request:Request,response:Response):
         if not valid:
             failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
             c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,failures,int(time.time())+900))
-        else: c.execute('DELETE FROM attempts WHERE key=?',(key,))
+        else:
+            if row['mfa_secret']:
+                from .security import verify_otp
+                if not verify_otp(c,row,data.otp):
+                    failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
+                    c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,failures,int(time.time())+900));c.commit()
+                    fail('mfa','Informe o código do autenticador ou um código de recuperação.',401)
+            c.execute('DELETE FROM attempts WHERE key=?',(key,))
     if not valid: fail('credentials','E-mail ou senha incorretos.',401)
     grant=login_user(response,row['id'],request.headers.get('x-native-client')=='1')
     return {'user':public_user(row),**grant}
 @app.post('/api/auth/register')
 def register(data:Register,response:Response,request:Request):
     validate_password(data.password)
+    if not data.terms_accepted or data.terms_version!='2026.1':fail('terms','Leia e aceite os termos para criar sua conta.')
     addr=request.client.host if request.client else 'unknown'
     key=s.digest(addr+'|register')
     with s.db() as c:
@@ -149,10 +162,12 @@ def register(data:Register,response:Response,request:Request):
         row=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
     return {'user':public_user(row),**login_user(response,uid,request.headers.get('x-native-client')=='1')}
 @app.get('/api/me')
-def me(user=Depends(session)): return {'user':public_user(user),'csrf':user['csrf'],'google_enabled':google_ready(),'push_enabled':False}
+def me(user=Depends(session)): return {'user':public_user(user),'csrf':user['csrf'],'google_enabled':google_ready(),'push_enabled':bool(push_platforms())}
 @app.post('/api/auth/logout')
 def logout(response:Response,user=Depends(session)):
-    with s.db() as c: c.execute('DELETE FROM sessions WHERE token=?',(user['token'],))
+    with s.db() as c:
+        c.execute('DELETE FROM sessions WHERE token=?',(user['token'],))
+        c.execute('DELETE FROM device_tokens WHERE user_id=?',(user['id'],))
     response.delete_cookie(COOKIE,path='/');return {'ok':True}
 class PasswordChange(BaseModel):
     current:str=Field(max_length=128)
@@ -219,6 +234,7 @@ def link_guardian(cid:int,data:Link,user=Depends(admin)):
         child_allowed(c,user,cid)
         if not c.execute('SELECT 1 FROM users WHERE id=? AND role="parent" AND active=1',(data.parent_id,)).fetchone(): fail('parent','Responsável inválido.')
         c.execute('UPDATE children SET parent_id=?,face_allowed=0,face_template=NULL,consent_at=NULL WHERE id=?',(data.parent_id,cid))
+        c.execute('UPDATE family_links SET active=0 WHERE child_id=?',(cid,));c.execute('DELETE FROM family_invites WHERE child_id=?',(cid,))
         s.audit(c,user['id'],'guardian_linked_consent_reset',cid)
     return {'ok':True}
 class Consent(BaseModel): allowed:bool
@@ -237,17 +253,22 @@ class Attendance(BaseModel):
     guardian_id:int
     lesson_id:int|None=None
     claim_code:str|None=None
+    exception_reason:str=Field(default='',max_length=300)
 
 @app.post('/api/children/{cid}/attendance')
 def attendance(cid:int,data:Attendance,user=Depends(staff)):
     if data.action not in ('in','out') or not data.guardian_confirmed: fail('confirm','Confirme pessoalmente o responsável antes de registrar.')
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         ch=child_allowed(c,user,cid)
+        attempt_key=s.digest(f'checkout|{user["id"]}|{cid}')
+        attempt=c.execute('SELECT * FROM attempts WHERE key=?',(attempt_key,)).fetchone()
+        if data.action=='out' and attempt and attempt['expires']>time.time() and attempt['failures']>=6:fail('rate','Muitas tentativas. Procure a administração ou aguarde 15 minutos.',429)
         if data.lesson_id is not None:
             lesson=c.execute('SELECT * FROM lessons WHERE id=? AND active=1',(data.lesson_id,)).fetchone()
             if not lesson or lesson['starts_at'][:10]!=s.today() or not room_allowed(c,user,lesson['room_id']):fail('lesson','Registre a chegada no dia da aula, na sua turma.',403)
             if not c.execute('SELECT 1 FROM reservations WHERE child_id=? AND lesson_id=? AND confirmed=1',(cid,data.lesson_id)).fetchone():fail('lesson','O aluno não está confirmado nesta aula.',409)
-        if not ch['parent_id'] or data.guardian_id!=ch['parent_id']: fail('guardian','Responsável não vinculado.',403)
+        if not ch['parent_id'] or (data.guardian_id!=ch['parent_id'] and not c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1 AND can_pickup=1',(cid,data.guardian_id)).fetchone()): fail('guardian','Responsável não autorizado.',403)
         guardian=c.execute('SELECT name FROM users WHERE id=? AND active=1',(data.guardian_id,)).fetchone()
         if not guardian: fail('guardian','Responsável indisponível.')
         old=c.execute('SELECT * FROM attendance WHERE child_id=? AND day=?',(cid,s.today())).fetchone()
@@ -259,13 +280,20 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
             msg=f'{ch["name"]}: entrada registrada. Código de Segurança (Claim Tag): {claim}. Apresente este código na retirada da criança.'
         else:
             if not old or old['status']!='present': fail('state','Registre a entrada antes da saída.',409)
-            if data.claim_code and old['claim_code'] and data.claim_code.strip().upper()!=old['claim_code'].strip().upper():
-                fail('claim_code',f'Código de segurança ({data.claim_code.strip().upper()}) não confere com o da etiqueta da criança ({old["claim_code"]}).',403)
+            supplied=(data.claim_code or '').strip().upper()
+            if not old['claim_code'] or not supplied or not hmac.compare_digest(supplied,old['claim_code']):
+                if user['role']!='admin' or len(data.exception_reason.strip())<15:
+                    failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
+                    c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(attempt_key,failures,int(time.time())+900));c.commit()
+                    fail('claim_code','Código de retirada inválido. Confira a etiqueta ou procure a administração.',403)
+                s.audit(c,user['id'],'checkout_exception',cid)
             claim=old['claim_code'] if old and old['claim_code'] else ''
             c.execute('UPDATE attendance SET status="departed",out_at=?,guardian=?,actor=?,checkout_guardian=? WHERE child_id=? AND day=?',(s.now(),guardian['name'],user['id'],guardian['name'],cid,s.today()))
             title='Saída registrada'
             msg=f'{ch["name"]}: saída conferida pela equipe com responsável {guardian["name"]}.'
         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(ch['parent_id'],cid,'attendance',title,msg,user['id'],s.now()))
+        c.execute('DELETE FROM attempts WHERE key=?',(attempt_key,))
+        c.execute('INSERT INTO attendance_events(child_id,lesson_id,action,guardian_id,guardian_name,actor,created_at,exception_reason) VALUES(?,?,?,?,?,?,?,?)',(cid,data.lesson_id,data.action,data.guardian_id,guardian['name'],user['id'],s.now(),data.exception_reason.strip() if data.action=='out' else ''))
         s.audit(c,user['id'],'check_in' if data.action=='in' else 'check_out',cid)
     return {'ok':True,'claim_code':claim}
 
@@ -285,8 +313,8 @@ def get_privacy_terms():
     }
 
 class DeviceTokenIn(BaseModel):
-    token:str
-    platform:str='web'
+    token:str=Field(min_length=20,max_length=4096)
+    platform:str=Field(default='android',pattern='^(android|ios)$')
 
 @app.post('/api/devices/token')
 def register_device_token(data:DeviceTokenIn,user=Depends(session)):
@@ -432,6 +460,12 @@ def download_apk():
             return FileResponse(p, media_type='application/vnd.android.package-archive', filename='lagoinha-kids.apk')
     fail('not_found', 'APK em compilação ou indisponível.', 404)
 
+from .security import router as security_router
+app.include_router(security_router)
+
+from .features import router as features_router
+app.include_router(features_router)
+
 from .school import router as school_router
 app.include_router(school_router)
 
@@ -446,7 +480,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2026.1',
+        'version': '1.2.0',
         'build': get_build_id(),
         'app': 'Lagoinha Kids',
         'timestamp': s.now()

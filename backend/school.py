@@ -1,4 +1,4 @@
-from datetime import datetime,date
+from datetime import datetime,date,timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter,Depends
 from pydantic import BaseModel,Field
@@ -109,7 +109,7 @@ def children(lesson_id:int|None=None,user=Depends(session)):
         if lesson_id is not None:
             lesson=c.execute('SELECT * FROM lessons WHERE id=?',(lesson_id,)).fetchone()
             if not lesson or (user['role']!='parent' and not room_allowed(c,user,lesson['room_id'])):fail('lesson','Aula não permitida.',403)
-        rows=c.execute('SELECT ch.id,ch.name,ch.birthday,ch.room_id,ch.parent_id,ch.face_allowed,ch.consent_at,ch.face_template IS NOT NULL face_enrolled,coalesce(r.name,"Ainda sem turma") room_name,coalesce(r.color,"#e4e4e7") color,u.name parent_name,u.email parent_email,coalesce(a.status,"absent") status,a.in_at,a.out_at,coalesce(ch.allergies,"") allergies,coalesce(ch.medical_conditions,"") medical_conditions,coalesce(ch.emergency_medication,"") emergency_medication,coalesce(ch.special_needs,"") special_needs,coalesce(ch.authorized_pickups,"") authorized_pickups,coalesce(a.claim_code,"") claim_code,coalesce(a.checkout_guardian,"") checkout_guardian FROM children ch LEFT JOIN rooms r ON r.id=ch.room_id LEFT JOIN users u ON u.id=ch.parent_id LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=? WHERE ch.archived=0 ORDER BY ch.name',(s.today(),)).fetchall()
+        rows=c.execute('SELECT ch.id,ch.name,ch.birthday,ch.room_id,ch.parent_id,ch.face_allowed,ch.consent_at,ch.face_template IS NOT NULL face_enrolled,coalesce(r.name,"Ainda sem turma") room_name,coalesce(r.color,"#e4e4e7") color,u.name parent_name,u.email parent_email,coalesce(a.status,"absent") status,a.in_at,a.out_at,coalesce(ch.allergies,"") allergies,coalesce(ch.medical_conditions,"") medical_conditions,coalesce(ch.emergency_medication,"") emergency_medication,coalesce(ch.special_needs,"") special_needs,coalesce(ch.authorized_pickups,"") authorized_pickups,coalesce(a.claim_code,"") claim_code,coalesce(a.checkout_guardian,"") checkout_guardian FROM children ch LEFT JOIN rooms r ON r.id=ch.room_id LEFT JOIN users u ON u.id=ch.parent_id LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=? WHERE ch.archived=0 AND (?!="parent" OR ch.parent_id=? OR EXISTS(SELECT 1 FROM family_links f WHERE f.child_id=ch.id AND f.user_id=? AND f.active=1)) ORDER BY ch.name',(s.today(),user['role'],user['id'],user['id'])).fetchall()
         result=[]
         for row in rows:
             if not child_visible(c,user,row):continue
@@ -129,15 +129,23 @@ def create_child(data:ChildIn,user=Depends(session)):
 def edit_child(cid:int,data:ChildIn,user=Depends(session)):
     with s.db() as c:
         old=child_allowed(c,user,cid)
+        health_fields=('allergies','medical_conditions','emergency_medication','special_needs','authorized_pickups')
+        for key in health_fields:
+            if key not in data.model_fields_set:data=data.model_copy(update={key:old[key]})
+        if user['role']=='teacher' and any((getattr(data,key) or '').strip()!=old[key] for key in health_fields):fail('owner','Cuidados e autorizações devem ser atualizados pela família ou administração.',403)
         if user['role']=='teacher' and old['parent_id'] is not None and (data.name.strip()!=old['name'] or str(data.birthday)!=old['birthday']):
             fail('forbidden','Apenas a família ou a administração pode alterar o nome civil e nascimento da criança.',403)
         parent,rid=validate_child(c,data,user)
         if user['role']!='parent' and data.parent_id is None:parent=old['parent_id']
         booked=c.execute('SELECT r.min_age,r.max_age,l.starts_at FROM reservations b JOIN lessons l ON l.id=b.lesson_id JOIN rooms r ON r.id=l.room_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1 AND l.ends_at>?',(cid,s.now())).fetchall()
         if any(not r['min_age']<=age_on(data.birthday,r['starts_at'])<=r['max_age'] for r in booked):fail('age','Cancele as aulas incompatíveis antes de alterar o nascimento.',409)
-        if user['role']=='parent':rid=old['room_id']
+        if user['role']=='parent':
+            if old['parent_id']!=user['id']:fail('owner','Somente o responsável principal pode editar o cadastro.',403)
+            rid=old['room_id']
         c.execute('UPDATE children SET name=?,birthday=?,room_id=?,parent_id=?,allergies=?,medical_conditions=?,emergency_medication=?,special_needs=?,authorized_pickups=? WHERE id=?',(data.name.strip(),str(data.birthday),rid,parent,(data.allergies or '').strip(),(data.medical_conditions or '').strip(),(data.emergency_medication or '').strip(),(data.special_needs or '').strip(),(data.authorized_pickups or '').strip(),cid))
-        if parent!=old['parent_id']:c.execute('UPDATE children SET face_allowed=0,face_template=NULL,consent_at=NULL WHERE id=?',(cid,))
+        if parent!=old['parent_id']:
+            c.execute('UPDATE children SET face_allowed=0,face_template=NULL,consent_at=NULL WHERE id=?',(cid,))
+            c.execute('UPDATE family_links SET active=0 WHERE child_id=?',(cid,));c.execute('DELETE FROM family_invites WHERE child_id=?',(cid,))
         s.audit(c,user['id'],'child_updated',cid)
     return {'ok':True}
 @router.delete('/children/{cid}')
@@ -145,8 +153,11 @@ def archive_child(cid:int,user=Depends(session)):
     if user['role']=='teacher':fail('forbidden','Somente a família ou a administração pode arquivar o cadastro.',403)
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        child_allowed(c,user,cid)
+        child=child_allowed(c,user,cid)
+        if user['role']=='parent' and child['parent_id']!=user['id']:fail('owner','Somente o responsável principal pode arquivar o cadastro.',403)
         if c.execute('SELECT 1 FROM attendance WHERE child_id=? AND day=? AND status="present"',(cid,s.today())).fetchone():fail('present','A criança está na salinha. Confira a saída antes de arquivar.',409)
+        c.execute('DELETE FROM waitlist WHERE child_id=?',(cid,))
+        c.execute('UPDATE family_links SET active=0 WHERE child_id=?',(cid,))
         c.execute('UPDATE children SET archived=1,face_allowed=0,face_template=NULL,consent_at=NULL WHERE id=?',(cid,))
         c.execute('UPDATE reservations SET confirmed=0,updated_at=? WHERE child_id=? AND lesson_id IN(SELECT id FROM lessons WHERE ends_at>?)',(s.now(),cid,s.now()));s.audit(c,user['id'],'child_archived',cid)
     return {'ok':True}
@@ -156,6 +167,7 @@ class LessonIn(BaseModel):
     title:str=Field(default='Aulinha',min_length=2,max_length=80)
     starts_at:datetime
     ends_at:datetime
+    repeat_weeks:int=Field(default=1,ge=1,le=12)
 def normalize_lesson(c,data,user,lid=None):
     if not data.title.strip():fail('title','Informe o nome da aulinha.')
     room=room_for_edit(c,user,data.room_id)
@@ -173,15 +185,21 @@ def lessons(user=Depends(session)):
         for row in rows:
             if user['role']!='parent' and not room_allowed(c,user,row['room_id']):continue
             booked=[dict(b) for b in c.execute('SELECT b.child_id,ch.name FROM reservations b JOIN children ch ON ch.id=b.child_id WHERE b.lesson_id=? AND b.confirmed=1 AND ch.archived=0',(row['id'],))]
-            own={r[0] for r in c.execute('SELECT id FROM children WHERE parent_id=? AND archived=0',(user['id'],))} if user['role']=='parent' else set()
-            result.append(dict(row)|{'confirmed_count':len(booked),'available':max(0,row['capacity']-len(booked)),'confirmed_children':[b['child_id'] for b in booked if user['role']!='parent' or b['child_id'] in own]})
+            own={r[0] for r in c.execute('SELECT id FROM children WHERE archived=0 AND (parent_id=? OR EXISTS(SELECT 1 FROM family_links f WHERE f.child_id=children.id AND f.user_id=? AND f.active=1))',(user['id'],user['id']))} if user['role']=='parent' else set()
+            waiting=[r[0] for r in c.execute('SELECT child_id FROM waitlist WHERE lesson_id=? ORDER BY id',(row['id'],))]
+            result.append(dict(row)|{'waiting_children':[cid for cid in waiting if user['role']!='parent' or cid in own],'waiting_count':len(waiting),'confirmed_count':len(booked),'available':max(0,row['capacity']-len(booked)),'confirmed_children':[b['child_id'] for b in booked if user['role']!='parent' or b['child_id'] in own]})
         return result
 @router.post('/lessons')
 def create_lesson(data:LessonIn,user=Depends(staff)):
     with s.db() as c:
-        c.execute('BEGIN IMMEDIATE');start,end=normalize_lesson(c,data,user)
-        lid=c.execute('INSERT INTO lessons(room_id,title,starts_at,ends_at,created_by) VALUES(?,?,?,?,?)',(data.room_id,data.title.strip(),start,end,user['id'])).lastrowid;s.audit(c,user['id'],'lesson_created')
-    return {'id':lid}
+        c.execute('BEGIN IMMEDIATE')
+        ids=[]
+        for week in range(data.repeat_weeks):
+            occurrence=data.model_copy(update={'starts_at':data.starts_at+timedelta(weeks=week),'ends_at':data.ends_at+timedelta(weeks=week)})
+            start,end=normalize_lesson(c,occurrence,user)
+            ids.append(c.execute('INSERT INTO lessons(room_id,title,starts_at,ends_at,created_by) VALUES(?,?,?,?,?)',(data.room_id,data.title.strip(),start,end,user['id'])).lastrowid)
+        s.audit(c,user['id'],'lesson_created')
+    return {'id':ids[0],'ids':ids}
 @router.patch('/lessons/{lid}')
 def edit_lesson(lid:int,data:LessonIn,user=Depends(staff)):
     with s.db() as c:
@@ -222,15 +240,57 @@ def confirm_presence(lid:int,data:ReservationIn,user=Depends(session)):
         if existing and existing['confirmed']:return {'ok':True,'already_confirmed':True}
         if c.execute('SELECT count(*) FROM reservations WHERE lesson_id=? AND confirmed=1',(lid,)).fetchone()[0]>=lesson['capacity']:fail('full','As vagas desta aulinha foram preenchidas.',409)
         if c.execute('SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1 AND l.starts_at<? AND l.ends_at>?',(ch['id'],lesson['ends_at'],lesson['starts_at'])).fetchone():fail('overlap','A criança já está confirmada em outra aula nesse horário.',409)
+        c.execute('DELETE FROM waitlist WHERE lesson_id=? AND child_id=?',(lid,ch['id']))
         c.execute('INSERT INTO reservations VALUES(?,?,?,?,?) ON CONFLICT(lesson_id,child_id) DO UPDATE SET confirmed=1,created_by=excluded.created_by,updated_at=excluded.updated_at',(lid,ch['id'],1,user['id'],s.now()));s.audit(c,user['id'],'lesson_presence_confirmed',ch['id'])
     return {'ok':True,'physical_check_in':False}
 @router.delete('/lessons/{lid}/presence/{cid}')
 def cancel_presence(lid:int,cid:int,user=Depends(session)):
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         child_allowed(c,user,cid);lesson=c.execute('SELECT * FROM lessons WHERE id=?',(lid,)).fetchone()
         if not lesson:fail('missing','Aula não encontrada.',404)
         if user['role']!='parent':room_for_edit(c,user,lesson['room_id'])
         if user['role']=='parent' and lesson['ends_at']<=s.now():fail('closed','Esta aula já terminou.',409)
         if user['role']=='parent' and lesson['starts_at'][:10]==s.today() and c.execute('SELECT 1 FROM attendance WHERE child_id=? AND day=? AND status="present"',(cid,s.today())).fetchone():fail('present','A criança está na salinha. Converse com a equipe antes de cancelar.',409)
         c.execute('UPDATE reservations SET confirmed=0,updated_at=? WHERE lesson_id=? AND child_id=?',(s.now(),lid,cid));s.audit(c,user['id'],'lesson_presence_cancelled',cid)
+        promote_waitlist(c,lid)
+    return {'ok':True}
+
+
+def promote_waitlist(c,lid):
+    lesson=c.execute('SELECT l.*,r.capacity,r.min_age,r.max_age,r.active room_active FROM lessons l JOIN rooms r ON r.id=l.room_id WHERE l.id=?',(lid,)).fetchone()
+    if not lesson or not lesson['active'] or not lesson['room_active'] or lesson['ends_at']<=s.now():return
+    count=c.execute('SELECT count(*) FROM reservations WHERE lesson_id=? AND confirmed=1',(lid,)).fetchone()[0]
+    for entry in c.execute('SELECT w.*,ch.birthday,ch.parent_id,ch.archived FROM waitlist w JOIN children ch ON ch.id=w.child_id WHERE w.lesson_id=? ORDER BY w.id',(lid,)).fetchall():
+        if count>=lesson['capacity']:break
+        conflict=c.execute('SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1 AND l.starts_at<? AND l.ends_at>?',(entry['child_id'],lesson['ends_at'],lesson['starts_at'])).fetchone()
+        valid=not entry['archived'] and lesson['min_age']<=age_on(entry['birthday'],lesson['starts_at'])<=lesson['max_age'] and not conflict
+        c.execute('DELETE FROM waitlist WHERE id=?',(entry['id'],))
+        if valid:
+            c.execute('INSERT INTO reservations VALUES(?,?,1,?,?) ON CONFLICT(lesson_id,child_id) DO UPDATE SET confirmed=1,created_by=excluded.created_by,updated_at=excluded.updated_at',(lid,entry['child_id'],entry['actor'],s.now()))
+            count+=1
+            ch={'id':entry['child_id'],'parent_id':entry['parent_id']}
+            publish_notice(c,lesson['created_by'],ch,'Vaga confirmada na aulinha',f'Surgiu uma vaga em {lesson["title"]}, dia {lesson["starts_at"][:10]} às {lesson["starts_at"][11:16]}. Sua participação foi confirmada. Cancele pelo app se não puder comparecer.')
+            s.audit(c,entry['actor'],'waitlist_promoted',entry['child_id'])
+
+@router.post('/lessons/{lid}/waitlist')
+def join_waitlist(lid:int,data:ReservationIn,user=Depends(session)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE');ch=child_allowed(c,user,data.child_id)
+        if user['role']!='parent':
+            target=c.execute('SELECT room_id FROM lessons WHERE id=?',(lid,)).fetchone()
+            if not target:fail('missing','Aulinha não encontrada.',404)
+            room_for_edit(c,user,target['room_id'])
+        lesson=c.execute('SELECT l.*,r.capacity,r.min_age,r.max_age FROM lessons l JOIN rooms r ON r.id=l.room_id WHERE l.id=? AND l.active=1 AND r.active=1 AND l.ends_at>?',(lid,s.now())).fetchone()
+        if not lesson:fail('closed','Aulinha indisponível.',409)
+        if not lesson['min_age']<=age_on(ch['birthday'],lesson['starts_at'])<=lesson['max_age']:fail('age','Faixa etária incompatível.')
+        if c.execute('SELECT 1 FROM reservations WHERE lesson_id=? AND child_id=? AND confirmed=1',(lid,ch['id'])).fetchone():fail('confirmed','A criança já está confirmada.',409)
+        if c.execute('SELECT count(*) FROM reservations WHERE lesson_id=? AND confirmed=1',(lid,)).fetchone()[0]<lesson['capacity']:fail('available','Há vagas. Confirme a presença diretamente.',409)
+        c.execute('INSERT OR IGNORE INTO waitlist(lesson_id,child_id,actor,created_at) VALUES(?,?,?,?)',(lid,ch['id'],user['id'],s.now()));s.audit(c,user['id'],'waitlist_joined',ch['id'])
+    return {'ok':True}
+@router.delete('/lessons/{lid}/waitlist/{cid}')
+def leave_waitlist(lid:int,cid:int,user=Depends(session)):
+    with s.db() as c:
+        child_allowed(c,user,cid)
+        c.execute('DELETE FROM waitlist WHERE lesson_id=? AND child_id=?',(lid,cid))
     return {'ok':True}

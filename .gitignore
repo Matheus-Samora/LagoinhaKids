@@ -7,3 +7,14 @@ __pycache__/
 .pytest_cache/
 local.properties
 ACESSOS-LOCAIS.md
+
+work/
+Lagoinha-Kids-acessos-locais.md
+*.apk
+*.jks
+*.keystore
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+.env.*
+!.env.example

@@ -1,13 +1,15 @@
 import {createSchoolUI} from './school.js';
 import './style.css';
 import './mobile.css';
+import './auth.css';
 import {Capacitor} from '@capacitor/core';
 import {Camera,CameraResultType,CameraSource,CameraDirection} from '@capacitor/camera';
 import {App} from '@capacitor/app';
+import {PushNotifications} from '@capacitor/push-notifications';
 
 const app=document.getElementById('app'), modal=document.getElementById('modal');
 const NATIVE=Capacitor.isNativePlatform();
-const DEFAULT_TUNNEL='https://however-boots-populations-differential.trycloudflare.com';
+const DEFAULT_TUNNEL='https://mountain-interactive-doors-suit.trycloudflare.com';
 let storedServer='';
 try{storedServer=NATIVE?(localStorage.getItem('kids_server')||DEFAULT_TUNNEL):'';}catch{}
 let deferredPrompt=null;
@@ -25,9 +27,10 @@ function toast(text,error=false){const t=document.getElementById('toast');t.text
 async function api(path,options={}){
  const headers={...(NATIVE?{'X-Native-Client':'1'}:{}),...(S.token?{'Authorization':'Bearer '+S.token}:{}),...(S.csrf?{'X-CSRF-Token':S.csrf}:{}),...options.headers};
  if(options.body && !(options.body instanceof FormData)){headers['Content-Type']='application/json';options.body=JSON.stringify(options.body);}
- const response=await fetch(S.apiOrigin+'/api'+path,{credentials:NATIVE?'omit':'same-origin',...options,headers});
+ let response;try{response=await fetch(S.apiOrigin+'/api'+path,{credentials:'include',...options,headers,signal:AbortSignal.timeout(15000)});}catch{setConnection(false);throw new Error('Sem conexão com o servidor. Tente novamente.');}
+ setConnection(true);
  const data=await response.json();
- if(!response.ok){if(response.status===401 && S.user){S.user=null;renderLogin();}throw new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir a operação.');}
+ if(!response.ok){if(response.status===401 && S.user){S.user=null;renderLogin();}const err=new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir a operação.');err.code=data.detail?.code;throw err;}
  return data;
 }
 function getSavedAccounts(){
@@ -45,9 +48,19 @@ function removeSavedAccount(email){
 }
 function brand(){return `<div class="brand"><img src="/logo.png" alt="Logo Lagoinha"/><div>lagoinha <strong>kids<span>●</span></strong><small>CUIDADO QUE CONECTA</small></div></div>`;}
 function renderLogin(register=false,prefillEmail=''){
- const saved=!register?getSavedAccounts():[];
- app.innerHTML=`<div class="login-layout"><section class="login-story">${brand()}<div class="story-copy"><span class="eyebrow light">MINISTÉRIO INFANTIL</span><h1>Um lugar para<br> crescer.<br><span>Um cuidado<br> para lembrar.</span></h1><p>Famílias e professores conectados.<br>Cada criança acolhida com amor.</p><div class="story-tags"><span>${icon('heart',15)} Acolhimento</span><span>${icon('shield',15)} Cuidado</span><span>${icon('kids',15)} Conexão</span></div></div><div class="story-art" aria-hidden="true"><div class="arch a1"></div><div class="arch a2"></div><div class="art-sun">✳</div><div class="art-circle"></div></div><footer>Lagoinha Kids <span>Juntos, cuidamos de quem mais importa.</span></footer></section><section class="login-form-wrap"><div class="login-form"><span class="eyebrow">BEM-VINDO AO LAGOINHA KIDS</span><h2>${register?'Vamos nos conhecer?':'Que bom ter você aqui.'}</h2><p>${register?'Crie sua conta de responsável. A equipe vinculará seus filhos após conferir o cadastro.':'Entre para acompanhar o cuidado de perto.'}</p><button type="button" class="btn secondary full install-top-btn" data-action="install-modal" style="margin-bottom:14px;border:1px solid #27272a;display:flex;align-items:center;justify-content:center;gap:8px;">📱 <strong>Instalar / Baixar no Celular (APK ou iPhone)</strong></button>${saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>${icon('shield',14)} CONTAS SALVAS NESTE APARELHO</span><small>${saved.length} salva${saved.length>1?'s':''}</small></div><div class="saved-accounts-chips">${saved.map(acc=>`<div class="saved-account-chip ${prefillEmail===acc.email?'selected':''}"><button type="button" class="saved-account-main" data-action="select-saved" data-email="${escape(acc.email)}"><span class="avatar mini">${initials(acc.name)}</span><div class="saved-account-text"><strong>${escape(acc.name.split(' ')[0])}</strong><small>${roles[acc.role]||acc.role}</small></div></button><button type="button" class="saved-account-del" data-action="remove-saved" data-email="${escape(acc.email)}" title="Remover da lista" aria-label="Remover ${escape(acc.name)}">${icon('close',12)}</button></div>`).join('')}</div><div class="saved-divider"><span>ou acesse abaixo</span></div></div>`:''}${NATIVE?`<div class="native-server"><label>Servidor do aplicativo<input id="mobile-api" type="url" value="${escape(S.apiOrigin)}" placeholder="https://kids.sua-igreja.com"/></label><button type="button" class="text-link" data-action="set-server">Aplicar servidor</button></div>`:''}<form data-form="${register?'register':'login'}">${register?'<label>Seu nome<input name="name" autocomplete="name" required minlength="2" maxlength="100" placeholder="Como podemos chamar você?"/></label><label>Celular / WhatsApp (para avisos urgentes)<input name="phone" type="tel" maxlength="30" placeholder="(DD) 99999-9999"/></label>':''}<label>E-mail<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" placeholder="voce@exemplo.com" value="${escape(prefillEmail)}"/></label><label>Senha<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="${register?'new-password':'current-password'}" required ${register?'minlength="12"':''} maxlength="128" placeholder="${register?'Pelo menos 12 caracteres':'Digite sua senha'}"/><button type="button" data-action="toggle-password" aria-label="Mostrar senha">Ver</button></div></label>${!register?'<div class="form-helper"><span>Seu acesso é definido pela equipe.</span><button type="button" data-action="password-help">Preciso de ajuda</button></div>':''}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${register?'Criar conta de responsável':'Entrar no aplicativo'} ${icon('arrow',18)}</button></form><div class="divider"><span>ou continue com</span></div><button class="btn google full" data-action="google"><span class="google-g">G</span> Conta Google ${!S.google?'<small>Em configuração</small>':''}</button><p class="signup">${register?'Já tem uma conta?':'É responsável e ainda não tem acesso?'} <button data-action="${register?'login-screen':'register-screen'}">${register?'Entrar':'Criar conta'}</button></p><div class="login-footnote">${icon('shield',16)} Um espaço reservado para famílias e equipe. · <button type="button" class="text-link" data-action="privacy-terms" style="font-size:12px;color:#71717a;text-decoration:underline;">Termos &amp; LGPD</button></div><span class="demo-note">Ambiente local · dados iniciais fictícios</span></div></section></div>`;
+ app.innerHTML=`<main class="auth-screen"><section class="auth-card">${brand()}<h1>${register?'Criar conta':'Bem-vindo'}</h1><p class="auth-subtitle">${register?'Seu acesso ao Lagoinha Kids.':'Entre para continuar.'}</p><form data-form="${register?'register':'login'}">${register?'<label>Nome<input name="name" autocomplete="name" required minlength="2" maxlength="100"/></label><label>Celular<input name="phone" type="tel" autocomplete="tel" maxlength="30"/></label>':''}<label>E-mail<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${escape(prefillEmail)}"/></label><label>Senha<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="${register?'new-password':'current-password'}" required ${register?'minlength="12"':''} maxlength="128"/><button type="button" data-action="toggle-password" aria-label="Mostrar senha">Ver</button></div></label>${!register?'<label id="login-otp-label" hidden>Código do autenticador<input name="otp" autocomplete="one-time-code" maxlength="40"/></label>':''}${register?'<label class="checkbox-label terms-choice"><input name="terms_accepted" type="checkbox" required/>Li e aceito os <button type="button" class="text-link" data-action="privacy-terms">termos e a política de privacidade</button>.</label>':'<button type="button" class="auth-forgot text-link" data-action="password-help">Esqueci minha senha</button>'}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${register?'Criar conta':'Entrar'}</button></form>${S.google?'<div class="divider"><span>ou</span></div><button class="btn google full" data-action="google"><span class="google-g">G</span> Continuar com Google</button>':''}<p class="signup">${register?'Já tem conta?':'Primeiro acesso?'} <button data-action="${register?'login-screen':'register-screen'}">${register?'Entrar':'Criar conta'}</button></p><footer class="auth-footer"><button class="text-link" data-action="privacy-terms">Privacidade</button><button class="text-link" data-action="install-modal">Instalar app</button>${NATIVE?'<button class="text-link" data-action="server-options">Conexão</button>':''}</footer><p id="connection-status" class="connection-status" role="status" ${navigator.onLine?'hidden':''}>Sem conexão. Verifique sua internet.</p></section></main>`;
 }
+function welcome(){
+ app.innerHTML=`<div class="welcome-screen" aria-label="Lagoinha Kids"><img src="/logo.png" alt="Lagoinha Kids"/><strong>lagoinha kids<span>.</span></strong></div>`;
+ return new Promise(resolve=>setTimeout(resolve,matchMedia('(prefers-reduced-motion: reduce)').matches?0:1100));
+}
+function recoveryModal(){showModal('Recuperar acesso','Enviaremos um link para seu e-mail.',`<form data-form="recovery"><label>E-mail<input type="email" name="email" autocomplete="email" required/></label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Enviar link</button></form>`);}
+function resetModal(token){showModal('Nova senha','Use pelo menos 12 caracteres.',`<form data-form="reset"><input type="hidden" name="token" value="${escape(token)}"/><label>Nova senha<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required/></label><label>Confirmar senha<input type="password" name="confirm" autocomplete="new-password" minlength="12" maxlength="128" required/></label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Salvar senha</button></form>`);}
+async function familyModal(ch){
+ const family=await api(`/children/${ch.id}/family`);
+ showModal('Responsáveis',escape(ch.name),`<div class="family-list">${family.map(u=>`<p><strong>${escape(u.name)}</strong> · ${u.primary_guardian?'Principal':'Autorizado para retirada'} ${!u.primary_guardian?`<button class="text-link" data-action="revoke-family" data-child="${ch.id}" data-user="${u.id}">Remover</button>`:''}</p>`).join('')}</div>${S.user.role==='admin'||ch.parent_id===S.user.id?`<form data-form="family-invite" data-id="${ch.id}"><label>E-mail de quem será autorizado<input name="email" type="email" required/></label><p class="soft-info">A pessoa deve aceitar o convite com uma conta deste e-mail. Compartilhe o link apenas com ela.</p><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Criar convite</button></form>`:''}`);
+}
+async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
  const jobs=[api('/children'),api('/rooms'),api('/notifications'),api('/lessons')];
  if(S.user.role==='admin')jobs.push(api('/users'),api('/audit'));
@@ -151,12 +164,12 @@ function pageContent(){
   const present=S.children.filter(ch=>ch.status==='present').length,departed=S.children.filter(ch=>ch.status==='departed').length;
    return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
  }
- if(S.page==='notifications')return `${title('Avisos','Recados da equipe e da família.')}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta">${escape(n.child_name||'Lagoinha Kids')} · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section><p class="muted-note">Com o aplicativo aberto, os avisos são atualizados a cada 3 segundos. Notificações com o app fechado ainda não estão ativadas.</p>`;
+ if(S.page==='notifications')return `${title('Avisos','Recados da equipe e da família.')}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta">${escape(n.child_name||'Lagoinha Kids')} · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section><p class="muted-note">Com o aplicativo aberto, os avisos são atualizados automaticamente. Notificações com o app fechado ainda não estão ativadas.</p>`;
  if(S.page==='users'&&S.user.role==='admin')return `${title('Pessoas que cuidam.','Gerencie os acessos e as turmas da sua equipe.',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'Nenhuma atribuída':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
  if(S.page==='settings')return settingsPage();
  return '';
 }
-function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile"><span class="avatar big">${initials(S.user.name)}</span><div><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><span class="tag">${roles[S.user.role]}</span></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
+function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile"><span class="avatar big">${initials(S.user.name)}</span><div><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><span class="tag">${roles[S.user.role]}</span></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button>${NATIVE?'<button class="btn secondary full" data-action="enable-push" style="margin-top:12px">Ativar notificações neste celular</button>':''}${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
 
 function showModal(title,subtitle,html){modal.querySelector('#modal-content').innerHTML=`<div class="modal-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-button" data-action="close" aria-label="Fechar">${icon('close')}</button></div>${html}`;modal.showModal();}
 async function privacyModal(){
@@ -193,15 +206,15 @@ function installModal(){
  </div>`);
 }
 const optionsParents=()=>'<option value="">Vincular depois</option>'+S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}">${escape(u.name)} · ${escape(u.email)}</option>`).join('');
-function attendanceModal(ch){
+async function attendanceModal(ch){
  if(!ch.parent_id)return toast('Peça à administração para vincular um responsável antes da entrada ou saída.',true);
  const out=ch.status==='present';
  showModal(out?'Um até logo com cuidado.':'Que bom que você chegou.',`${out?'Registrar saída':'Registrar entrada'} de ${escape(ch.name)}`,
   `<div class="guardian-box">${icon('shield',25)}<div><span>RESPONSÁVEL VINCULADO</span><strong>${escape(ch.parent_name)}</strong></div></div>
   ${ch.allergies?`<div class="allergy-alert-box" style="margin:10px 0;padding:10px;background:#18181b;border:1px solid #3f3f46;border-radius:8px;font-size:13px;"><strong style="color:#ffffff;">⚠️ Alergia / Cuidado Médico:</strong> <span style="color:#e4e4e7;">${escape(ch.allergies)}</span>${ch.emergency_medication?`<div style="color:#a1a1aa;margin-top:4px;"><small>Medicação de emergência: ${escape(ch.emergency_medication)}</small></div>`:''}</div>`:''}
   ${ch.authorized_pickups?`<div style="margin:8px 0;font-size:12px;color:#a1a1aa;"><span>Pessoas autorizadas a retirar: </span><strong style="color:#ffffff;">${escape(ch.authorized_pickups)}</strong></div>`:''}
-  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}">
-   ${!out?`<div class="claim-info-note" style="margin:8px 0 12px;padding:8px 12px;background:#09090b;border:1px solid #27272a;border-radius:6px;font-size:12px;color:#a1a1aa;">Ao confirmar a entrada, o sistema gerará uma <strong>Etiqueta de Segurança (Claim Tag de 4 dígitos)</strong> pareada para a criança e para o responsável.</div>`:`<div class="claim-checkout-note" style="margin:8px 0 12px;padding:10px;background:#09090b;border:1px solid #27272a;border-radius:6px;"><div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#a1a1aa;margin-bottom:6px;">PROTOCOLO DE RETIRADA (NO TAG, NO CHILD)</div><label style="font-size:13px;display:block;margin-bottom:8px;">Código da Etiqueta do Responsável (4 caracteres):<input name="claim_code" type="text" maxlength="4" style="text-transform:uppercase;font-size:18px;font-weight:700;letter-spacing:4px;text-align:center;margin-top:4px;" placeholder="${escape(ch.claim_code||'A1B2')}" required/></label></div>`}
+  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}"><label>Responsável presente<select name="guardian_id">${family.map(u=>`<option value="${u.id}">${escape(u.name)}</option>`).join('')}</select></label>
+   ${!out?`<div class="claim-info-note" style="margin:8px 0 12px;padding:8px 12px;background:#09090b;border:1px solid #27272a;border-radius:6px;font-size:12px;color:#a1a1aa;">Ao confirmar a entrada, o sistema gerará uma <strong>Etiqueta de Segurança (Claim Tag de 4 dígitos)</strong> pareada para a criança e para o responsável.</div>`:`<div class="claim-checkout-note" style="margin:8px 0 12px;padding:10px;background:#09090b;border:1px solid #27272a;border-radius:6px;"><div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#a1a1aa;margin-bottom:6px;">PROTOCOLO DE RETIRADA (NO TAG, NO CHILD)</div><label style="font-size:13px;display:block;margin-bottom:8px;">Código da Etiqueta do Responsável (4 caracteres):<input name="claim_code" type="text" maxlength="4" style="text-transform:uppercase;font-size:18px;font-weight:700;letter-spacing:4px;text-align:center;margin-top:4px;" placeholder="Código" required/></label></div>`}
    <label class="checkbox-label"><input name="confirmed" type="checkbox" required/>Conferi presencialmente a identidade ${out?'e a Etiqueta de Segurança':'do responsável vinculado'} e autorizo este registro.</label>
    <p class="soft-info">Uma comparação facial ou notificação não substitui essa conferência presencial.</p>
    <p class="form-error" role="alert"></p>
@@ -236,7 +249,17 @@ document.addEventListener('click',async e=>{
  if(action==='go-back'){handleBackButton();return;}
  if(action==='set-server'){const url=new URL(document.getElementById('mobile-api').value);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/')throw new Error('Informe apenas a origem HTTPS do servidor.');S.apiOrigin=url.origin;localStorage.setItem('kids_server',S.apiOrigin);const h=await api('/health');S.google=h.google_enabled;renderLogin();toast('Servidor configurado.');}
  if(action==='toggle-password'){const input=el.previousElementSibling;input.type=input.type==='password'?'text':'password';el.textContent=input.type==='password'?'Ver':'Ocultar';}
- if(action==='password-help')toast('Peça à administração uma nova conta ou ajuda para recuperar o acesso.');
+ if(action==='verify-email'){await api('/auth/email/send',{method:'POST'});toast('Confira seu e-mail para confirmar o endereço.');}
+ if(action==='mfa')mfaModal();
+ if(action==='enable-push')await enablePush();
+ if(action==='revoke-sessions'){await api('/auth/sessions/revoke-others',{method:'POST'});toast('Outros acessos encerrados.');}
+ if(action==='password-help')recoveryModal();
+ if(action==='server-options')showModal('Conexão','Endereço informado pela equipe.',`<div class="native-server"><label>Servidor<input id="mobile-api" type="url" value="${escape(S.apiOrigin)}"/></label><button class="btn primary full" data-action="set-server">Aplicar servidor</button></div>`);
+ if(action==='family')await familyModal(ch);
+ if(action==='child-history')await historyModal(ch);
+ if(action==='revoke-family'){await api(`/children/${el.dataset.child}/family/${el.dataset.user}`,{method:'DELETE'});modal.close();await load();toast('Vínculo removido.');}
+ if(action==='apply-update'){if(modal.open||S.busy||document.querySelector('.page-content form')){toast('Conclua o formulário antes de atualizar.');return;}location.reload();}
+ if(action==='retry-connection'){await load();toast('Conexão restabelecida.');}
  if(action==='register-screen')renderLogin(true);
  if(action==='login-screen')renderLogin();
  if(action==='google'||action==='google-link'){
@@ -259,7 +282,7 @@ document.addEventListener('click',async e=>{
  if(action==='privacy-terms')privacyModal();
  if(action==='pwa-prompt'){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;});}else{toast('No Chrome, toque no menu (⋮) e selecione "Instalar aplicativo".');}}
  if(action==='close')modal.close();
- if(action==='attendance')attendanceModal(ch);
+ if(action==='attendance')await attendanceModal(ch);
  if(action==='notify')notifyModal(ch,el.dataset.kind);
  if(action==='consent')consentModal(ch);
  if(action==='face')faceModal(ch);
@@ -284,12 +307,20 @@ document.addEventListener('submit',async e=>{
  const error=form.querySelector('.form-error');if(error)error.textContent='';
  S.busy=true;if(button){button.disabled=true;button.dataset.origHtml=button.innerHTML;button.innerHTML='<span class="spin">●</span> Aguarde...';}
  try{
+  if(kind==='verify-email'){await api('/auth/email/verify',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);toast('E-mail confirmado.');return;}
+  if(kind==='mfa-setup'){const data=await api('/auth/mfa/setup',{method:'POST',body:values});showModal('Conectar autenticador','Adicione esta chave ao seu aplicativo autenticador.',`<p class="soft-info">${escape(data.secret)}</p><form data-form="mfa-confirm"><input name="secret" type="hidden" value="${escape(data.enrollment)}"/><label>Senha atual<input name="password" type="password" autocomplete="current-password" required/></label><label>Código do autenticador<input name="code" autocomplete="one-time-code" required/></label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar ativação</button></form>`);return;}
+  if(kind==='mfa-confirm'){const data=await api('/auth/mfa/confirm',{method:'POST',body:values});S.user.mfa_enabled=true;showModal('Guarde seus códigos de recuperação','Cada código funciona uma vez. Guarde em um local seguro.',`<div class="recovery-codes">${data.recovery_codes.map(code=>`<code>${escape(code)}</code>`).join('')}</div>`);return;}
+  if(kind==='mfa-disable'){await api('/auth/mfa/disable',{method:'POST',body:values});S.user.mfa_enabled=false;modal.close();toast('Dois fatores desativados.');return;}
+  if(kind==='accept-invite'){await api('/family/accept',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);await load();toast('Vínculo confirmado.');return;}
+  if(kind==='recovery'){const r=await api('/auth/recovery',{method:'POST',body:values});modal.close();toast(r.message);return;}
+  if(kind==='reset'){if(values.password!==values.confirm)throw new Error('As senhas não conferem.');await api('/auth/reset',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);renderLogin();toast('Senha atualizada. Entre com sua nova senha.');return;}
+  if(kind==='family-invite'){const r=await api(`/children/${cid}/family/invites`,{method:'POST',body:values});showModal('Convite criado','Envie este link à pessoa autorizada. Válido por 48 horas.',`<label>Link do convite<input readonly value="${escape(r.url)}"/></label>`);return;}
   const schoolResult=await school.submit(form,values);if(schoolResult){modal.close();await load();toast(schoolResult.message||schoolResult);if(schoolResult.roomId)school.lessonForm(schoolResult.roomId);return;}
-  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:values});S.user=result.user;S.csrf=result.csrf;S.token=result.access_token||'';saveAccount(result.user);navHistory.length=0;S.page=S.user.role==='teacher'?'rooms':'overview';await load();return;}
+  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=S.user.role==='teacher'?'rooms':'overview';await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){
-    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:child.parent_id,lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
+    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:Number(values.guardian_id)||child.parent_id,lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
     modal.close();await load();
     if(form.dataset.direction==='in'&&attRes.claim_code)toast(`Entrada confirmada! Etiqueta de Segurança (TAG): ${attRes.claim_code}`);
     else toast('Saída conferida e registrada com sucesso.');
@@ -306,7 +337,7 @@ document.addEventListener('submit',async e=>{
    S.children=await api('/children');return;
   }
   modal.close();await load();toast(kind==='notify'?'Aviso enviado dentro do aplicativo.':'Tudo certo. Registro salvo.');
- }catch(err){if(error)error.textContent=err.message;else toast(err.message,true);}
+ }catch(err){if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}if(error)error.textContent=err.message;else toast(err.message,true);}
  finally{S.busy=false;if(button&&button.isConnected){button.disabled=false;if(button.dataset.origHtml)button.innerHTML=button.dataset.origHtml;}}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});
@@ -321,44 +352,25 @@ if(Capacitor.isNativePlatform()){
 async function start(){
  void checkLiveUpdate();
  if(NATIVE&&!S.apiOrigin){renderLogin();return;}
- try{const health=await api('/health');S.google=health.google_enabled;}catch{app.innerHTML='<div class="boot">O servidor está indisponível. Inicie o Lagoinha Kids e recarregue.</div>';return;}
+ try{const health=await api('/health');S.google=health.google_enabled;}catch{renderLogin();toast('Não foi possível conectar. Verifique sua internet e tente entrar novamente.',true);return;}
  try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=S.user.role==='teacher'?'rooms':'overview';await load();}catch{renderLogin();}
- const err=new URL(location.href).searchParams.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
+ const params=new URL(location.href).searchParams;if(params.get('reset'))resetModal(params.get('reset'));
+ if(params.get('verify'))showModal('Confirmar e-mail','Confirme o endereço associado à sua conta.',`<form data-form="verify-email"><input type="hidden" name="token" value="${escape(params.get('verify'))}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar e-mail</button></form>`);
+ const err=params.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
 }
 
-let currentBuild=null, isUpdating=false;
+let currentBuild=null,checkingVersion=false;
 async function checkLiveUpdate(){
- if(isUpdating||S.busy)return;
- try{
-  const v=await api('/version');
-  if(!v||!v.build)return;
-  if(currentBuild===null){
-   currentBuild=v.build;
-   return;
-  }
-  if(v.build!==currentBuild){
-   isUpdating=true;
-   currentBuild=v.build;
-   toast('Atualizando aplicativo com a versão mais recente...');
-   if('caches' in window){
-    try{
-     const keys=await caches.keys();
-     await Promise.all(keys.map(k=>caches.delete(k)));
-    }catch{}
-   }
-   setTimeout(()=>{
-    window.location.replace(window.location.href);
-   },800);
-  }
- }catch{}
+ if(checkingVersion||document.hidden||S.busy||modal.open)return;
+ checkingVersion=true;
+ try{const v=await api('/version');if(currentBuild===null){currentBuild=v.build;return;}if(v.build!==currentBuild&&!document.getElementById('update-banner')){const banner=document.createElement('div');banner.id='update-banner';banner.className='update-banner';banner.innerHTML='<span>Nova versão disponível</span><button class="btn secondary" data-action="apply-update">Atualizar</button>';document.body.append(banner);}}catch{}finally{checkingVersion=false;}
 }
-
-let syncing=false;
+let syncing=false,liveRevision=null;
 async function syncLive(){
  if(!S.user||document.hidden||S.busy||syncing)return;
  syncing=true;const uid=S.user.id;
-  void checkLiveUpdate();
  try{
+  const revision=(await api('/sync')).revision;if(revision===liveRevision)return;
   const [notifications,lessons,rooms,children]=await Promise.all([api('/notifications'),api('/lessons'),api('/rooms'),api('/children')]);
   if(S.user?.id!==uid)return;
   const previous=new Set(S.notifications.map(n=>n.id));
@@ -366,13 +378,41 @@ async function syncLive(){
   const changed=JSON.stringify([notifications,lessons,rooms,children])!==JSON.stringify([S.notifications,S.lessons,S.rooms,S.children]);
   Object.assign(S,{notifications,lessons,rooms,children});
   const editing=modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
-  if(changed&&!editing)render();
+  if(!editing){liveRevision=revision;if(changed)render();}
   if(newNotice)toast('Você recebeu um novo aviso. Abra Avisos para conferir.');
  }catch{}finally{syncing=false;}
 }
-setInterval(()=>{void syncLive();void checkLiveUpdate();},3000);
+setInterval(()=>void syncLive(),5000);
+setInterval(()=>void checkLiveUpdate(),60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){void syncLive();void checkLiveUpdate();}});
 window.addEventListener('focus',()=>{void syncLive();void checkLiveUpdate();});
 window.addEventListener('online',()=>{void syncLive();void checkLiveUpdate();});
 
-start();
+welcome().then(start);
+
+let pushListening=false;
+async function enablePush(){
+ const cap=await api('/capabilities');
+ if(!cap.push_platforms?.includes(Capacitor.getPlatform())){toast('As notificações externas aguardam configuração pela equipe.',true);return;}
+ if(!NATIVE){toast('Use o aplicativo instalado para ativar notificações neste celular.');return;}
+ if(!pushListening){
+  await PushNotifications.addListener('registration',async ({value})=>{try{await api('/devices/token',{method:'POST',body:{token:value,platform:Capacitor.getPlatform()}});toast('Notificações ativadas.');}catch(err){toast(err.message,true);}});
+  await PushNotifications.addListener('registrationError',()=>toast('Não foi possível ativar notificações. Tente novamente.',true));
+  await PushNotifications.addListener('pushNotificationReceived',()=>void syncLive());
+  await PushNotifications.addListener('pushNotificationActionPerformed',()=>{S.page='notifications';void load();});
+  pushListening=true;
+ }
+ let permission=await PushNotifications.checkPermissions();
+ if(permission.receive==='prompt')permission=await PushNotifications.requestPermissions();
+ if(permission.receive!=='granted'){toast('Permita notificações nas configurações do celular.',true);return;}
+ await PushNotifications.register();
+}
+
+function mfaModal(){showModal('Dois fatores',S.user.mfa_enabled?'A proteção está ativada.':'Proteja o acesso administrativo com um autenticador.',`<form data-form="${S.user.mfa_enabled?'mfa-disable':'mfa-setup'}"><label>Senha atual<input name="password" type="password" autocomplete="current-password" required/></label>${S.user.mfa_enabled?'<label>Código do autenticador<input name="code" autocomplete="one-time-code" required/></label>':''}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${S.user.mfa_enabled?'Desativar proteção':'Configurar autenticador'}</button></form>`);}
+
+function setConnection(online){
+ let banner=document.getElementById('network-banner');
+ if(online){banner?.remove();return;}
+ if(!banner){banner=document.createElement('div');banner.id='network-banner';banner.className='network-banner';banner.setAttribute('role','status');banner.innerHTML='<span>Sem conexão. Os dados podem estar desatualizados.</span><button class="text-link" data-action="retry-connection">Tentar novamente</button>';document.body.append(banner);}
+}
+window.addEventListener('offline',()=>setConnection(false));

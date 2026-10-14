@@ -1,0 +1,9 @@
+.git
+runtime
+work
+.env
+.env.*
+node_modules
+android
+public/*.apk
+Lagoinha-Kids-acessos-locais.md
