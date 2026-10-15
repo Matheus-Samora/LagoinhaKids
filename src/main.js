@@ -315,7 +315,7 @@ function renderInnerPage(){
         <div class="push-icon-bubble active">${icon('check', 20)}</div>
         <div>
           <strong>Notificações no celular ativadas ✓</strong>
-          <p>Você receberá alertas na tela de bloqueio mesmo com o aplicativo fechado.</p>
+          <p>Ative avisos neste aparelho para recebê-los também com o aplicativo fechado.</p>
         </div>
       </div>
       <div class="push-card-actions">
@@ -822,7 +822,7 @@ async function enablePush(){
  if(!cap.push_platforms?.includes(Capacitor.getPlatform())){toast('As notificações externas aguardam configuração pela equipe.',true);return;}
  if(!NATIVE){toast('Use o aplicativo instalado para ativar notificações neste celular.');return;}
  if(!pushListening){
-  await PushNotifications.addListener('registration',async ({value})=>{try{await api('/devices/token',{method:'POST',body:{token:value,platform:Capacitor.getPlatform()}});toast('Notificações ativadas.');}catch(err){toast(err.message,true);}});
+  await PushNotifications.addListener('registration',async ({value})=>{try{await api('/devices/token',{method:'POST',body:{token:value,platform:Capacitor.getPlatform()}});localStorage.setItem('lagoinha_push_enabled','true');toast('Notificações registradas neste aparelho.');}catch(err){toast(err.message,true);}});
   await PushNotifications.addListener('registrationError',()=>toast('Não foi possível ativar notificações. Tente novamente.',true));
   await PushNotifications.addListener('pushNotificationReceived',()=>void syncLive());
   await PushNotifications.addListener('pushNotificationActionPerformed',()=>{S.page='notifications';void load();});
@@ -1011,80 +1011,12 @@ async function sendSystemNotification({ title, message, tag, url, id, child_id, 
 }
 
 function promptPushPermissionModal(){
-  sessionStorage.setItem('lagoinha_push_session_dismissed','true');
-  const html=`<div class="push-permission-card">
-    <div class="push-modal-badge">
-      <img src="/logo.png" alt="Lagoinha Kids" class="push-modal-logo"/>
-      <span class="push-badge-indicator">${icon('bell',15)}</span>
-    </div>
-    <h3 class="push-modal-title">Ativar Notificações no Celular</h3>
-    <p class="push-modal-subtitle">Receba os avisos do seu filho na tela de bloqueio e central de notificações, mesmo com o aplicativo fechado.</p>
-    <div class="push-features-list">
-      <div class="push-feature-item">
-        <div class="push-feature-icon">${icon('check',18)}</div>
-        <div class="push-feature-text">
-          <strong>Check-in & Saída Segura</strong>
-          <p>Receba confirmação imediata quando seu filho entrar na salinha ou for retirado com o QR Code.</p>
-        </div>
-      </div>
-      <div class="push-feature-item">
-        <div class="push-feature-icon">${icon('speaker',18)}</div>
-        <div class="push-feature-text">
-          <strong>Chamada Rápida durante o Culto</strong>
-          <p>Se seu filho precisar de você (troca de fralda, choro ou febre), as tias avisam direto no seu aparelho.</p>
-        </div>
-      </div>
-      <div class="push-feature-item">
-        <div class="push-feature-icon">${icon('calendar',18)}</div>
-        <div class="push-feature-text">
-          <strong>Avisos e Aulinhas</strong>
-          <p>Lembretes de programações especiais, eventos infantis e temas do discipulado familiar.</p>
-        </div>
-      </div>
-    </div>
-    <div class="push-modal-alert">
-      <span style="font-size:18px;">📱</span>
-      <div>
-        <strong>Aparecem fora do aplicativo:</strong>
-        <p>As notificações saltam na tela de bloqueio do celular (Android, iPhone e Computador).</p>
-      </div>
-    </div>
-    <div class="push-modal-actions">
-      <button type="button" class="btn primary full push-confirm-btn" data-action="activate-notifications">${icon('bell',18)}<span>Ativar Notificações no Celular</span></button>
-      <button type="button" class="btn secondary full push-dismiss-btn" data-action="dismiss-push-modal">Agora não, lembrar depois</button>
-    </div>
-    <p class="push-privacy-footer">${icon('shield',13)} Ambiente seguro · Você pode desativar a qualquer momento nas configurações.</p>
-  </div>`;
-  showModal('Notificações no Celular','Avisos importantes em tempo real.',html);
+ const description=S.user?.role==='parent'?'Receba chamados da salinha e avisos sobre seus filhos.':'Receba chamados e respostas das famílias.';
+ showModal('Notificações no celular',description,`<p>Ative os avisos neste aparelho para recebê-los também com o aplicativo fechado.</p><p class="soft-info">É necessário permitir notificações e manter conexão com a internet. No iPhone, instale na Tela de Início e abra pelo ícone (iOS 16.4 ou posterior).</p><button type="button" class="btn primary full" data-action="activate-notifications">Ativar notificações</button><button type="button" class="btn secondary full" data-action="dismiss-push-modal">Agora não</button>`);
 }
 
 async function requestNotificationPermission(explicit=true){
-  if(Capacitor.isNativePlatform()){
-    try{
-      let perm=await PushNotifications.checkPermissions();
-      if(perm.receive==='prompt')perm=await PushNotifications.requestPermissions();
-      const localPerm=await LocalNotifications.requestPermissions();
-      if(perm.receive==='granted'||localPerm.display==='granted'){
-        await PushNotifications.register();
-        localStorage.setItem('lagoinha_push_enabled','true');
-        modal.close();
-        toast('🔔 Notificações ativadas no seu celular com sucesso!');
-        await sendSystemNotification({
-          title:'Lagoinha Kids · Notificações Ativadas',
-          message:'Tudo pronto! Você receberá os avisos do seu filho no topo da tela do celular.',
-          tag:'welcome-notification'
-        });
-        render();
-        return true;
-      }else{
-        if(explicit)toast('Permissão não concedida. Você pode ativar nas configurações do celular.',true);
-        return false;
-      }
-    }catch(err){
-      if(explicit)toast('Erro ao ativar notificações: '+(err.message||err),true);
-      return false;
-    }
-  }
+  if(NATIVE){await enablePush();return hasPushPermission();}
 
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
   const isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;
