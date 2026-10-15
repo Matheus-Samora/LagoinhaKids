@@ -5,6 +5,35 @@ on:
 permissions:
   contents: read
 jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t lagoinha-kids-ci .
+      - name: Start isolated smoke container
+        run: >-
+          docker run -d --name kids-ci -p 127.0.0.1:8780:8770
+          -e KIDS_BOOTSTRAP_EMAIL=ci-admin@example.test
+          -e KIDS_BOOTSTRAP_PASSWORD=CI-container-only-password
+          lagoinha-kids-ci
+      - name: Check HTTP and supervised worker
+        run: |
+          python - <<'PY'
+          import json,time,urllib.request
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8780/api/health',timeout=3) as response:
+                      assert json.load(response)['status']=='ok'
+                  break
+              except Exception:
+                  if attempt==29:raise
+                  time.sleep(1)
+          PY
+          docker exec kids-ci python -c "import os; assert len([n for n in os.listdir('/proc') if n.isdigit()])>=3"
+      - if: always()
+        run: docker logs kids-ci || true
+      - if: always()
+        run: docker rm -f kids-ci || true
   postgres:
     runs-on: ubuntu-latest
     services:
