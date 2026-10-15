@@ -1,5 +1,5 @@
 """Authenticated Web Push subscriptions for installed Android/iOS PWAs."""
-import os,json,base64,re
+import os,json,base64,re,time
 from pathlib import Path
 from urllib.parse import urlsplit
 from fastapi import APIRouter,Depends
@@ -35,6 +35,10 @@ def config(user=Depends(session)):
 def subscribe(data:Subscription,user=Depends(session)):
     if not ready():fail('push_unavailable','Notificações externas ainda não configuradas.',503)
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        exists=c.execute('SELECT 1 FROM web_subscriptions WHERE user_id=? AND endpoint=?',(user['id'],data.endpoint)).fetchone()
+        if not exists and c.execute('SELECT count(*) FROM web_subscriptions WHERE user_id=?',(user['id'],)).fetchone()[0]>=10:
+            fail('devices','Limite de aparelhos atingido. Em Minha conta, encerre outras sessões antes de ativar um novo aparelho.',429)
         c.execute('DELETE FROM web_subscriptions WHERE endpoint=? AND user_id!=?',(data.endpoint,user['id']))
         c.execute('INSERT INTO web_subscriptions(user_id,endpoint,keys_json,session_token,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,keys_json=excluded.keys_json,session_token=excluded.session_token,updated_at=excluded.updated_at',(user['id'],data.endpoint,json.dumps(data.keys),user['token'],s.now()))
         c.execute('UPDATE outbox SET next_attempt=0 WHERE status="pending" AND notification_id IN(SELECT id FROM notifications WHERE user_id=?)',(user['id'],))
@@ -48,6 +52,11 @@ def unsubscribe(user=Depends(session)):
 @router.post('/test')
 def test(user=Depends(session)):
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         if not c.execute('SELECT 1 FROM web_subscriptions WHERE user_id=?',(user['id'],)).fetchone():fail('push','Ative as notificações neste aparelho primeiro.')
+        key=s.digest('web-push-test|'+str(user['id']))
+        attempt=c.execute('SELECT expires FROM attempts WHERE key=?',(key,)).fetchone()
+        if attempt and attempt['expires']>time.time():fail('rate','Aguarde um minuto antes de solicitar outro teste.',429)
+        c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,1,int(time.time())+60))
         c.execute('INSERT INTO notifications(user_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?)',(user['id'],'push_test','Teste de notificações','Este é um teste de entrega pelo servidor.',user['id'],s.now()))
     return {'ok':True,'message':'Teste colocado na fila. A entrega será feita pelo servidor.'}

@@ -79,3 +79,16 @@ def test_real_web_push_encryption_without_network(monkeypatch):
     assert decoded['id']==123 and decoded['url']=='/#notifications'
     assert decoded['body']=='Você recebeu um novo aviso. Abra o aplicativo para conferir.'
     assert 'authorization' in {k.lower() for k in captured['headers']}
+
+def test_push_test_throttled_without_duplicate_notice(monkeypatch):
+    data=configure(monkeypatch);p=client(3)
+    assert p.post('/api/web-push/subscribe',json=data).status_code==200
+    assert p.post('/api/web-push/test').status_code==200
+    assert p.post('/api/web-push/test').status_code==429
+    with s.db() as c:assert c.execute('SELECT count(*) FROM outbox').fetchone()[0]==1
+
+def test_subscription_count_is_bounded(monkeypatch):
+    data=configure(monkeypatch);p=client(3)
+    for index in range(10):assert p.post('/api/web-push/subscribe',json=data|{'endpoint':data['endpoint']+str(index)}).status_code==200
+    assert p.post('/api/web-push/subscribe',json=data|{'endpoint':data['endpoint']+'extra'}).status_code==429
+    assert p.post('/api/web-push/subscribe',json=data|{'endpoint':data['endpoint']+'0'}).status_code==200
