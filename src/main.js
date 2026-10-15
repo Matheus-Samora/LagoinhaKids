@@ -471,13 +471,32 @@ function installModal(){
 
 const optionsParents=()=>'<option value="">Vincular depois</option>'+S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}">${escape(u.name)} · ${escape(u.email)}</option>`).join('');
 async function attendanceModal(ch){
+ if(!ch)return;
  if(!ch.parent_id)return toast('Peça à administração para vincular um responsável antes da entrada ou saída.',true);
+ let family=[];
+ try{
+  family=await api(`/children/${ch.id}/family`);
+ }catch(err){
+  console.warn('Erro ao carregar familiares:',err);
+  family=[];
+ }
+ if(!Array.isArray(family)||!family.length){
+  family=[{id:ch.parent_id,name:ch.parent_name||'Responsável vinculado',primary_guardian:1,can_pickup:1}];
+ }
  const out=ch.status==='present';
+ const guardianOptions=family.map(u=>{
+  const isPrimary=Boolean(u.primary_guardian);
+  const canPickup=Boolean(u.can_pickup);
+  const badge=isPrimary?' (Principal)':(canPickup?' (Autorizado)':' (Não autorizado p/ retirada)');
+  const disabled=out&&!canPickup&&!isPrimary?'disabled':'';
+  return `<option value="${u.id}" ${disabled}>${escape(u.name)}${badge}</option>`;
+ }).join('');
+
  showModal(out?'Um até logo com cuidado.':'Que bom que você chegou.',`${out?'Registrar saída':'Registrar entrada'} de ${escape(ch.name)}`,
-  `<div class="guardian-box">${icon('shield',25)}<div><span>RESPONSÁVEL VINCULADO</span><strong>${escape(ch.parent_name)}</strong></div></div>
+  `<div class="guardian-box">${icon('shield',25)}<div><span>RESPONSÁVEL VINCULADO</span><strong>${escape(ch.parent_name||'Responsável')}</strong></div></div>
   ${ch.allergies?`<div class="allergy-alert-box" style="margin:10px 0;padding:10px;background:#18181b;border:1px solid #3f3f46;border-radius:8px;font-size:13px;"><strong style="color:#ffffff;">⚠️ Alergia / Cuidado Médico:</strong> <span style="color:#e4e4e7;">${escape(ch.allergies)}</span>${ch.emergency_medication?`<div style="color:#a1a1aa;margin-top:4px;"><small>Medicação de emergência: ${escape(ch.emergency_medication)}</small></div>`:''}</div>`:''}
   ${ch.authorized_pickups?`<div style="margin:8px 0;font-size:12px;color:#a1a1aa;"><span>Pessoas autorizadas a retirar: </span><strong style="color:#ffffff;">${escape(ch.authorized_pickups)}</strong></div>`:''}
-  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}"><label>Responsável presente<select name="guardian_id">${family.map(u=>`<option value="${u.id}">${escape(u.name)}</option>`).join('')}</select></label>
+  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}"><label>Responsável presente<select name="guardian_id">${guardianOptions}</select></label>
    ${!out?`<div class="claim-info-note" style="margin:8px 0 12px;padding:8px 12px;background:#09090b;border:1px solid #27272a;border-radius:6px;font-size:12px;color:#a1a1aa;">Ao confirmar a entrada, o sistema gerará uma <strong>Etiqueta de Segurança (Claim Tag de 4 dígitos)</strong> pareada para a criança e para o responsável.</div>`:`<div class="claim-checkout-note" style="margin:8px 0 12px;padding:10px;background:#09090b;border:1px solid #27272a;border-radius:6px;"><div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#a1a1aa;margin-bottom:6px;">PROTOCOLO DE RETIRADA (NO TAG, NO CHILD)</div><label style="font-size:13px;display:block;margin-bottom:8px;">Código da Etiqueta do Responsável (4 caracteres):<input name="claim_code" type="text" maxlength="4" style="text-transform:uppercase;font-size:18px;font-weight:700;letter-spacing:4px;text-align:center;margin-top:4px;" placeholder="Código" ${S.user.role==='admin'?'':'required'}/></label>${S.user.role==='admin'?'<details class="child-extra"><summary>Exceção administrativa</summary><p class="soft-info">Use somente após conferir presencialmente o responsável. O motivo ficará registrado na auditoria.</p><label>Motivo da exceção<textarea name="exception_reason" minlength="15" maxlength="300"></textarea></label></details>':''}</div>`}
    <label class="checkbox-label"><input name="confirmed" type="checkbox" required/>Conferi presencialmente a identidade ${out?'e a Etiqueta de Segurança':'do responsável vinculado'} e autorizo este registro.</label>
    <p class="soft-info">Uma comparação facial ou notificação não substitui essa conferência presencial.</p>
@@ -1294,7 +1313,7 @@ document.addEventListener('submit',async e=>{
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){
-    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:Number(values.guardian_id)||child.parent_id,exception_reason:values.exception_reason||'',lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
+    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:Number(values.guardian_id)||(child?.parent_id||0),exception_reason:values.exception_reason||'',lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
     modal.close();await load();
     if(form.dataset.direction==='in'&&attRes.claim_code)toast(`Entrada confirmada! Etiqueta de Segurança (TAG): ${attRes.claim_code}`);
     else toast('Saída conferida e registrada com sucesso.');
