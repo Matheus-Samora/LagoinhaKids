@@ -28,3 +28,16 @@ def test_acknowledgement_cannot_cross_families():
     assert client(4).post('/api/paging/on-my-way',json={'paging_id':p['id']}).status_code==403
     assert client(3).post('/api/paging/on-my-way',json={'paging_id':p['id']}).status_code==200
     assert client(3).post('/api/paging/on-my-way',json={}).status_code==200
+
+def test_server_worker_delivers_once_per_queued_notice(monkeypatch):
+    from backend import push_worker
+    data=configure(monkeypatch);p=client(3)
+    assert p.post('/api/web-push/subscribe',json=data).status_code==200
+    assert p.post('/api/web-push/test').status_code==200
+    delivered=[]
+    monkeypatch.setattr(push_worker,'fcm_ready',lambda:False)
+    monkeypatch.setattr(push_worker,'apns_ready',lambda:False)
+    monkeypatch.setattr(web_push,'send',lambda subscription,nid:delivered.append(nid) or True)
+    assert push_worker.deliver_batch()['sent']==1
+    assert push_worker.deliver_batch()['sent']==0
+    assert len(delivered)==1

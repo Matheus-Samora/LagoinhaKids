@@ -874,7 +874,7 @@ window.addEventListener('beforeunload',event=>{if(formDirty){event.preventDefaul
 
 function hasPushPermission(){
   if(typeof Notification!=='undefined'&&Notification.permission==='granted'&&localStorage.getItem('lagoinha_web_push_registered')==='true')return true;
-  if(localStorage.getItem('lagoinha_push_enabled')==='true')return true;
+  if(NATIVE&&localStorage.getItem('lagoinha_push_enabled')==='true')return true;
   return false;
 }
 

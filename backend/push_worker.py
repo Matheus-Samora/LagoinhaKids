@@ -17,7 +17,7 @@ def deliver_batch(limit=50):
         rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY o.id LIMIT ?',(int(time.time()),limit)).fetchall()
     for row in rows:
         try:
-            with s.db() as c:tokens=[dict(r) for r in c.execute('SELECT token,platform FROM device_tokens WHERE user_id=?',(row['user_id'],))]
+            with s.db() as c:tokens=[dict(r) for r in c.execute('SELECT d.token,d.platform FROM device_tokens d JOIN users u ON u.id=d.user_id WHERE d.user_id=? AND u.active=1',(row['user_id'],))]
             tokens=[r for r in tokens if (r['platform']=='android' and credentials) or (r['platform']=='ios' and apns_ready())]
             with s.db() as c:
                 c.execute('BEGIN IMMEDIATE')

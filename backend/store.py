@@ -265,6 +265,8 @@ def init():
     migrate_school()
 
 def seed():
+    if os.getenv('KIDS_ALLOW_DEMO_SEED')!='true' or os.getenv('K_SERVICE'):
+        raise RuntimeError('Demonstration data disabled. Set KIDS_ALLOW_DEMO_SEED=true only in an isolated development environment.')
     init()
     with db() as c:
         if c.execute('SELECT count(*) FROM users').fetchone()[0]: return False

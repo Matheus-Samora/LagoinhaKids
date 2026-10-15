@@ -13,7 +13,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Kids',version='1.3.0')
+app=FastAPI(title='Lagoinha Kids',version='1.4.0')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=8*1024*1024
@@ -181,6 +181,8 @@ def change_password(data:PasswordChange,user=Depends(session)):
     with s.db() as c:
         c.execute('UPDATE users SET password=? WHERE id=?',(s.password_hash(data.password),user['id']))
         c.execute('DELETE FROM sessions WHERE user_id=? AND token!=?',(user['id'],user['token']))
+        c.execute('DELETE FROM web_subscriptions WHERE user_id=? AND session_token!=?',(user['id'],user['token']))
+        c.execute('DELETE FROM device_tokens WHERE user_id=? AND session_token!=?',(user['id'],user['token']))
         s.audit(c,user['id'],'password_changed')
     return {'ok':True}
 
@@ -481,6 +483,8 @@ from .events import router as events_router
 app.include_router(events_router)
 from .web_push import router as web_push_router
 app.include_router(web_push_router)
+from .calendar_export import router as calendar_router
+app.include_router(calendar_router)
 
 WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 
@@ -493,7 +497,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '1.3.0',
+        'version': '1.4.0',
         'build': get_build_id(),
         'app': 'Lagoinha Kids',
         'timestamp': s.now()

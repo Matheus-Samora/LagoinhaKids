@@ -9,7 +9,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r backend/requirements.txt
 npm ci
 npm run build
-.venv\Scripts\python.exe -m backend.seed
+# Não execute seed na instalação real. Crie um administrador com backend.manage.
 .venv\Scripts\python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8770
 ```
 
