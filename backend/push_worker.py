@@ -4,7 +4,7 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from . import store as s
 from .push_transport import fcm_ready,apns_ready,send_apns
-from . import web_push
+from . import web_push_transport as web_push
 
 def deliver_batch(limit=50):
     if not fcm_ready() and not apns_ready() and not web_push.ready():return {'configured':False,'sent':0}

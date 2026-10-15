@@ -91,7 +91,8 @@ def test_origin_prefix_and_other_tunnels_rejected():
         assert c.post('/api/auth/login',headers={'Origin':origin},json={'email':'user3@example.test','password':PASSWORD}).status_code==403
 
 def test_clean_install_and_second_seed_preserves(tmp_path):
-    env=os.environ|{'KIDS_DATA_DIR':str(tmp_path)}
+    env=os.environ|{'KIDS_DATA_DIR':str(tmp_path),'KIDS_ALLOW_DEMO_SEED':'true'}
+    env.pop('KIDS_DATABASE_URL',None)
     for _ in range(2):
         r=subprocess.run([sys.executable,'-m','backend.seed'],env=env,capture_output=True,text=True)
         assert r.returncode==0,r.stderr
@@ -139,6 +140,8 @@ def test_push_worker_unconfigured_no_false_delivery(monkeypatch):
     from backend.push_worker import deliver_batch
     monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS',raising=False)
     monkeypatch.delenv('KIDS_APNS_KEY_PATH',raising=False)
+    monkeypatch.delenv('KIDS_WEB_PUSH_KEY_PATH',raising=False)
+    monkeypatch.delenv('KIDS_WEB_PUSH_PRIVATE_KEY',raising=False)
     assert deliver_batch()=={'configured':False,'sent':0}
 def test_fcm_sender_redacts_child_data_and_records_provider_acceptance(monkeypatch,tmp_path):
     import json

@@ -3886,5 +3886,7 @@ button:active,
 }
 /* Checklist: keyboard focus, touch targets and reduced motion. */
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #2563eb!important;outline-offset:3px}
+.update-banner{position:fixed;bottom:calc(88px + env(safe-area-inset-bottom));left:16px;right:16px;z-index:100000;display:flex;gap:12px;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;color:#18181b;border:1px solid #d4d4d8;border-radius:12px;box-shadow:0 4px 20px #0002}
+@media(min-width:861px){.update-banner{bottom:24px;left:auto;width:360px}}
 @media(pointer:coarse){button,.mini-button{min-height:44px;min-width:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

@@ -3,7 +3,7 @@
   "appName": "Lagoinha Kids",
   "webDir": "dist",
   "server": {
-    "url": "https://mountain-interactive-doors-suit.trycloudflare.com",
+    "url": "https://showtimes-belt-friendly-running.trycloudflare.com",
     "cleartext": false
   },
   "plugins": {

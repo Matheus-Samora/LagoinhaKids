@@ -37,7 +37,25 @@ def test_server_worker_delivers_once_per_queued_notice(monkeypatch):
     delivered=[]
     monkeypatch.setattr(push_worker,'fcm_ready',lambda:False)
     monkeypatch.setattr(push_worker,'apns_ready',lambda:False)
-    monkeypatch.setattr(web_push,'send',lambda subscription,nid:delivered.append(nid) or True)
+    monkeypatch.setattr(push_worker.web_push,'send',lambda subscription,nid:delivered.append(nid) or True)
     assert push_worker.deliver_batch()['sent']==1
     assert push_worker.deliver_batch()['sent']==0
     assert len(delivered)==1
+
+def test_calendar_export_scoped_and_utc():
+    from datetime import datetime,timedelta
+    from zoneinfo import ZoneInfo
+    start=(datetime.now(ZoneInfo('America/Sao_Paulo'))+timedelta(days=2)).replace(hour=10,minute=0,second=0,microsecond=0)
+    a=client();lid=a.post('/api/lessons',json={'room_id':2,'title':'Aula','starts_at':start.isoformat(),'ends_at':(start+timedelta(hours=1)).isoformat()}).json()['id']
+    assert client(2).get(f'/api/lessons/{lid}/calendar.ics').status_code==403
+    r=client(3).get(f'/api/lessons/{lid}/calendar.ics')
+    assert r.status_code==200
+    assert 'BEGIN:VCALENDAR' in r.text and 'T130000Z' in r.text
+    assert 'example.test' not in r.text
+    assert 'text/calendar' in r.headers['content-type']
+
+def test_seed_disabled_by_default(monkeypatch):
+    import pytest
+    monkeypatch.delenv('KIDS_ALLOW_DEMO_SEED',raising=False)
+    with pytest.raises(RuntimeError,match='Demonstration data disabled'):s.seed()
+    with s.db() as c:assert c.execute('SELECT count(*) FROM users').fetchone()[0]==4

@@ -353,30 +353,9 @@ async function privacyModal(){
  }
 }
 function installModal(){
- showModal('Instalar no celular','Acesse em tela cheia no iPhone ou instale o APK nativo no Android.',`<div class="install-guide">
-  <div class="install-option-card">
-   <div class="install-option-head"><span class="install-badge">ANDROID (APK NATIVO)</span><h3>Instalador Direto (.apk)</h3></div>
-   <p>Instale o aplicativo Android compilado para testes no dispositivo com câmera nativa e alta performance.</p>
-   <a href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk" class="btn primary full install-link">${icon('arrow',18)} Baixar APK Android</a>
-   <small class="helper-text">Ao abrir o arquivo, confirme "Instalar mesmo assim" ou habilite fontes desconhecidas no navegador.</small>
-  </div>
-  <div class="install-option-card">
-   <div class="install-option-head"><span class="install-badge">IPHONE / IOS</span><h3>Adicionar à Tela de Início</h3></div>
-   <p>No iPhone (iOS), adicione instantaneamente à tela de início sem precisar de conta de desenvolvedor da Apple:</p>
-   <ol class="install-steps">
-    <li>Abra este endereço no <strong>Safari</strong> do seu iPhone.</li>
-    <li>Toque no botão de <strong>Compartilhar</strong> (quadrado com seta).</li>
-    <li>Role e escolha <strong>"Adicionar à Tela de Início"</strong>.</li>
-    <li>O ícone abrirá em tela cheia, como aplicativo nativo!</li>
-   </ol>
-  </div>
-  <div class="install-option-card">
-   <div class="install-option-head"><span class="install-badge">CHROME / WEB</span><h3>Instalar Web App (PWA)</h3></div>
-   <p>No Google Chrome do celular ou computador, instale como aplicativo web:</p>
-   <button type="button" class="btn secondary full" data-action="pwa-prompt">${icon('plus',18)} Instalar via Google Chrome</button>
-  </div>
- </div>`);
+ showModal('Instalar Lagoinha Kids','Abra pelo ícone do celular, sem precisar de loja de aplicativos.',`<div class="install-guide"><div class="install-option-card"><h3>Android</h3><p>Abra este endereço no Chrome. Use “Instalar aplicativo” ou “Adicionar à tela inicial” no menu do navegador.</p><button type="button" class="btn primary full" data-action="pwa-prompt">Instalar aplicativo</button></div><div class="install-option-card"><h3>iPhone</h3><p>Abra no Safari, toque em Compartilhar e escolha “Adicionar à Tela de Início”. Abra pelo novo ícone para ativar notificações (iOS 16.4 ou posterior).</p></div><p class="soft-info">Depois de entrar, ative os avisos em Minha conta. É necessária conexão com a internet para consultar e salvar informações.</p></div>`);
 }
+
 const optionsParents=()=>'<option value="">Vincular depois</option>'+S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}">${escape(u.name)} · ${escape(u.email)}</option>`).join('');
 async function attendanceModal(ch){
  if(!ch.parent_id)return toast('Peça à administração para vincular um responsável antes da entrada ou saída.',true);

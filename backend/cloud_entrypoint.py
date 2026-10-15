@@ -19,12 +19,14 @@ def main():
         for process in processes:
             if process.poll() is None:process.terminate()
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
+    failed=False
     try:
         while not stopping and all(p.poll() is None for p in processes):time.sleep(1)
+        failed=not stopping
     finally:
         stop()
         for process in processes:
             try:process.wait(timeout=10)
             except subprocess.TimeoutExpired:process.kill()
-    return 0 if stopping else 1
+    return 1 if failed else 0
 if __name__=='__main__':sys.exit(main())
