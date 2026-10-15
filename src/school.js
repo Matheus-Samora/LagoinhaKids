@@ -31,8 +31,8 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const hiddenInp=document.getElementById('room-cover-url-input');
   const prevArea=document.getElementById('room-cover-preview');
   const urlField=document.getElementById('room-url-input-field');
-  if(hiddenInp)hiddenInp.value=url;
-  if(urlField)urlField.value=url;
+  if(hiddenInp)hiddenInp.value=url||'';
+  if(urlField)urlField.value=url&&url.startsWith('http')?url:'';
   if(prevArea){
    if(url){
     prevArea.className='media-preview-area has-image';
@@ -100,7 +100,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
           </div>
           <div class="media-url-drawer" id="room-url-drawer" hidden>
             <div class="media-url-input-wrap">
-              <input type="url" id="room-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${e(coverUrl)}"/>
+              <input type="text" inputmode="url" id="room-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${e(coverUrl.startsWith('http')?coverUrl:'')}"/>
               <button type="button" class="btn primary" data-action="apply-room-url">Aplicar</button>
             </div>
           </div>
@@ -473,7 +473,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='toggle-room-presets'){const d=document.getElementById('room-presets-drawer');if(d)d.hidden=!d.hidden;return true;}
   if(action==='toggle-room-url'){const d=document.getElementById('room-url-drawer');if(d)d.hidden=!d.hidden;return true;}
   if(action==='pick-room-preset'){setRoomCoverPreview(el.dataset.url);document.getElementById('room-presets-drawer')?.setAttribute('hidden','');toast('Capa sugerida aplicada!');return true;}
-  if(action==='apply-room-url'){const val=document.getElementById('room-url-input-field')?.value?.trim();if(val){setRoomCoverPreview(val);document.getElementById('room-url-drawer')?.setAttribute('hidden','');toast('Link da capa aplicado!');}else{toast('Informe uma URL válida.',true);}return true;}
+  if(action==='apply-room-url'){const val=document.getElementById('room-url-input-field')?.value?.trim();if(val && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/'))){setRoomCoverPreview(val);document.getElementById('room-url-drawer')?.setAttribute('hidden','');toast('Link da capa aplicado!');}else{toast('Informe uma URL válida (ex: https://...).',true);}return true;}
   if(action==='child-lessons'){S.selectedChild=id;if(navigateTo)navigateTo('lessons');else{S.page='lessons';render();}return true;}
   if(action==='new-room'){roomForm();return true;}
   if(action==='edit-room'){roomForm(room);return true;}

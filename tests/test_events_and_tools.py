@@ -328,3 +328,26 @@ def test_media_upload_and_room_event_covers():
     target_ev = next((e for e in events if e['id'] == ev_id), None)
     assert target_ev is not None
     assert target_ev['banner_url'] == media_url
+
+    # 7. Create event with exact user screenshot scenario (FestKids 2026, space in date, Culto Especial)
+    res_festkids = admin_c.post('/api/events', json={
+        'title': 'FestKids 2026',
+        'description': 'Venha participar do nosso FestKids! Louvor animado, teatro, brincadeiras e alegria.',
+        'category': 'Culto Especial',
+        'target_audience': 'all',
+        'min_age': 3,
+        'max_age': 14,
+        'starts_at': '2026-10-22 14:42',
+        'ends_at': '2026-10-22 17:42',
+        'location': 'Igreja batista da Lagoinha',
+        'price': '30',
+        'max_capacity': 50,
+        'banner_url': media_url
+    })
+    assert res_festkids.status_code == 200, res_festkids.text
+    fest_id = res_festkids.json()['id']
+    ev_check = next((e for e in admin_c.get('/api/events').json() if e['id'] == fest_id), None)
+    assert ev_check is not None
+    assert ev_check['title'] == 'FestKids 2026'
+    assert ev_check['price'] == '30'
+    assert ev_check['banner_url'] == media_url

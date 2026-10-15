@@ -508,8 +508,8 @@ function setEventBannerPreview(url){
  const hiddenInp=document.getElementById('event-banner-url-input');
  const prevArea=document.getElementById('event-banner-preview');
  const urlField=document.getElementById('event-url-input-field');
- if(hiddenInp)hiddenInp.value=url;
- if(urlField)urlField.value=url;
+ if(hiddenInp)hiddenInp.value=url||'';
+ if(urlField)urlField.value=url&&url.startsWith('http')?url:'';
  if(prevArea){
   if(url){
    prevArea.className='media-preview-area has-image';
@@ -568,7 +568,7 @@ function eventFormModal(ev=null){
     </div>
     <div class="media-url-drawer" id="event-url-drawer" hidden>
      <div class="media-url-input-wrap">
-      <input type="url" id="event-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${escape(bannerUrl)}"/>
+      <input type="text" inputmode="url" id="event-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${escape(bannerUrl.startsWith('http')?bannerUrl:'')}"/>
       <button type="button" class="btn primary" data-action="apply-event-url">Aplicar</button>
      </div>
     </div>
@@ -649,7 +649,7 @@ document.addEventListener('click',async e=>{
  if(action==='toggle-event-presets'){const d=document.getElementById('event-presets-drawer');if(d)d.hidden=!d.hidden;return;}
  if(action==='toggle-event-url'){const d=document.getElementById('event-url-drawer');if(d)d.hidden=!d.hidden;return;}
  if(action==='pick-event-preset'){setEventBannerPreview(el.dataset.url);document.getElementById('event-presets-drawer')?.setAttribute('hidden','');toast('Sugestão aplicada como banner!');return;}
- if(action==='apply-event-url'){const val=document.getElementById('event-url-input-field')?.value?.trim();if(val){setEventBannerPreview(val);document.getElementById('event-url-drawer')?.setAttribute('hidden','');toast('Link de imagem aplicado!');}else{toast('Informe uma URL válida.',true);}return;}
+ if(action==='apply-event-url'){const val=document.getElementById('event-url-input-field')?.value?.trim();if(val && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/'))){setEventBannerPreview(val);document.getElementById('event-url-drawer')?.setAttribute('hidden','');toast('Link de imagem aplicado!');}else{toast('Informe uma URL válida (ex: https://...).',true);}return;}
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
  if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}
@@ -782,19 +782,32 @@ document.addEventListener('submit',async e=>{
   const schoolResult=await school.submit(form,values);if(schoolResult){modal.close();await load();toast(schoolResult.message||schoolResult);if(schoolResult.roomId)school.lessonForm(schoolResult.roomId);return;}
   if(kind==='create-event'||kind==='event-form'){
    const evId=form.dataset.id;
+   if(!values.title||values.title.trim().length<2)throw new Error('Informe o título do evento (mínimo 2 caracteres).');
+   if(!values.description||values.description.trim().length<5)throw new Error('Informe a descrição do evento (mínimo 5 caracteres).');
+   if(!values.starts_at||!values.ends_at)throw new Error('Informe as datas e horários de início e término.');
+   const minAge=Number(values.min_age)||0;
+   const maxAge=Number(values.max_age)||17;
+   if(maxAge<minAge)throw new Error('A idade máxima não pode ser menor que a idade mínima.');
+   const formatIso=(v)=>{
+    if(!v)return '';
+    let s=v.trim().replace(' ','T');
+    if(s.length===16)s+=':00';
+    if(s.length===19)s+='-03:00';
+    return s;
+   };
    const payload={
-    title:values.title,
-    description:values.description,
-    category:values.category,
-    target_audience:values.target_audience,
-    min_age:Number(values.min_age),
-    max_age:Number(values.max_age),
-    starts_at:values.starts_at.length===16?values.starts_at+':00-03:00':values.starts_at,
-    ends_at:values.ends_at.length===16?values.ends_at+':00-03:00':values.ends_at,
-    location:values.location||'',
-    price:values.price||'Gratuito',
+    title:values.title.trim(),
+    description:values.description.trim(),
+    category:values.category||'Culto Especial',
+    target_audience:values.target_audience||'all',
+    min_age:minAge,
+    max_age:maxAge,
+    starts_at:formatIso(values.starts_at),
+    ends_at:formatIso(values.ends_at),
+    location:values.location?.trim()||'',
+    price:values.price?.trim()||'Gratuito',
     max_capacity:Number(values.max_capacity)||100,
-    banner_url:values.banner_url||''
+    banner_url:values.banner_url?.trim()||''
    };
    if(evId){
     await api(`/events/${evId}`,{method:'PATCH',body:payload});
@@ -847,7 +860,7 @@ document.addEventListener('submit',async e=>{
  }catch(err){
   formDirty=true;
   if(err.code==='mfa'){const otp=document.getElementById('login-otp-label');if(otp){otp.hidden=false;otp.querySelector('input').focus();}}
-  if(error)error.textContent=err.message;else toast(err.message,true);
+  if(error){error.textContent=err.message;try{error.scrollIntoView({behavior:'smooth',block:'center'});}catch{}}toast(err.message,true);
   form.classList.remove('shake');
   void form.offsetWidth;
   form.classList.add('shake');

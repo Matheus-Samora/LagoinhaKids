@@ -59,16 +59,20 @@ class EventCreate(BaseModel):
     @model_validator(mode='after')
     def validate_schedule(self):
         try:
-            start=datetime.fromisoformat(self.starts_at)
-            end=datetime.fromisoformat(self.ends_at)
+            s_val = self.starts_at.strip().replace(' ', 'T')
+            e_val = self.ends_at.strip().replace(' ', 'T')
+            start=datetime.fromisoformat(s_val)
+            end=datetime.fromisoformat(e_val)
             zone=ZoneInfo('America/Sao_Paulo')
             start=start.replace(tzinfo=zone) if start.tzinfo is None else start.astimezone(zone)
             end=end.replace(tzinfo=zone) if end.tzinfo is None else end.astimezone(zone)
-        except ValueError:raise ValueError('Informe datas e horários válidos.')
+        except Exception:raise ValueError('Informe datas e horários válidos.')
         if end<=start:raise ValueError('O término deve ocorrer depois do início.')
-        if self.banner_url and not (self.banner_url.startswith('https://') or self.banner_url.startswith('/api/media/') or self.banner_url.startswith('/')):
-            raise ValueError('A imagem deve usar HTTPS ou ser enviada pelo app.')
+        banner = self.banner_url.strip() if self.banner_url else ""
+        if banner and not (banner.startswith('https://') or banner.startswith('http://') or banner.startswith('/api/media/') or banner.startswith('/')):
+            raise ValueError('A imagem deve usar um link válido (HTTPS) ou ser enviada pelo app.')
         self.starts_at=start.isoformat(timespec='seconds');self.ends_at=end.isoformat(timespec='seconds')
+        self.banner_url=banner
         return self
 
 class EventRegisterIn(BaseModel):
