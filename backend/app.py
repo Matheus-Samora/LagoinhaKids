@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 from datetime import date
 import httpx
 import numpy as np
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, File, Form
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, File, Form, UploadFile
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -470,6 +470,52 @@ def download_apk():
         if p.is_file():
             return FileResponse(p, media_type='application/vnd.android.package-archive', filename='lagoinha-kids.apk')
     fail('not_found', 'APK em compilação ou indisponível.', 404)
+
+@app.post('/api/upload')
+async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
+    raw = await file.read()
+    if not raw or len(raw) > 10 * 1024 * 1024:
+        fail('size', 'Arquivo muito grande. O limite é 10 MB.', 400)
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(raw))
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            img = img.convert('RGBA')
+            save_format = 'WEBP'
+            content_type = 'image/webp'
+        else:
+            img = img.convert('RGB')
+            save_format = 'WEBP'
+            content_type = 'image/webp'
+        
+        img.thumbnail((1200, 800), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        img.save(out, format=save_format, quality=82, optimize=True)
+        compressed = out.getvalue()
+    except Exception as exc:
+        fail('invalid_image', f'Formato de imagem inválido: {str(exc)}', 400)
+    
+    media_id = f"img_{secrets.token_hex(10)}.webp"
+    with s.db() as c:
+        c.execute('INSERT INTO media(id, filename, content_type, data, created_by, created_at) VALUES(?,?,?,?,?,?)',
+                  (media_id, file.filename or 'upload.webp', content_type, compressed, user['id'], s.now()))
+        c.commit()
+    return {'url': f'/api/media/{media_id}', 'id': media_id, 'size': len(compressed)}
+
+@app.api_route('/api/media/{media_id}', methods=['GET', 'HEAD'])
+def get_media(media_id: str):
+    with s.db() as c:
+        row = c.execute('SELECT content_type, data FROM media WHERE id = ?', (media_id,)).fetchone()
+    if not row or not row['data']:
+        fail('not_found', 'Imagem não encontrada.', 404)
+    return Response(
+        content=bytes(row['data']),
+        media_type=row['content_type'],
+        headers={
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Content-Disposition': 'inline'
+        }
+    )
 
 from .security import router as security_router
 app.include_router(security_router)

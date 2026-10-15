@@ -1,5 +1,5 @@
 import './school.css';
-export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refresh,render,age,statusName,time,navigateTo,openScanner}){
+export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refresh,render,age,statusName,time,navigateTo,openScanner,uploadImage,roomPresets=[]}){
  const dateLabel=value=>new Intl.DateTimeFormat('pt-BR',{weekday:'short',day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date(value));
  const day=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(value);
  const ageAt=(birth,when)=>{const [y,m,d]=when.slice(0,10).split('-').map(Number),[by,bm,bd]=birth.split('-').map(Number);return y-by-((m<bm||(m===bm&&d<bd))?1:0);};
@@ -26,9 +26,28 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    </fieldset>
    ${errorSlot}<button class="btn primary full" type="submit">${ch?'Salvar alterações':'Cadastrar'} ${icon('check',17)}</button></form>`);
  }
+
+ function setRoomCoverPreview(url){
+  const hiddenInp=document.getElementById('room-cover-url-input');
+  const prevArea=document.getElementById('room-cover-preview');
+  const urlField=document.getElementById('room-url-input-field');
+  if(hiddenInp)hiddenInp.value=url;
+  if(urlField)urlField.value=url;
+  if(prevArea){
+   if(url){
+    prevArea.className='media-preview-area has-image';
+    prevArea.innerHTML=`<img src="${e(url)}" alt="Capa da turma" class="media-preview-img" id="room-cover-img"/><div class="media-preview-overlay"><button type="button" class="mini-button danger-button" data-action="clear-room-cover">${icon('close',14)} Remover foto</button></div>`;
+   }else{
+    prevArea.className='media-preview-area';
+    prevArea.innerHTML=`<div class="media-empty-state"><div class="media-empty-icon">${icon('rooms',28)}</div><strong>Adicione uma foto de capa</strong><p>Envie do seu aparelho ou escolha uma sugestão</p></div>`;
+   }
+  }
+ }
+
  function roomForm(r){
   const isEdit=Boolean(r);
   const currentOwner=r?.created_by||S.user.id;
+  const coverUrl=r?.cover_url||'';
   const availableStaff=S.users&&S.users.length?S.users.filter(u=>['admin','teacher'].includes(u.role)&&u.active):[];
   const staffSelect=availableStaff.length>1?`
     <label>Professor(a) responsável
@@ -39,8 +58,56 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
 
   showModal(
     isEdit ? 'Editar turma' : 'Criar nova turma',
-    isEdit ? 'Atualize as informações, faixa etária e vagas da turma.' : 'Defina os detalhes da turma e publique os horários das aulinhas.',
+    isEdit ? 'Atualize as informações, foto de capa e vagas da turma.' : 'Defina os detalhes da turma, foto de capa e publique os horários das aulinhas.',
     `<form data-form="simple-room" ${isEdit?`data-id="${r.id}"`:''}>
+      <div class="media-picker-group">
+        <label class="media-picker-label">Foto / Capa da Turma</label>
+        <div class="media-picker-box">
+          <div class="media-preview-area ${coverUrl?'has-image':''}" id="room-cover-preview">
+            ${coverUrl ? `
+              <img src="${e(coverUrl)}" alt="Capa da turma" class="media-preview-img" id="room-cover-img"/>
+              <div class="media-preview-overlay">
+                <button type="button" class="mini-button danger-button" data-action="clear-room-cover">${icon('close',14)} Remover foto</button>
+              </div>
+            ` : `
+              <div class="media-empty-state">
+                <div class="media-empty-icon">${icon('rooms',28)}</div>
+                <strong>Adicione uma foto de capa</strong>
+                <p>Envie do seu celular/computador ou escolha uma sugestão</p>
+              </div>
+            `}
+          </div>
+          <div class="media-actions-toolbar">
+            <label class="btn secondary media-upload-btn" tabindex="0">
+              <span>📷 Enviar foto</span>
+              <input type="file" id="room-cover-file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden/>
+            </label>
+            <button type="button" class="btn secondary" data-action="toggle-room-presets">🎨 Sugestões prontas</button>
+            <button type="button" class="btn secondary" data-action="toggle-room-url">🔗 Link externo</button>
+          </div>
+          <div class="media-presets-drawer" id="room-presets-drawer" hidden>
+            <div class="media-presets-header">
+              <small>Sugestões por faixa etária da Lagoinha:</small>
+            </div>
+            <div class="media-presets-grid">
+              ${roomPresets.map(p=>`
+                <button type="button" class="media-preset-card" data-action="pick-room-preset" data-url="${e(p.url)}" title="${e(p.name)} (${p.min_age} a ${p.max_age} anos)">
+                  <img src="${e(p.url)}" alt="${e(p.name)}" loading="lazy"/>
+                  <span>${e(p.name)}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+          <div class="media-url-drawer" id="room-url-drawer" hidden>
+            <div class="media-url-input-wrap">
+              <input type="url" id="room-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${e(coverUrl)}"/>
+              <button type="button" class="btn primary" data-action="apply-room-url">Aplicar</button>
+            </div>
+          </div>
+          <input type="hidden" name="cover_url" id="room-cover-url-input" value="${e(coverUrl)}"/>
+        </div>
+      </div>
+
       <label>Nome da turma
         <input name="name" value="${e(r?.name||'')}" required minlength="2" maxlength="80" placeholder="Ex.: Pequenos Exploradores"/>
       </label>
@@ -93,7 +160,44 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  }
  function roomsPage(){
   const canManage=S.user.role==='admin'||S.user.role==='teacher';
-  return `${title('Turmas','Crie e gerencie as turmas, horários e equipe da salinha.',canManage?`<button class="btn primary" data-action="new-room">${icon('plus',17)} Criar turma</button>`:'')}${S.rooms.length?`<div class="simple-room-grid">${S.rooms.map(r=>{const lessons=S.lessons.filter(l=>l.room_id===r.id);return `<article class="simple-room-card panel"><header><span class="room-symbol">${icon('rooms',24)}</span><div class="room-card-actions"><button type="button" class="room-action-btn" data-action="edit-room" data-id="${r.id}" title="Editar informações da turma">${icon('settings',14)} <span>Editar</span></button><button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir turma">${icon('close',14)} <span>Excluir</span></button></div></header><h2>${e(r.name)}</h2><p>${r.min_age} a ${r.max_age} anos · ${r.capacity} vagas por aula</p><p class="muted-note">Responsável: ${e(r.owner_name||'Equipe Lagoinha Kids')}</p><div class="simple-room-actions"><button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button><button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button></div><section class="room-schedule"><h3>Próximas aulinhas</h3>${lessons.length?lessons.map(l=>`<div class="schedule-row"><div><strong>${dateLabel(l.starts_at)}</strong><span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count} confirmado${l.confirmed_count===1?'':'s'}</span></div><button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}" title="Discipulado Familiar">📖 Discipulado</button><button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button><button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar horário de ${e(r.name)}">${icon('settings',16)}</button></div>`).join(''):'<p class="muted-note">Publique a primeira aulinha para receber confirmações.</p>'}</section></article>`;}).join('')}</div>`:empty('Nenhuma turma cadastrada','Toque em “Criar turma” para cadastrar a primeira salinha e publicar horários.')}`;
+  return `${title('Turmas','Crie e gerencie as turmas, horários e equipe da salinha.',canManage?`<button class="btn primary" data-action="new-room">${icon('plus',17)} Criar turma</button>`:'')}${S.rooms.length?`<div class="simple-room-grid">${S.rooms.map(r=>{
+   const lessons=S.lessons.filter(l=>l.room_id===r.id);
+   return `<article class="simple-room-card panel">
+     ${r.cover_url?`
+       <div class="room-card-cover-wrap">
+         <img src="${e(r.cover_url)}" alt="${e(r.name)}" class="room-card-cover-img" loading="lazy"/>
+         <div class="room-card-cover-overlay"></div>
+         <span class="room-card-age-tag">${r.min_age} a ${r.max_age} anos</span>
+       </div>
+     `:`
+       <div class="room-card-cover-wrap placeholder">
+         <span class="room-symbol" style="background:${r.color||'#f4f4f5'}">${icon('rooms',24)}</span>
+         <span class="room-card-age-tag">${r.min_age} a ${r.max_age} anos</span>
+       </div>
+     `}
+     <div class="room-card-body">
+       <header>
+         <div class="room-header-title">
+           <h2>${e(r.name)}</h2>
+           <p>${r.min_age} a ${r.max_age} anos · ${r.capacity} vagas por aula</p>
+         </div>
+         <div class="room-card-actions">
+           <button type="button" class="room-action-btn" data-action="edit-room" data-id="${r.id}" title="Editar informações da turma">${icon('settings',14)} <span>Editar</span></button>
+           <button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir turma">${icon('close',14)} <span>Excluir</span></button>
+         </div>
+       </header>
+       <p class="muted-note">Responsável: ${e(r.owner_name||'Equipe Lagoinha Kids')}</p>
+       <div class="simple-room-actions">
+         <button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button>
+         <button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button>
+       </div>
+       <section class="room-schedule">
+         <h3>Próximas aulinhas</h3>
+         ${lessons.length?lessons.map(l=>`<div class="schedule-row"><div><strong>${dateLabel(l.starts_at)}</strong><span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count} confirmado${l.confirmed_count===1?'':'s'}</span></div><button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}" title="Discipulado Familiar">📖 Discipulado</button><button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button><button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar horário de ${e(r.name)}">${icon('settings',16)}</button></div>`).join(''):'<p class="muted-note">Publique a primeira aulinha para receber confirmações.</p>'}
+       </section>
+     </div>
+   </article>`;
+  }).join('')}</div>`:empty('Nenhuma turma cadastrada','Toque em “Criar turma” para cadastrar a primeira salinha e publicar horários.')}`;
  }
  function rosterRows(children,lesson){
   const today=day(new Date());
@@ -365,6 +469,11 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    const user=S.users.find(u=>u.id===id);
    showModal('Gerenciar usuário',e(user.name),`<form data-form="school-user" data-id="${id}"><label>Nome<input name="name" required minlength="2" maxlength="100" value="${e(user.name)}"/></label><label>E-mail<input type="email" name="email" required value="${e(user.email)}"/></label><label>Perfil<select name="role">${[['admin','Administração'],['teacher','Professor(a)'],['parent','Responsável']].map(([value,label])=>`<option value="${value}" ${user.role===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="checkbox-label"><input type="checkbox" name="active" ${user.active?'checked':''}/>Acesso ativo</label><fieldset><legend>Turmas sob responsabilidade do professor</legend>${S.rooms.map(r=>`<label class="checkbox-label"><input type="checkbox" name="rooms" value="${r.id}" ${user.rooms.includes(r.id)?'checked':''}/>${e(r.name)}</label>`).join('')}</fieldset><details class="child-extra"><summary>Definir nova senha</summary><label>Nova senha inicial<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Deixe vazio para manter a senha"/></label></details>${errorSlot}<button class="btn primary full" type="submit">Salvar usuário</button></form>`);return true;
   }
+  if(action==='clear-room-cover'){setRoomCoverPreview('');toast('Capa removida.');return true;}
+  if(action==='toggle-room-presets'){const d=document.getElementById('room-presets-drawer');if(d)d.hidden=!d.hidden;return true;}
+  if(action==='toggle-room-url'){const d=document.getElementById('room-url-drawer');if(d)d.hidden=!d.hidden;return true;}
+  if(action==='pick-room-preset'){setRoomCoverPreview(el.dataset.url);document.getElementById('room-presets-drawer')?.setAttribute('hidden','');toast('Capa sugerida aplicada!');return true;}
+  if(action==='apply-room-url'){const val=document.getElementById('room-url-input-field')?.value?.trim();if(val){setRoomCoverPreview(val);document.getElementById('room-url-drawer')?.setAttribute('hidden','');toast('Link da capa aplicado!');}else{toast('Informe uma URL válida.',true);}return true;}
   if(action==='child-lessons'){S.selectedChild=id;if(navigateTo)navigateTo('lessons');else{S.page='lessons';render();}return true;}
   if(action==='new-room'){roomForm();return true;}
   if(action==='edit-room'){roomForm(room);return true;}
@@ -462,7 +571,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    await api(`/users/${id}`,{method:'PATCH',body:data});return 'Usuário atualizado.';
   }
   if(type==='simple-room'){
-   const data={name:values.name,min_age:Number(values.min_age),max_age:Number(values.max_age),capacity:Number(values.capacity)};
+   const data={name:values.name,min_age:Number(values.min_age),max_age:Number(values.max_age),capacity:Number(values.capacity),cover_url:values.cover_url||''};
    if(values.owner_id)data.owner_id=Number(values.owner_id);
    if(id)data.version=S.rooms.find(r=>r.id===Number(id))?.version;
    const result=await api(id?`/rooms/${id}`:'/rooms',{method:id?'PATCH':'POST',body:data});return id?'Turma salva.':{message:'Turma criada. Agora publique o primeiro horário.',roomId:result.id};
@@ -485,6 +594,27 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   return false;
  }
  function change(event){
+  if(event.target.id==='room-cover-file-input'){
+   const file=event.target.files[0];
+   if(!file)return;
+   const prevArea=document.getElementById('room-cover-preview');
+   if(prevArea){
+    prevArea.className='media-preview-area';
+    prevArea.innerHTML='<div class="media-empty-state"><span class="spin">●</span><strong style="margin-top:8px;">Otimizando e enviando foto de capa...</strong><p>Aguarde um instante</p></div>';
+   }
+   Promise.resolve().then(async()=>{
+    try{
+     if(!uploadImage)throw new Error('Função de upload indisponível.');
+     const url=await uploadImage(file);
+     setRoomCoverPreview(url);
+     toast('Foto de capa da turma enviada com sucesso! 📸');
+    }catch(err){
+     setRoomCoverPreview('');
+     toast(err.message||'Não foi possível enviar a foto.',true);
+    }
+   });
+   return;
+  }
   if(event.target.id==='lesson-child'){S.selectedChild=Number(event.target.value);render();}
   if(event.target.id==='lesson-filter'){S.selectedLesson=Number(event.target.value)||null;render();}
   if(event.target.id==='room-select-filter'||event.target.classList.contains('room-select-filter')){

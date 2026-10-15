@@ -28,8 +28,11 @@ class RoomIn(BaseModel):
     capacity:int=Field(ge=1,le=100)
     owner_id:int|None=None
     version:int|None=Field(default=None,ge=1)
+    cover_url:str|None=Field(default='',max_length=500)
 def validate_room(c,data,user,is_edit=False):
     if not data.name.strip() or data.max_age<data.min_age:fail('room','Confira o nome e a faixa etária.')
+    if data.cover_url and not (data.cover_url.startswith('https://') or data.cover_url.startswith('/api/media/') or data.cover_url.startswith('/')):
+        fail('cover','A imagem de capa deve usar HTTPS ou ser enviada pelo app.')
     owner=data.owner_id or user['id']
     if not is_edit and user['role']!='admin' and owner!=user['id']:fail('owner','Você só pode criar turmas em seu próprio nome.',403)
     if not c.execute('SELECT 1 FROM users WHERE id=? AND role IN ("teacher","admin") AND active=1',(owner,)).fetchone():fail('owner','Escolha um professor ou administrador ativo.')
@@ -44,7 +47,7 @@ def sync_owner(c,rid,owner):
 def rooms(user=Depends(session)):
     with s.db() as c:
         rows=c.execute('SELECT r.*,u.name owner_name FROM rooms r LEFT JOIN users u ON u.id=r.created_by WHERE r.active=1 ORDER BY r.name').fetchall()
-        if user['role']=='parent':return [{k:r[k] for k in ('id','name','min_age','max_age','capacity','color','owner_name')} for r in rows]
+        if user['role']=='parent':return [{k:r[k] for k in ('id','name','min_age','max_age','capacity','color','cover_url','owner_name')} for r in rows]
         result=[]
         for r in rows:
             if not room_allowed(c,user,r['id']):continue
@@ -57,7 +60,7 @@ def rooms(user=Depends(session)):
 def create_room(data:RoomIn,user=Depends(staff)):
     with s.db() as c:
         owner=validate_room(c,data,user,is_edit=False)
-        rid=c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color,created_by) VALUES(?,?,?,?,?,?)',(data.name.strip(),data.min_age,data.max_age,data.capacity,'#27272a',owner)).lastrowid
+        rid=c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color,cover_url,created_by) VALUES(?,?,?,?,?,?,?)',(data.name.strip(),data.min_age,data.max_age,data.capacity,'#27272a',data.cover_url or '',owner)).lastrowid
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_created')
     return {'id':rid}
 @router.patch('/rooms/{rid}')
@@ -76,7 +79,7 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
         if maximum>data.capacity:fail('capacity','Já existem aulas com mais confirmações que essa capacidade.',409)
         booked=c.execute('SELECT ch.birthday,l.starts_at FROM reservations b JOIN lessons l ON l.id=b.lesson_id JOIN children ch ON ch.id=b.child_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchall()
         if any(not data.min_age<=age_on(row['birthday'],row['starts_at'])<=data.max_age for row in booked):fail('age','A nova faixa etária exclui alunos já confirmados. Ajuste as confirmações antes.',409)
-        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,created_by=?,version=version+1 WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,owner,rid))
+        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,cover_url=?,created_by=?,version=version+1 WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,data.cover_url or '',owner,rid))
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_updated')
     return {'ok':True}
 @router.delete('/rooms/{rid}')

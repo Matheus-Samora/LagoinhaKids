@@ -392,7 +392,27 @@ function stopCamera(){S.stream?.getTracks().forEach(t=>t.stop());S.stream=null;}
 modal.addEventListener('close',()=>{stopCamera();S.faceFile=null;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=null;});
 modal.addEventListener('cancel',(e)=>{if(S.busy||!allowDiscard())e.preventDefault();});
 function selectFace(file){if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8*1024*1024)return toast('Use JPG, PNG ou WebP de até 8 MB.',true);S.faceFile=file;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=URL.createObjectURL(file);document.getElementById('face-preview').src=S.faceUrl;document.getElementById('face-preview').hidden=false;document.getElementById('face-placeholder').hidden=true;}
-document.addEventListener('change',e=>{if(e.target.id==='face-input')selectFace(e.target.files[0]);if(e.target.id==='room-filter'){S.room=e.target.value;updateRoster();}});
+document.addEventListener('change',async e=>{
+ if(e.target.id==='face-input')selectFace(e.target.files[0]);
+ if(e.target.id==='room-filter'){S.room=e.target.value;updateRoster();}
+ if(e.target.id==='event-banner-file-input'){
+  const file=e.target.files[0];
+  if(!file)return;
+  const prevArea=document.getElementById('event-banner-preview');
+  if(prevArea){
+   prevArea.className='media-preview-area';
+   prevArea.innerHTML='<div class="media-empty-state"><span class="spin">●</span><strong style="margin-top:8px;">Otimizando e enviando foto...</strong><p>Aguarde um instante</p></div>';
+  }
+  try{
+   const url=await uploadImageFile(file);
+   setEventBannerPreview(url);
+   toast('Foto do evento enviada com sucesso! 📸');
+  }catch(err){
+   setEventBannerPreview('');
+   toast(err.message||'Não foi possível enviar a foto.',true);
+  }
+ }
+});
 document.addEventListener('input',e=>{if(e.target.id==='student-search'){S.search=e.target.value;updateRoster();}});
 function updateRoster(){document.getElementById('roster').innerHTML=roster(filtered(),S.page==='attendance');}
 document.addEventListener('keydown',e=>{if(e.target.classList.contains('face-drop')&&['Enter',' '].includes(e.key)){e.preventDefault();document.getElementById('face-input').click();}});
@@ -456,11 +476,106 @@ function guestCheckinModal(){
  </form>`);
 }
 
+async function uploadImageFile(file){
+ if(!file)throw new Error('Nenhum arquivo selecionado.');
+ if(!file.type.startsWith('image/'))throw new Error('Selecione uma imagem válida (JPG, PNG, WebP ou GIF).');
+ if(file.size > 15 * 1024 * 1024)throw new Error('A imagem deve ter no máximo 15 MB.');
+ const data = new FormData();
+ data.append('file', file);
+ const res = await api('/upload', { method: 'POST', body: data });
+ return res.url;
+}
+
+const EVENT_PRESETS = [
+ { title: 'EBF Heróis da Fé', category: 'EBF', url: 'https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?auto=format&fit=crop&w=1200&q=80' },
+ { title: 'Acampamento Kids', category: 'Acampamento', url: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=1200&q=80' },
+ { title: 'Culto da Família', category: 'Culto Especial', url: 'https://images.unsplash.com/photo-1476703993599-0035a21b17a9?auto=format&fit=crop&w=1200&q=80' },
+ { title: 'Louvor & Música Kids', category: 'Musical', url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80' },
+ { title: 'Batismo & Dedicação', category: 'Batismo', url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1200&q=80' },
+ { title: 'Passeio & Diversão', category: 'Passeio', url: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=1200&q=80' }
+];
+
+const ROOM_PRESETS = [
+ { name: 'Berçário Ovelhinhas', min_age: 0, max_age: 1, url: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=1200&q=80' },
+ { name: 'Maternal Sementinhas', min_age: 2, max_age: 3, url: 'https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=1200&q=80' },
+ { name: 'Pequenos Construtores', min_age: 4, max_age: 5, url: 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=1200&q=80' },
+ { name: 'Guerreiros da Luz', min_age: 6, max_age: 8, url: 'https://images.unsplash.com/photo-1485546246426-74dc88dec4d9?auto=format&fit=crop&w=1200&q=80' },
+ { name: 'Exploradores da Palavra', min_age: 9, max_age: 11, url: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80' },
+ { name: 'Geração Eleita Teens', min_age: 12, max_age: 17, url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80' }
+];
+
+function setEventBannerPreview(url){
+ const hiddenInp=document.getElementById('event-banner-url-input');
+ const prevArea=document.getElementById('event-banner-preview');
+ const urlField=document.getElementById('event-url-input-field');
+ if(hiddenInp)hiddenInp.value=url;
+ if(urlField)urlField.value=url;
+ if(prevArea){
+  if(url){
+   prevArea.className='media-preview-area has-image';
+   prevArea.innerHTML=`<img src="${escape(url)}" alt="Prévia do banner" class="media-preview-img" id="event-banner-img"/><div class="media-preview-overlay"><button type="button" class="mini-button danger-button" data-action="clear-event-banner">${icon('close',14)} Remover foto</button></div>`;
+  }else{
+   prevArea.className='media-preview-area';
+   prevArea.innerHTML=`<div class="media-empty-state"><div class="media-empty-icon">${icon('calendar',28)}</div><strong>Adicione uma foto ou banner</strong><p>Envie do seu celular/computador ou escolha uma sugestão</p></div>`;
+  }
+ }
+}
+
 function eventFormModal(ev=null){
  const now=new Date();
  const d1=ev?ev.starts_at.slice(0,16):new Date(now.getTime()+86400000*7).toISOString().slice(0,16);
  const d2=ev?ev.ends_at.slice(0,16):new Date(now.getTime()+86400000*7+3600000*3).toISOString().slice(0,16);
+ const bannerUrl=ev?.banner_url||'';
+
  showModal(ev?'Editar Evento':'Novo Evento',ev?'Atualize as informações deste evento.':'Publique acampamentos, EBFs ou encontros para Kids e Teens.',`<form data-form="create-event" ${ev?`data-id="${ev.id}"`:''}>
+  <div class="media-picker-group">
+   <label class="media-picker-label">Banner de Divulgação do Evento</label>
+   <div class="media-picker-box">
+    <div class="media-preview-area ${bannerUrl?'has-image':''}" id="event-banner-preview">
+     ${bannerUrl ? `
+       <img src="${escape(bannerUrl)}" alt="Prévia do banner" class="media-preview-img" id="event-banner-img"/>
+       <div class="media-preview-overlay">
+        <button type="button" class="mini-button danger-button" data-action="clear-event-banner">${icon('close',14)} Remover foto</button>
+       </div>
+     ` : `
+       <div class="media-empty-state">
+        <div class="media-empty-icon">${icon('calendar',28)}</div>
+        <strong>Adicione uma foto ou banner</strong>
+        <p>Envie do seu celular/computador ou escolha uma sugestão</p>
+       </div>
+     `}
+    </div>
+    <div class="media-actions-toolbar">
+     <label class="btn secondary media-upload-btn" tabindex="0">
+      <span>📷 Enviar foto</span>
+      <input type="file" id="event-banner-file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden/>
+     </label>
+     <button type="button" class="btn secondary" data-action="toggle-event-presets">🎨 Sugestões prontas</button>
+     <button type="button" class="btn secondary" data-action="toggle-event-url">🔗 Link externo</button>
+    </div>
+    <div class="media-presets-drawer" id="event-presets-drawer" hidden>
+     <div class="media-presets-header">
+      <small>Toque em uma sugestão para aplicar como banner:</small>
+     </div>
+     <div class="media-presets-grid">
+      ${EVENT_PRESETS.map(p=>`
+        <button type="button" class="media-preset-card" data-action="pick-event-preset" data-url="${escape(p.url)}" title="${escape(p.title)}">
+         <img src="${escape(p.url)}" alt="${escape(p.title)}" loading="lazy"/>
+         <span>${escape(p.title)}</span>
+        </button>
+      `).join('')}
+     </div>
+    </div>
+    <div class="media-url-drawer" id="event-url-drawer" hidden>
+     <div class="media-url-input-wrap">
+      <input type="url" id="event-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${escape(bannerUrl)}"/>
+      <button type="button" class="btn primary" data-action="apply-event-url">Aplicar</button>
+     </div>
+    </div>
+    <input type="hidden" name="banner_url" id="event-banner-url-input" value="${escape(bannerUrl)}"/>
+   </div>
+  </div>
+
   <label>Título do evento<input name="title" required minlength="2" maxlength="120" value="${escape(ev?.title||'')}" placeholder="Ex.: EBF Heróis da Fé"/></label>
   <label>Descrição completa<textarea name="description" rows="3" required minlength="5" maxlength="2000" placeholder="Conte os detalhes do evento, o que levar, programação...">${escape(ev?.description||'')}</textarea></label>
   <div class="form-grid">
@@ -486,7 +601,6 @@ function eventFormModal(ev=null){
    <label>Valor / Preço<input name="price" value="${escape(ev?.price||'Gratuito')}" required/></label>
   </div>
   <label>Capacidade máxima de vagas<input name="max_capacity" type="number" min="1" max="1000" value="${ev?.max_capacity??100}" required/></label>
-  <label>URL do banner (opcional)<input name="banner_url" value="${escape(ev?.banner_url||'')}" placeholder="https://..."/></label>
   <p class="form-error" role="alert"></p>
   <button class="btn primary full" type="submit">${ev?'Salvar Alterações':'Publicar Evento & Notificar Pais'}</button>
  </form>`);
@@ -508,7 +622,7 @@ function eventRegisterModal(ev){
  </form>`:`<p class="soft-info">Você não tem filhos cadastrados na faixa etária deste evento (${ev.min_age} a ${ev.max_age} anos). Cadastre seu filho em Meus filhos primeiro.</p><button type="button" class="btn primary full" data-action="close">Entendido</button>`);
 }
 
-const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
+const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,uploadImage:uploadImageFile,roomPresets:ROOM_PRESETS,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
 initUSBScannerListener(S, (child, code) => {
  if (S.user && S.user.role !== 'parent') {
   openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age, attendanceModal });
@@ -531,6 +645,11 @@ document.addEventListener('click',async e=>{
  if(await school.action(action,el,ch))return;
  if(action==='guest-checkout'){showModal('Saída do visitante','Confira o responsável e o código entregue na chegada.',`<form data-form="guest-checkout" data-id="${Number(el.dataset.id)}"><label>Código de retirada<input name="claim_code" autocomplete="off" required maxlength="30"/></label><label class="checkbox-label"><input type="checkbox" name="confirmed" required/>Conferi presencialmente o responsável.</label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar saída</button></form>`);return;}
  if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal});return;}
+ if(action==='clear-event-banner'){setEventBannerPreview('');toast('Banner removido.');return;}
+ if(action==='toggle-event-presets'){const d=document.getElementById('event-presets-drawer');if(d)d.hidden=!d.hidden;return;}
+ if(action==='toggle-event-url'){const d=document.getElementById('event-url-drawer');if(d)d.hidden=!d.hidden;return;}
+ if(action==='pick-event-preset'){setEventBannerPreview(el.dataset.url);document.getElementById('event-presets-drawer')?.setAttribute('hidden','');toast('Sugestão aplicada como banner!');return;}
+ if(action==='apply-event-url'){const val=document.getElementById('event-url-input-field')?.value?.trim();if(val){setEventBannerPreview(val);document.getElementById('event-url-drawer')?.setAttribute('hidden','');toast('Link de imagem aplicado!');}else{toast('Informe uma URL válida.',true);}return;}
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
  if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}

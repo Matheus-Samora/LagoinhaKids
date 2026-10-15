@@ -200,8 +200,19 @@ def migrate_safety_and_health(conn):
     p_fields={r[1] for r in conn.execute('PRAGMA table_info(paging_requests)')}
     for column,definition in [('acknowledged_at','TEXT'),('acknowledged_by','INTEGER REFERENCES users(id)')]:
         if column not in p_fields:conn.execute(f'ALTER TABLE paging_requests ADD COLUMN {column} {definition}')
-    if 'version' not in {r[1] for r in conn.execute('PRAGMA table_info(rooms)')}:
+    r_fields={r[1] for r in conn.execute('PRAGMA table_info(rooms)')}
+    if 'version' not in r_fields:
         conn.execute('ALTER TABLE rooms ADD COLUMN version INTEGER NOT NULL DEFAULT 1')
+    if 'cover_url' not in r_fields:
+        conn.execute('ALTER TABLE rooms ADD COLUMN cover_url TEXT NOT NULL DEFAULT ""')
+    conn.execute('''CREATE TABLE IF NOT EXISTS media (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        data BLOB,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL
+    )''')
     if conn.execute("SELECT 1 FROM sqlite_master WHERE name='notifications'").fetchone():
         conn.execute('CREATE INDEX IF NOT EXISTS notice_user_id ON notifications(user_id,id)')
     conn.execute('CREATE INDEX IF NOT EXISTS family_user_active ON family_links(user_id,active,child_id)')
@@ -255,7 +266,7 @@ def init():
         CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY,failures INTEGER NOT NULL,expires INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS oauth(state TEXT PRIMARY KEY,nonce TEXT NOT NULL,browser TEXT NOT NULL,user_id INTEGER,mode TEXT NOT NULL,expires INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS rooms(id INTEGER PRIMARY KEY,name TEXT NOT NULL,min_age INTEGER NOT NULL,max_age INTEGER NOT NULL,capacity INTEGER NOT NULL,color TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS rooms(id INTEGER PRIMARY KEY,name TEXT NOT NULL,min_age INTEGER NOT NULL,max_age INTEGER NOT NULL,capacity INTEGER NOT NULL,color TEXT NOT NULL,cover_url TEXT NOT NULL DEFAULT "");
         CREATE TABLE IF NOT EXISTS teacher_rooms(user_id INTEGER REFERENCES users(id),room_id INTEGER REFERENCES rooms(id),PRIMARY KEY(user_id,room_id));
         CREATE TABLE IF NOT EXISTS children(id INTEGER PRIMARY KEY,name TEXT NOT NULL,birthday TEXT NOT NULL,room_id INTEGER NOT NULL REFERENCES rooms(id),parent_id INTEGER REFERENCES users(id),face_allowed INTEGER NOT NULL DEFAULT 0,face_template BLOB,consent_at TEXT,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS attendance(child_id INTEGER REFERENCES children(id),day TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('present','departed')),in_at TEXT NOT NULL,out_at TEXT,guardian TEXT NOT NULL,actor INTEGER REFERENCES users(id),PRIMARY KEY(child_id,day));

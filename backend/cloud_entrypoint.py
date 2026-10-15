@@ -7,6 +7,19 @@ def main():
         raise RuntimeError('Cloud deployment requires a persistent encryption key.')
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        if os.getenv('KIDS_DATABASE_URL'):
+            try:
+                c.execute('ALTER TABLE rooms ADD COLUMN IF NOT EXISTS cover_url TEXT NOT NULL DEFAULT ""')
+                c.execute('''CREATE TABLE IF NOT EXISTS media (
+                    id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    data BYTEA,
+                    created_by BIGINT REFERENCES users(id),
+                    created_at TEXT NOT NULL
+                )''')
+            except Exception as e:
+                print('Postgres additive migration notice:', e, flush=True)
         if not c.execute('SELECT 1 FROM users LIMIT 1').fetchone():
             password=os.getenv('KIDS_BOOTSTRAP_PASSWORD','')
             if len(password)<16:raise RuntimeError('An initial administrator password is required.')

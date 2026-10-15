@@ -54,7 +54,7 @@ class EventCreate(BaseModel):
     location: str = Field(default="", max_length=120)
     price: str = Field(default="Gratuito", max_length=60)
     max_capacity: int = Field(default=100, ge=1, le=1000)
-    banner_url: str = Field(default="", max_length=300)
+    banner_url: str = Field(default="", max_length=500)
 
     @model_validator(mode='after')
     def validate_schedule(self):
@@ -66,7 +66,8 @@ class EventCreate(BaseModel):
             end=end.replace(tzinfo=zone) if end.tzinfo is None else end.astimezone(zone)
         except ValueError:raise ValueError('Informe datas e horários válidos.')
         if end<=start:raise ValueError('O término deve ocorrer depois do início.')
-        if self.banner_url and not self.banner_url.startswith('https://'):raise ValueError('A imagem deve usar HTTPS.')
+        if self.banner_url and not (self.banner_url.startswith('https://') or self.banner_url.startswith('/api/media/') or self.banner_url.startswith('/')):
+            raise ValueError('A imagem deve usar HTTPS ou ser enviada pelo app.')
         self.starts_at=start.isoformat(timespec='seconds');self.ends_at=end.isoformat(timespec='seconds')
         return self
 

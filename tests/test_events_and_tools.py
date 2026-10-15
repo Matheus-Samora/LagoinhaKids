@@ -237,3 +237,94 @@ def test_paging_system_and_guest_checkin():
     # List active guests
     active_guests = teacher_c.get('/api/guests/active').json()
     assert any(g['child_name'] == 'Criança Visitante' for g in active_guests)
+
+def test_media_upload_and_room_event_covers():
+    import io
+    from PIL import Image
+    from fastapi.testclient import TestClient
+    from backend.app import app
+
+    admin_c = client(1)
+    teacher_c = client(2)
+    parent_c = client(3)
+
+    # 1. Non-logged-in cannot upload (401), parent cannot upload (403)
+    unauth_c = TestClient(app)
+    img = Image.new('RGB', (50, 50), color='red')
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG')
+    buf.seek(0)
+
+    res_unauth = unauth_c.post('/api/upload', files={'file': ('teste.jpg', buf.getvalue(), 'image/jpeg')})
+    assert res_unauth.status_code == 401
+
+    res_parent = parent_c.post('/api/upload', files={'file': ('teste.jpg', buf.getvalue(), 'image/jpeg')})
+    assert res_parent.status_code == 403
+
+    # 2. Authenticated user uploads image
+    res_upload = teacher_c.post('/api/upload', files={'file': ('capa.jpg', buf.getvalue(), 'image/jpeg')})
+    assert res_upload.status_code == 200, res_upload.text
+    upload_data = res_upload.json()
+    assert 'url' in upload_data
+    media_url = upload_data['url']
+    media_id = upload_data['id']
+    assert media_url == f'/api/media/{media_id}'
+
+    # 3. Retrieve uploaded media
+    res_media = parent_c.get(media_url)
+    assert res_media.status_code == 200
+    assert res_media.headers['content-type'] == 'image/webp'
+    assert len(res_media.content) > 0
+
+    # 4. Create room with cover_url
+    res_room = teacher_c.post('/api/rooms', json={
+        'name': 'Turma com Foto',
+        'min_age': 2,
+        'max_age': 5,
+        'capacity': 20,
+        'cover_url': media_url
+    })
+    assert res_room.status_code == 200, res_room.text
+    room_id = res_room.json()['id']
+
+    # Room in GET /rooms includes cover_url
+    rooms = parent_c.get('/api/rooms').json()
+    target_room = next((r for r in rooms if r['id'] == room_id), None)
+    assert target_room is not None
+    assert target_room['cover_url'] == media_url
+
+    # 5. Edit room cover_url
+    res_edit = teacher_c.patch(f'/api/rooms/{room_id}', json={
+        'name': 'Turma com Foto Atualizada',
+        'min_age': 2,
+        'max_age': 5,
+        'capacity': 20,
+        'cover_url': 'https://images.unsplash.com/photo-1519689680058-324335c77eba'
+    })
+    assert res_edit.status_code == 200, res_edit.text
+    rooms_updated = teacher_c.get('/api/rooms').json()
+    target_room_up = next((r for r in rooms_updated if r['id'] == room_id), None)
+    assert target_room_up['cover_url'] == 'https://images.unsplash.com/photo-1519689680058-324335c77eba'
+
+    # 6. Create event with banner_url from media upload
+    res_event = teacher_c.post('/api/events', json={
+        'title': 'EBF com Banner Upload',
+        'description': 'Evento com foto enviada pelo usuário',
+        'category': 'EBF',
+        'target_audience': 'all',
+        'min_age': 0,
+        'max_age': 17,
+        'starts_at': (datetime.now(TZ) + timedelta(days=15)).isoformat(),
+        'ends_at': (datetime.now(TZ) + timedelta(days=16)).isoformat(),
+        'location': 'Templo',
+        'price': 'Gratuito',
+        'max_capacity': 100,
+        'banner_url': media_url
+    })
+    assert res_event.status_code == 200, res_event.text
+    ev_id = res_event.json()['id']
+
+    events = parent_c.get('/api/events').json()
+    target_ev = next((e for e in events if e['id'] == ev_id), None)
+    assert target_ev is not None
+    assert target_ev['banner_url'] == media_url

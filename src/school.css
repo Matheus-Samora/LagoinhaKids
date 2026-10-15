@@ -206,10 +206,14 @@
 }
 
 .simple-room-card {
-  padding: 26px;
+  padding: 0;
   border-radius: 20px;
+  overflow: hidden;
   border: 1.5px solid #e4e4e7;
+  background: #ffffff;
   box-shadow: 0 4px 18px -2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.2s ease;
@@ -219,6 +223,97 @@
   transform: translateY(-3px);
   border-color: #09090b;
   box-shadow: 0 14px 30px -4px rgba(0, 0, 0, 0.1);
+}
+
+.room-card-cover-wrap {
+  position: relative;
+  height: 140px;
+  background: #18181b;
+  overflow: hidden;
+}
+
+.room-card-cover-wrap.placeholder {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: #f4f4f5;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.room-card-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.simple-room-card:hover .room-card-cover-img {
+  transform: scale(1.05);
+}
+
+.room-card-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 65%);
+}
+
+.room-card-age-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.3px;
+  z-index: 2;
+}
+
+.room-card-cover-wrap.placeholder .room-card-age-tag {
+  position: static;
+  background: #09090b;
+  border: 1px solid #27272a;
+}
+
+.room-card-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.room-card-body header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.room-header-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-header-title h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.4px;
+  color: #09090b;
+}
+
+.room-header-title p {
+  font-size: 13px;
+  color: #52525b;
+  margin: 0;
 }
 
 .simple-room-card header {

@@ -455,9 +455,19 @@
     gap: 14px;
   }
 
-  .simple-child-card, .simple-room-card, .lesson-card, .simple-next, .panel {
+  .simple-child-card, .lesson-card, .simple-next, .panel {
     padding: 18px;
     border-radius: 14px;
+  }
+
+  .simple-room-card {
+    padding: 0 !important;
+    border-radius: 14px;
+    overflow: hidden !important;
+  }
+
+  .room-card-body {
+    padding: 16px !important;
   }
 
   .simple-child-card h2, .simple-room-card h2, .lesson-card h2 {
