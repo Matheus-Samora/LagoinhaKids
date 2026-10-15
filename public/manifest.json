@@ -1,7 +1,7 @@
 {
   "name": "Lagoinha Kids",
   "short_name": "Lagoinha Kids",
-  "description": "Cuidado que conecta - Ministério Infantil Lagoinha",
+  "description": "Cuidado que conecta - MinistÃ©rio Infantil Lagoinha",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -15,5 +15,10 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "id": "/",
+  "lang": "pt-BR",
+  "categories": [
+    "education"
   ]
 }

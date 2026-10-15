@@ -111,7 +111,9 @@ def operations(user=Depends(admin)):
 @router.get('/capabilities')
 def capabilities():
     from .push_transport import push_platforms
-    return {'push_platforms':push_platforms(),'password_recovery':mail_ready(),'push':bool(push_platforms()),'google':bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))}
+    from .web_push import ready
+    platforms=push_platforms()+(['web'] if ready() else [])
+    return {'push_platforms':platforms,'password_recovery':mail_ready(),'push':bool(platforms),'google':bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))}
 
 @router.get('/sync')
 def sync_revision(user=Depends(session)):

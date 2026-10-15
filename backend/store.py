@@ -13,6 +13,8 @@ load_dotenv(ROOT / '.env')
 DATA = Path(os.getenv('KIDS_DATA_DIR', str(ROOT / 'runtime'))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / 'kids.sqlite3'
+if os.getenv('K_SERVICE') and not os.getenv('KIDS_DATABASE_URL'):
+    raise RuntimeError('Cloud Run requires KIDS_DATABASE_URL; ephemeral SQLite is forbidden.')
 env_key = os.getenv('KIDS_BIOMETRIC_KEY') or os.getenv('KIDS_MASTER_KEY')
 if env_key:
     raw_key = env_key.strip().encode('utf-8') if isinstance(env_key, str) else env_key
@@ -26,6 +28,10 @@ else:
 
 @contextmanager
 def db():
+    if os.getenv('KIDS_DATABASE_URL'):
+        from .postgres import db as postgres_db
+        with postgres_db() as connection:yield connection
+        return
     conn = sqlite3.connect(DB, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys=ON')
@@ -127,6 +133,9 @@ def migrate_safety_and_health(conn):
 
     if 'session_token' not in {r[1] for r in conn.execute('PRAGMA table_info(device_tokens)')}:
         conn.execute('ALTER TABLE device_tokens ADD COLUMN session_token TEXT NOT NULL DEFAULT ""')
+    conn.execute('''CREATE TABLE IF NOT EXISTS web_subscriptions(
+        id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),
+        endpoint TEXT NOT NULL UNIQUE,keys_json TEXT NOT NULL,session_token TEXT NOT NULL,updated_at TEXT NOT NULL)''')
 
     if 'lessons' in tables:
         l_fields = {r[1] for r in conn.execute('PRAGMA table_info(lessons)')}
@@ -236,6 +245,10 @@ def migrate_school():
     finally:conn.close()
 
 def init():
+    if os.getenv('KIDS_DATABASE_URL'):
+        from .postgres import init as postgres_init
+        postgres_init()
+        return
     with db() as c:
         c.executescript('''
         CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password TEXT,role TEXT NOT NULL CHECK(role IN ('admin','teacher','parent')),active INTEGER NOT NULL DEFAULT 1,google_sub TEXT UNIQUE,created_at TEXT NOT NULL);

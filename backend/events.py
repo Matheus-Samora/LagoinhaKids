@@ -403,6 +403,7 @@ def on_my_way(data: PagingAckIn, user=Depends(session)):
             if not p:
                 resolved = c.execute("SELECT * FROM paging_requests WHERE id=?", (data.paging_id,)).fetchone()
                 if resolved:
+                    child_allowed(c,user,resolved['child_id'])
                     ch_res = c.execute("SELECT name FROM children WHERE id=?", (resolved['child_id'],)).fetchone()
                     return {'ok': True, 'child_name': ch_res['name'] if ch_res else 'seu filho', 'status': 'resolved', 'claim_code': resolved['claim_code'], 'message': 'Este chamado já havia sido concluído.'}
         if not p and data.child_id:
@@ -415,31 +416,14 @@ def on_my_way(data: PagingAckIn, user=Depends(session)):
                 WHERE (ch.parent_id=? OR fl.user_id=?) AND p.status IN ('active','on_my_way')
                 ORDER BY p.id DESC LIMIT 1
             """, (user['id'], user['id'])).fetchone()
-        if not p and user.get('role') in ('admin', 'teacher'):
-            p = c.execute("SELECT * FROM paging_requests WHERE status IN ('active','on_my_way') ORDER BY id DESC LIMIT 1").fetchone()
-
-        if not p:
-            recipients = [r[0] for r in c.execute("SELECT id FROM users WHERE role IN ('admin', 'teacher') AND active=1")]
-            msg = f"O usuário {user['name']} confirmou 'Estou a caminho' (notificação de teste ou chamado prévio)."
-            for uid in set(recipients):
-                c.execute("""
-                    INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at)
-                    VALUES(?, NULL, 'arriving', '🏃 Responsável a Caminho (Teste)', ?, ?, ?)
-                """, (uid, msg, user['id'], now))
-            s.audit(c, user['id'], 'paging_on_my_way_test')
-            return {
-                'ok': True,
-                'child_name': 'Demonstração',
-                'status': 'on_my_way',
-                'claim_code': 'DEMO-OK',
-                'demo': True,
-                'message': 'Aviso de confirmação enviado à equipe administrativa com sucesso.'
-            }
+        if not p:fail('paging_not_found','Chamado ativo não encontrado.',404)
 
         ch = c.execute("SELECT * FROM children WHERE id=?", (p['child_id'],)).fetchone()
         if not ch:
             fail('child_not_found', 'Criança não encontrada.', 404)
 
+        if user['role']!='parent' or not child_visible(c,user,ch):fail('scope','Chamado de outra família.',403)
+        if p['status']=='on_my_way':return {'ok':True,'status':'on_my_way'}
         c.execute("""
             UPDATE paging_requests
             SET status='on_my_way', acknowledged_at=?, acknowledged_by=?

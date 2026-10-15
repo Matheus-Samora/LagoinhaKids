@@ -4,9 +4,10 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from . import store as s
 from .push_transport import fcm_ready,apns_ready,send_apns
+from . import web_push
 
 def deliver_batch(limit=50):
-    if not fcm_ready() and not apns_ready():return {'configured':False,'sent':0}
+    if not fcm_ready() and not apns_ready() and not web_push.ready():return {'configured':False,'sent':0}
     credentials=None
     if fcm_ready():
         credentials=service_account.Credentials.from_service_account_file(os.environ['GOOGLE_APPLICATION_CREDENTIALS'],scopes=['https://www.googleapis.com/auth/firebase.messaging'])
@@ -18,9 +19,15 @@ def deliver_batch(limit=50):
         try:
             with s.db() as c:tokens=[dict(r) for r in c.execute('SELECT token,platform FROM device_tokens WHERE user_id=?',(row['user_id'],))]
             tokens=[r for r in tokens if (r['platform']=='android' and credentials) or (r['platform']=='ios' and apns_ready())]
-            if not tokens:
+            with s.db() as c:
+                c.execute('BEGIN IMMEDIATE')
+                claimed=c.execute('UPDATE outbox SET next_attempt=? WHERE id=? AND status="pending" AND next_attempt<=?',(int(time.time())+1800,row['id'],int(time.time()))).rowcount
+                if not claimed:continue
+                subscriptions=[dict(r) for r in c.execute('SELECT w.* FROM web_subscriptions w JOIN users u ON u.id=w.user_id WHERE w.user_id=? AND u.active=1',(row['user_id'],))] if web_push.ready() else []
+            if not tokens and not subscriptions:
                 with s.db() as c:c.execute('UPDATE outbox SET next_attempt=? WHERE id=?',(int(time.time())+3600,row['id']))
                 continue
+            for subscription in subscriptions:web_push.send(subscription,row['notification_id'])
             for device in tokens:
                 token=device['token']
                 # Do not put children's names, health details or pickup codes on lock screens.

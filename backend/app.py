@@ -58,7 +58,7 @@ async def protection(request:Request,call_next):
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY'})
     return response
 
-CSRF_EXEMPT_PATHS = {'/api/paging/on-my-way'}
+CSRF_EXEMPT_PATHS = set()
 app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client','X-Service-Worker'])
 
 def session(request:Request):
@@ -169,6 +169,7 @@ def logout(response:Response,user=Depends(session)):
     with s.db() as c:
         c.execute('DELETE FROM sessions WHERE token=?',(user['token'],))
         c.execute('DELETE FROM device_tokens WHERE user_id=? AND session_token=?',(user['id'],user['token']))
+        c.execute('DELETE FROM web_subscriptions WHERE user_id=? AND session_token=?',(user['id'],user['token']))
     response.delete_cookie(COOKIE,path='/');return {'ok':True}
 class PasswordChange(BaseModel):
     current:str=Field(max_length=128)
@@ -478,6 +479,8 @@ app.include_router(school_router)
 
 from .events import router as events_router
 app.include_router(events_router)
+from .web_push import router as web_push_router
+app.include_router(web_push_router)
 
 WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 

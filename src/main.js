@@ -1,3 +1,4 @@
+import {subscribeWebPush} from './web-push.js';
 import {createSchoolUI} from './school.js';
 import {generateQR, openScannerModal, initUSBScannerListener} from './scanner.js';
 import './style.css';
@@ -616,7 +617,7 @@ document.addEventListener('click',async e=>{
   renderLogin(false);
   toast('Conta removida da lista deste aparelho.');
  }
- if(action==='logout'){await api('/auth/logout',{method:'POST'}).catch(()=>{});S.user=null;S.csrf='';S.token='';navHistory.length=0;renderLogin();toast('Sessão encerrada com sucesso.');}
+ if(action==='logout'){localStorage.removeItem('lagoinha_web_push_registered');localStorage.removeItem('lagoinha_push_enabled');await api('/auth/logout',{method:'POST'}).catch(()=>{});S.user=null;S.csrf='';S.token='';navHistory.length=0;renderLogin();toast('Sessão encerrada com sucesso.');}
  if(action==='open-push-modal')promptPushPermissionModal();
  if(action==='activate-notifications')await requestNotificationPermission(true);
  if(action==='dismiss-push-modal'){localStorage.setItem('lagoinha_push_dismissed_until',String(Date.now()+86400000*3));sessionStorage.setItem('lagoinha_push_session_dismissed','true');modal.close();}
@@ -872,7 +873,7 @@ window.addEventListener('beforeunload',event=>{if(formDirty){event.preventDefaul
 
 
 function hasPushPermission(){
-  if(typeof Notification!=='undefined'&&Notification.permission==='granted')return true;
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted'&&localStorage.getItem('lagoinha_web_push_registered')==='true')return true;
   if(localStorage.getItem('lagoinha_push_enabled')==='true')return true;
   return false;
 }
@@ -950,9 +951,10 @@ async function initNativeNotifications(){
 }
 
 async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging }){
-  const notifTitle=title||'Lagoinha Kids';
+  const notifTitle='Lagoinha Kids';
+  if(!NATIVE)return;
   const urgent=kind==='urgent_call'||isPaging;
-  const notifBody=message||'Você recebeu um novo comunicado.';
+  const notifBody='Você recebeu um novo aviso. Abra o aplicativo para conferir.';
 
   // 1. Se estiver no app nativo (APK Android / iOS)
   if(NATIVE){
@@ -1121,9 +1123,10 @@ async function requestNotificationPermission(explicit=true){
   try{
     const permission=await Notification.requestPermission();
     if(permission==='granted'){
+      await subscribeWebPush(api);
       localStorage.setItem('lagoinha_push_enabled','true');
       modal.close();
-      toast('🔔 Notificações ativadas com sucesso!');
+      toast('Notificações registradas neste aparelho.');
       sendSystemNotification({
         title:'Lagoinha Kids · Notificações Ativas',
         message:'Tudo pronto! Você receberá os avisos do seu filho na tela de bloqueio.',
@@ -1143,24 +1146,10 @@ async function requestNotificationPermission(explicit=true){
   }
 }
 
-function testSystemNotification(){
-  if(!hasPushPermission()){
-    promptPushPermissionModal();
-    return;
-  }
-  const defaultChild = (S.children && S.children.length) ? S.children[0] : null;
-  const childId = defaultChild ? defaultChild.id : 1;
-  const childName = defaultChild ? defaultChild.name : 'Lucas Oliveira';
-  sendSystemNotification({
-    title:`⚠️ Chamado da Salinha - ${childName}`,
-    message:`${childName} precisa da sua presença na salinha. Toque em Estou a caminho!`,
-    tag:'test-notification-'+Date.now(),
-    isPaging:true,
-    kind:'urgent_call',
-    child_id:childId,
-    paging_id:null
-  });
-  toast('🔔 Alerta prioritário enviado para o topo do celular!');
+async function testSystemNotification(){
+ if(!NATIVE){try{const result=await api('/web-push/test',{method:'POST'});toast(result.message);}catch(error){toast(error.message,true);}return;}
+ await sendSystemNotification({title:'Lagoinha Kids',message:'Teste de notificações',tag:'test-'+Date.now()});
+ toast('Teste local solicitado ao celular.');
 }
 
 function checkAutoPromptPush(){

@@ -1,128 +1,21 @@
-// Lagoinha Kids Service Worker - Live Server Real-Time Updates & External Notifications
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+// Private API responses and photographs are never cached.
+self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch',event=>{
+ if(event.request.mode==='navigate')event.respondWith(fetch(event.request).catch(()=>new Response('<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width"><title>Lagoinha Kids</title><body style="font-family:system-ui;padding:32px"><h1>Você está sem conexão</h1><p>Conecte-se à internet para consultar ou salvar informações.</p><button onclick="location.reload()">Tentar novamente</button></body></html>',{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}})));
 });
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-  );
-  self.clients.claim();
+self.addEventListener('push',event=>{
+ let data={};try{data=event.data?.json()||{};}catch{}
+ event.waitUntil(self.registration.showNotification('Lagoinha Kids',{
+  body:'Você recebeu um novo aviso. Abra o aplicativo para conferir.',icon:'/logo.png',badge:'/logo.png',
+  tag:data.tag||`notice-${data.id||Date.now()}`,data:{url:'/#notifications',id:data.id||null}
+ }));
 });
-
-// Do not intercept network requests - always load live server assets directly
-self.addEventListener('fetch', (event) => {
-  return;
+self.addEventListener('notificationclick',event=>{
+ event.notification.close();
+ event.waitUntil((async()=>{
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  for(const client of windows){if(new URL(client.url).origin===self.location.origin){client.postMessage({type:'NAVIGATE_PAGE',page:'notifications'});return client.focus();}}
+  return self.clients.openWindow('/#notifications');
+ })());
 });
-
-// Push notification received from server (Web Push / FCM)
-self.addEventListener('push', (event) => {
-  let data = {
-    title: 'Lagoinha Kids',
-    body: 'Você recebeu um novo aviso do ministério infantil.',
-    tag: 'lagoinha-kids-notification',
-    url: '/?page=notifications',
-    kind: 'general'
-  };
-
-  if (event.data) {
-    try {
-      const parsed = event.data.json();
-      data = { ...data, ...parsed };
-    } catch {
-      data.body = event.data.text() || data.body;
-    }
-  }
-
-  const isUrgent = data.kind === 'urgent_call' || data.isPaging === true;
-
-  const options = {
-    body: data.body || data.message || 'Abra o app para conferir os detalhes.',
-    icon: '/logo.png',
-    badge: '/logo.png',
-    tag: data.tag || (isUrgent ? 'urgent-call-' + (data.child_id || Date.now()) : 'lagoinha-notice-' + Date.now()),
-    renotify: true,
-    requireInteraction: isUrgent, // Stays pinned on Android/Desktop until responded!
-    data: {
-      url: data.url || (isUrgent ? '/?page=overview' : '/?page=notifications'),
-      id: data.id || null,
-      child_id: data.child_id || null,
-      paging_id: data.paging_id || null,
-      kind: data.kind || 'general',
-      isPaging: isUrgent
-    },
-    vibrate: isUrgent ? [300, 150, 300, 150, 300, 150, 400] : [200, 100, 200]
-  };
-
-  if (isUrgent) {
-    options.actions = [
-      { action: 'on_my_way', title: '🏃 Estou a caminho' },
-      { action: 'open_app', title: 'Ver detalhes' }
-    ];
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'Lagoinha Kids', options)
-  );
-});
-
-// Handle clicking notifications on OS lock screen / notification center
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const notifData = event.notification.data || {};
-  const targetUrl = notifData.url || '/?page=notifications';
-
-  if (event.action === 'on_my_way') {
-    // Parent clicked "Estou a caminho" directly from the OS notification bar!
-    const ackPromise = fetch('/api/paging/on-my-way', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Service-Worker': '1'
-      },
-      body: JSON.stringify({
-        child_id: notifData.child_id || null,
-        paging_id: notifData.paging_id || null
-      }),
-      credentials: 'include'
-    })
-      .then(async (response) => {
-        let childName = 'seu filho';
-        try {
-          const res = await response.json();
-          if (res.child_name) childName = res.child_name;
-        } catch {}
-        return self.registration.showNotification('Lagoinha Kids · Resposta Confirmada', {
-          body: `A salinha e o administrativo já foram avisados que você está a caminho de ${childName}!`,
-          icon: '/logo.png',
-          badge: '/logo.png',
-          tag: 'ack-confirmed',
-          data: { url: '/?page=overview' }
-        });
-      })
-      .catch((err) => {
-        console.error('Falha ao registrar estou a caminho no Service Worker:', err);
-      });
-
-    event.waitUntil(
-      ackPromise.then(() => focusOrOpen(targetUrl))
-    );
-    return;
-  }
-
-  event.waitUntil(focusOrOpen(targetUrl));
-});
-
-function focusOrOpen(targetUrl) {
-  return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-    for (const client of clientList) {
-      if ('focus' in client) {
-        client.postMessage({ type: 'NAVIGATE_PAGE', page: targetUrl.includes('overview') ? 'overview' : 'notifications' });
-        return client.focus();
-      }
-    }
-    if (clients.openWindow) {
-      return clients.openWindow(targetUrl);
-    }
-  });
-}
