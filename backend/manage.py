@@ -4,6 +4,7 @@ from pathlib import Path
 from . import store as s
 
 def backup(destination):
+    if os.getenv('KIDS_DATABASE_URL'):raise RuntimeError('Use Cloud SQL managed backups or pg_dump for PostgreSQL.')
     target=Path(destination).resolve();target.parent.mkdir(parents=True,exist_ok=True)
     if target==s.DB:raise ValueError('O backup deve usar outro arquivo.')
     with closing(sqlite3.connect(s.DB)) as source,closing(sqlite3.connect(target)) as copy:

@@ -110,6 +110,9 @@ def test_mfa_enrollment_login_and_recovery_codes():
     assert c.post('/api/auth/login',json=data|{'otp':recovery}).status_code==401
 
 def test_backup_restore_integrity(tmp_path):
+    if os.getenv('KIDS_DATABASE_URL'):
+        import pytest
+        pytest.skip('SQLite physical backup; PostgreSQL backups are managed by Cloud SQL.')
     from backend.manage import backup
     import sqlite3
     target=backup(tmp_path/'copy.sqlite3')

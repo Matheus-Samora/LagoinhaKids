@@ -119,7 +119,7 @@ def capabilities():
 def sync_revision(user=Depends(session)):
     with s.db() as c:
         change=c.execute('SELECT coalesce(max(id),0) FROM audit').fetchone()[0]
-        notice=c.execute('SELECT coalesce(max(id),0),coalesce(max(read_at),"") FROM notifications WHERE user_id=?',(user['id'],)).fetchone()
+        notice=c.execute('SELECT coalesce(max(id),0) notice_id,coalesce(max(read_at),"") read_stamp FROM notifications WHERE user_id=?',(user['id'],)).fetchone()
         # Minute boundary updates expiry-derived lists without reloading full lists every poll.
         return {'revision':s.digest(f'{change}|{notice[0]}|{notice[1]}|{int(time.time())//60}')}
 
