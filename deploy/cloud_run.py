@@ -27,6 +27,8 @@ def api(method,path,payload=None):
 def secret(name,value):
     if gcloud('secrets','describe',name,check=False).returncode:
         gcloud('secrets','create',name,'--replication-policy=automatic')
+    versions=json.loads(gcloud('secrets','versions','list',name,'--filter=state:ENABLED','--limit=1','--format=json').stdout)
+    if not versions:
         api('POST',f'secretmanager.googleapis.com/v1/projects/{PROJECT}/secrets/{name}:addVersion',{'payload':{'data':base64.b64encode(value.encode()).decode()}})
     gcloud('secrets','add-iam-policy-binding',name,'--member=serviceAccount:'+SA,'--role=roles/secretmanager.secretAccessor')
 
@@ -68,7 +70,7 @@ def main():
         gcloud('artifacts','repositories','create',REPOSITORY,'--location='+REGION,'--repository-format=docker')
     if gcloud('sql','instances','describe',INSTANCE,check=False).returncode:
         info('Creating dedicated PostgreSQL instance. This creates ongoing database charges.')
-        gcloud('sql','instances','create',INSTANCE,'--database-version=POSTGRES_16','--edition=ENTERPRISE','--tier=db-f1-micro','--region='+REGION,'--storage-size=10GB','--backup-start-time=03:00','--availability-type=ZONAL','--deletion-protection')
+        gcloud('sql','instances','create',INSTANCE,'--database-version=POSTGRES_16','--edition=ENTERPRISE','--tier=db-f1-micro','--region='+REGION,'--storage-size=10','--backup-start-time=03:00','--availability-type=ZONAL','--deletion-protection')
     instance=json.loads(gcloud('sql','instances','describe',INSTANCE,'--format=json').stdout)
     connection=instance['connectionName']
     password_file=STATE/'database-password.txt'
@@ -76,6 +78,8 @@ def main():
     password=password_file.read_text().strip()
     if gcloud('sql','databases','describe','kids','--instance='+INSTANCE,check=False).returncode:
         gcloud('sql','databases','create','kids','--instance='+INSTANCE)
+    users=json.loads(gcloud('sql','users','list','--instance='+INSTANCE,'--format=json').stdout)
+    if not any(user['name']=='kids' for user in users):
         api('POST',f'sqladmin.googleapis.com/sql/v1beta4/projects/{PROJECT}/instances/{INSTANCE}/users',{'name':'kids','password':password})
     # First import only; an existing deployment must never overwrite server data.
     if not (STATE/'import-completed').exists():
