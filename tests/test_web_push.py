@@ -59,3 +59,23 @@ def test_seed_disabled_by_default(monkeypatch):
     monkeypatch.delenv('KIDS_ALLOW_DEMO_SEED',raising=False)
     with pytest.raises(RuntimeError,match='Demonstration data disabled'):s.seed()
     with s.db() as c:assert c.execute('SELECT count(*) FROM users').fetchone()[0]==4
+
+def test_real_web_push_encryption_without_network(monkeypatch):
+    import requests,http_ece
+    from backend import web_push_transport
+    data=configure(monkeypatch)
+    receiver=ec.generate_private_key(ec.SECP256R1())
+    public=receiver.public_key().public_bytes(serialization.Encoding.X962,serialization.PublicFormat.UncompressedPoint)
+    auth=b'a'*16
+    data['keys']['p256dh']=base64.urlsafe_b64encode(public).rstrip(b'=').decode()
+    captured={}
+    def request(self,method,url,**kwargs):
+        captured.update(kwargs)
+        response=requests.Response();response.status_code=201;response._content=b'';return response
+    monkeypatch.setattr(requests.sessions.Session,'request',request)
+    assert web_push_transport.send({'endpoint':data['endpoint'],'keys_json':json.dumps(data['keys'])},123)
+    payload=http_ece.decrypt(captured['data'],private_key=receiver,auth_secret=auth,version='aes128gcm')
+    decoded=json.loads(payload)
+    assert decoded['id']==123 and decoded['url']=='/#notifications'
+    assert decoded['body']=='Você recebeu um novo aviso. Abra o aplicativo para conferir.'
+    assert 'authorization' in {k.lower() for k in captured['headers']}
