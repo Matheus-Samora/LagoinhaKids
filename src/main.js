@@ -12,9 +12,15 @@ import {LocalNotifications} from '@capacitor/local-notifications';
 
 const app=document.getElementById('app'), modal=document.getElementById('modal');
 const NATIVE=Capacitor.isNativePlatform();
-const DEFAULT_TUNNEL='https://mountain-interactive-doors-suit.trycloudflare.com';
+const DEFAULT_SERVER='https://lagoinha-kids-82569578125.southamerica-east1.run.app';
 let storedServer='';
-try{storedServer=NATIVE?(localStorage.getItem('kids_server')||DEFAULT_TUNNEL):'';}catch{}
+try{
+ if(NATIVE){
+  const saved=localStorage.getItem('kids_server');
+  const hosted=location.protocol==='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)?location.origin:'';
+  storedServer=saved&&!saved.includes('.trycloudflare.com')?saved:(hosted||DEFAULT_SERVER);
+ }
+}catch{}
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;});
 const S={apiOrigin:storedServer,token:'',user:null,csrf:'',rooms:[],lessons:[],events:[],eventAudience:'all',activePaging:[],activeGuests:[],selectedChild:null,selectedLesson:null,children:[],notifications:[],users:[],audit:[],page:'overview',search:'',room:'all',google:false,busy:false,stream:null,faceFile:null,faceUrl:null,faceMode:'enroll'};
