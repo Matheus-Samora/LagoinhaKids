@@ -27,15 +27,19 @@ class RoomIn(BaseModel):
     max_age:int=Field(ge=0,le=17)
     capacity:int=Field(ge=1,le=100)
     owner_id:int|None=None
+    teacher_id:int|None=None
+    monitor_id:int|None=None
     version:int|None=Field(default=None,ge=1)
     cover_url:str|None=Field(default='',max_length=500)
 def validate_room(c,data,user,is_edit=False):
     if not data.name.strip() or data.max_age<data.min_age:fail('room','Confira o nome e a faixa etária.')
     if data.cover_url and not (data.cover_url.startswith('https://') or data.cover_url.startswith('/api/media/') or data.cover_url.startswith('/')):
         fail('cover','A imagem de capa deve usar HTTPS ou ser enviada pelo app.')
-    owner=data.owner_id or user['id']
+    owner=data.teacher_id or data.owner_id or user['id']
     if not is_edit and user['role']!='admin' and owner!=user['id']:fail('owner','Você só pode criar turmas em seu próprio nome.',403)
     if not c.execute('SELECT 1 FROM users WHERE id=? AND role IN ("teacher","admin") AND active=1',(owner,)).fetchone():fail('owner','Escolha um professor ou administrador ativo.')
+    if data.monitor_id and not c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(data.monitor_id,)).fetchone():
+        fail('monitor','Monitor inválido.')
     return owner
 def sync_owner(c,rid,owner):
     c.execute('DELETE FROM teacher_rooms WHERE room_id=?',(rid,))
@@ -46,21 +50,36 @@ def sync_owner(c,rid,owner):
 @router.get('/rooms')
 def rooms(user=Depends(session)):
     with s.db() as c:
-        rows=c.execute('SELECT r.*,u.name owner_name FROM rooms r LEFT JOIN users u ON u.id=r.created_by WHERE r.active=1 ORDER BY r.name').fetchall()
-        if user['role']=='parent':return [{k:r[k] for k in ('id','name','min_age','max_age','capacity','color','cover_url','owner_name')} for r in rows]
+        rows=c.execute('''
+            SELECT r.*,
+                   coalesce(ut.name, u.name, 'Equipe Lagoinha Kids') owner_name,
+                   coalesce(ut.name, u.name, 'Equipe Lagoinha Kids') teacher_name,
+                   coalesce(ut.avatar_url, '') teacher_avatar,
+                   coalesce(um.name, '') monitor_name,
+                   coalesce(um.avatar_url, '') monitor_avatar
+            FROM rooms r
+            LEFT JOIN users u ON u.id=r.created_by
+            LEFT JOIN users ut ON ut.id=coalesce(r.teacher_id, r.created_by)
+            LEFT JOIN users um ON um.id=r.monitor_id
+            WHERE r.active=1
+            ORDER BY r.name
+        ''').fetchall()
+        if user['role']=='parent':return [{k:r[k] for k in ('id','name','min_age','max_age','capacity','color','cover_url','owner_name','teacher_id','teacher_name','teacher_avatar','monitor_id','monitor_name','monitor_avatar')} for r in rows]
         result=[]
         for r in rows:
             if not room_allowed(c,user,r['id']):continue
             total=c.execute('SELECT count(*) FROM children ch WHERE ch.archived=0 AND (ch.room_id=? OR EXISTS(SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=ch.id AND b.confirmed=1 AND l.room_id=? AND l.active=1))',(r['id'],r['id'])).fetchone()[0]
             present=c.execute('SELECT count(*) FROM attendance a JOIN children ch ON ch.id=a.child_id WHERE ch.archived=0 AND ch.room_id=? AND a.day=? AND a.status="present"',(r['id'],s.today())).fetchone()[0]
-            teachers=[dict(t) for t in c.execute('SELECT u.id,u.name FROM users u JOIN teacher_rooms tr ON tr.user_id=u.id WHERE tr.room_id=? AND u.active=1',(r['id'],))]
+            teachers=[dict(t) for t in c.execute('SELECT u.id,u.name,coalesce(u.staff_role,"teacher") staff_role FROM users u JOIN teacher_rooms tr ON tr.user_id=u.id WHERE tr.room_id=? AND u.active=1',(r['id'],))]
             result.append(dict(r)|{'total':total,'present':present,'teachers':teachers})
         return result
 @router.post('/rooms')
 def create_room(data:RoomIn,user=Depends(staff)):
     with s.db() as c:
         owner=validate_room(c,data,user,is_edit=False)
-        rid=c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color,cover_url,created_by) VALUES(?,?,?,?,?,?,?)',(data.name.strip(),data.min_age,data.max_age,data.capacity,'#27272a',data.cover_url or '',owner)).lastrowid
+        t_id=data.teacher_id or owner
+        m_id=data.monitor_id
+        rid=c.execute('INSERT INTO rooms(name,min_age,max_age,capacity,color,cover_url,created_by,teacher_id,monitor_id) VALUES(?,?,?,?,?,?,?,?,?)',(data.name.strip(),data.min_age,data.max_age,data.capacity,'#27272a',data.cover_url or '',owner,t_id,m_id)).lastrowid
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_created')
     return {'id':rid}
 @router.patch('/rooms/{rid}')
@@ -70,16 +89,18 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
         existing=room_for_edit(c,user,rid)
         if data.version is not None and data.version!=existing['version']:fail('conflict','Esta turma foi alterada. Atualize a tela e confira antes de salvar.',409)
         if user['role']!='admin':
-            owner=existing['created_by'] or user['id']
+            owner=existing['teacher_id'] or existing['created_by'] or user['id']
         else:
-            owner=data.owner_id or existing['created_by'] or user['id']
+            owner=data.teacher_id or data.owner_id or existing['teacher_id'] or existing['created_by'] or user['id']
         data=data.model_copy(update={'owner_id':owner})
         owner=validate_room(c,data,user,is_edit=True)
+        t_id=data.teacher_id or owner
+        m_id=data.monitor_id
         maximum=c.execute('SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1 GROUP BY l.id)',(rid,s.now())).fetchone()[0]
         if maximum>data.capacity:fail('capacity','Já existem aulas com mais confirmações que essa capacidade.',409)
         booked=c.execute('SELECT ch.birthday,l.starts_at FROM reservations b JOIN lessons l ON l.id=b.lesson_id JOIN children ch ON ch.id=b.child_id WHERE l.room_id=? AND l.active=1 AND l.ends_at>? AND b.confirmed=1',(rid,s.now())).fetchall()
         if any(not data.min_age<=age_on(row['birthday'],row['starts_at'])<=data.max_age for row in booked):fail('age','A nova faixa etária exclui alunos já confirmados. Ajuste as confirmações antes.',409)
-        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,cover_url=?,created_by=?,version=version+1 WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,data.cover_url or '',owner,rid))
+        c.execute('UPDATE rooms SET name=?,min_age=?,max_age=?,capacity=?,cover_url=?,created_by=?,teacher_id=?,monitor_id=?,version=version+1 WHERE id=?',(data.name.strip(),data.min_age,data.max_age,data.capacity,data.cover_url or '',owner,t_id,m_id,rid))
         sync_owner(c,rid,owner);s.audit(c,user['id'],'room_updated')
     return {'ok':True}
 @router.delete('/rooms/{rid}')
@@ -197,6 +218,10 @@ class LessonIn(BaseModel):
     starts_at:datetime
     ends_at:datetime
     repeat_weeks:int=Field(default=1,ge=1,le=12)
+    teacher_id:int|None=None
+    monitor_id:int|None=None
+    materials_url:str|None=Field(default='',max_length=500)
+    notes:str|None=Field(default='',max_length=2000)
 def normalize_lesson(c,data,user,lid=None):
     if not data.title.strip():fail('title','Informe o nome da aulinha.')
     room=room_for_edit(c,user,data.room_id)
@@ -209,7 +234,21 @@ def normalize_lesson(c,data,user,lid=None):
 @router.get('/lessons')
 def lessons(user=Depends(session)):
     with s.db() as c:
-        rows=c.execute('SELECT l.*,r.name room_name,r.min_age,r.max_age,r.capacity,u.name teacher_name FROM lessons l JOIN rooms r ON r.id=l.room_id LEFT JOIN users u ON u.id=r.created_by WHERE l.active=1 AND r.active=1 AND l.ends_at>? ORDER BY l.starts_at',(s.now(),)).fetchall()
+        rows=c.execute('''
+            SELECT l.*,
+                   r.name room_name, r.min_age, r.max_age, r.capacity,
+                   coalesce(ut.name, u.name, 'Equipe Lagoinha Kids') teacher_name,
+                   coalesce(ut.avatar_url, '') teacher_avatar,
+                   coalesce(um.name, '') monitor_name,
+                   coalesce(um.avatar_url, '') monitor_avatar
+            FROM lessons l
+            JOIN rooms r ON r.id=l.room_id
+            LEFT JOIN users u ON u.id=r.created_by
+            LEFT JOIN users ut ON ut.id=coalesce(l.teacher_id, r.teacher_id, r.created_by)
+            LEFT JOIN users um ON um.id=coalesce(l.monitor_id, r.monitor_id)
+            WHERE l.active=1 AND r.active=1 AND l.ends_at>?
+            ORDER BY l.starts_at
+        ''',(s.now(),)).fetchall()
         result=[]
         for row in rows:
             if user['role']!='parent' and not room_allowed(c,user,row['room_id']):continue
@@ -222,11 +261,17 @@ def lessons(user=Depends(session)):
 def create_lesson(data:LessonIn,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        target_room=c.execute('SELECT teacher_id, created_by, monitor_id FROM rooms WHERE id=?',(data.room_id,)).fetchone()
+        t_id=data.teacher_id or (target_room['teacher_id'] if target_room else None) or (target_room['created_by'] if target_room else None) or user['id']
+        m_id=data.monitor_id or (target_room['monitor_id'] if target_room else None)
         ids=[]
         for week in range(data.repeat_weeks):
             occurrence=data.model_copy(update={'starts_at':data.starts_at+timedelta(weeks=week),'ends_at':data.ends_at+timedelta(weeks=week)})
             start,end=normalize_lesson(c,occurrence,user)
-            ids.append(c.execute('INSERT INTO lessons(room_id,title,starts_at,ends_at,created_by) VALUES(?,?,?,?,?)',(data.room_id,data.title.strip(),start,end,user['id'])).lastrowid)
+            ids.append(c.execute('''
+                INSERT INTO lessons(room_id,title,starts_at,ends_at,created_by,teacher_id,monitor_id,materials_url,notes)
+                VALUES(?,?,?,?,?,?,?,?,?)
+            ''',(data.room_id,data.title.strip(),start,end,user['id'],t_id,m_id,(data.materials_url or '').strip(),(data.notes or '').strip())).lastrowid)
         s.audit(c,user['id'],'lesson_created')
     return {'id':ids[0],'ids':ids}
 @router.patch('/lessons/{lid}')
@@ -241,7 +286,14 @@ def edit_lesson(lid:int,data:LessonIn,user=Depends(staff)):
             if c.execute('SELECT 1 FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1 AND l.id!=? AND l.starts_at<? AND l.ends_at>?',(ch['id'],lid,end,start)).fetchone():fail('overlap','O novo horário conflita com outra aula de um aluno confirmado.',409)
             room=c.execute('SELECT * FROM rooms WHERE id=?',(data.room_id,)).fetchone()
             if not room['min_age']<=age_on(ch['birthday'],start)<=room['max_age']:fail('age','A nova data é incompatível com a idade de um aluno confirmado.',409)
-        c.execute('UPDATE lessons SET room_id=?,title=?,starts_at=?,ends_at=? WHERE id=?',(data.room_id,data.title.strip(),start,end,lid))
+        target_room=c.execute('SELECT teacher_id, created_by, monitor_id FROM rooms WHERE id=?',(data.room_id,)).fetchone()
+        t_id=data.teacher_id or (target_room['teacher_id'] if target_room else None) or old['teacher_id'] or user['id']
+        m_id=data.monitor_id if data.monitor_id is not None else old['monitor_id']
+        c.execute('''
+            UPDATE lessons
+            SET room_id=?,title=?,starts_at=?,ends_at=?,teacher_id=?,monitor_id=?,materials_url=?,notes=?
+            WHERE id=?
+        ''',(data.room_id,data.title.strip(),start,end,t_id,m_id,(data.materials_url or '').strip(),(data.notes or '').strip(),lid))
         for ch in booked:publish_notice(c,user['id'],ch,'Horário da aulinha atualizado',f'{data.title}: {start[:10]} às {start[11:16]}. Confira a agenda no aplicativo.')
         s.audit(c,user['id'],'lesson_updated')
     return {'ok':True}

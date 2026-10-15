@@ -26,10 +26,10 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 function isStandalone(){
  return NATIVE || (typeof window!=='undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator?.standalone===true));
 }
-const S={apiOrigin:storedServer,token:'',user:null,csrf:'',rooms:[],lessons:[],events:[],eventAudience:'all',activePaging:[],activeGuests:[],selectedChild:null,selectedLesson:null,children:[],notifications:[],users:[],audit:[],page:'overview',search:'',room:'all',google:false,busy:false,stream:null,faceFile:null,faceUrl:null,faceMode:'enroll'};
+const S={apiOrigin:storedServer,token:'',user:null,csrf:'',rooms:[],lessons:[],events:[],eventAudience:'all',activePaging:[],activeGuests:[],selectedChild:null,selectedLesson:null,children:[],notifications:[],users:[],audit:[],page:'overview',search:'',room:'all',google:false,busy:false,stream:null,faceFile:null,faceUrl:null,faceMode:'enroll',teamMembers:[],teamCandidates:[],teamFilter:'all'};
 const roles={admin:'Administração',teacher:'Professora / Professor',parent:'Responsável'};
 const statusName={absent:'Não chegou',present:'Na salinha',departed:'Saída registrada'};
-const paths={overview:'Visão geral',children:'Alunos',rooms:'Turmas',attendance:'Chamada',events:'Mural de Eventos',lessons:'Aulinhas',notifications:'Notificações',users:'Usuários e acessos',settings:'Minha conta'};
+const paths={overview:'Visão geral',children:'Alunos',rooms:'Turmas',team:'Professores e Monitores',attendance:'Chamada',events:'Mural de Eventos',lessons:'Aulinhas',notifications:'Notificações',users:'Usuários e acessos',settings:'Minha conta'};
 const escape=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=(name)=>escape(name.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join(''));
 const userAvatar=(user,size='mini')=>{
@@ -97,18 +97,32 @@ async function familyModal(ch){
 }
 async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
- const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests]=await Promise.all([api('/children'),api('/rooms'),api('/notifications'),api('/lessons'),api('/events'),api('/paging/active'),S.user.role==='admin'?api('/users'):[],S.user.role==='admin'?api('/audit'):[],S.user.role!=='parent'?api('/guests/active'):[]]);
- Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests});render();
+ const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamData]=await Promise.all([
+  api('/children'),
+  api('/rooms'),
+  api('/notifications'),
+  api('/lessons'),
+  api('/events'),
+  api('/paging/active'),
+  S.user.role==='admin'?api('/users'):[],
+  S.user.role==='admin'?api('/audit'):[],
+  S.user.role!=='parent'?api('/guests/active'):[],
+  S.user.role!=='parent'?api('/team').catch(()=>({members:[],candidates:[]})):{members:[],candidates:[]}
+ ]);
+ const teamMembers=teamData?.members||[];
+ const teamCandidates=teamData?.candidates||[];
+ Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamMembers,teamCandidates});
+ render();
 }
 function navItems(){
  if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell']];
- if(S.user.role==='teacher')return [['rooms','Minhas turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell']];
- return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['children','Alunos','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']];
+ if(S.user.role==='teacher')return [['rooms','Minhas turmas','rooms'],['team','Equipe','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell']];
+ return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['team','Professores e Monitores','kids'],['children','Alunos','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']];
 }
 function mobileNavItems(){
  if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell'],['settings','Conta','settings']];
- if(S.user.role==='teacher')return [['rooms','Turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
- return [['overview','Visão','home'],['rooms','Turmas','rooms'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ if(S.user.role==='teacher')return [['rooms','Turmas','rooms'],['team','Equipe','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
+ return [['overview','Visão','home'],['rooms','Turmas','rooms'],['team','Equipe','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['settings','Conta','settings']];
 }
 const navHistory=[];
 let lastBackTime=0;
@@ -233,6 +247,85 @@ function pagingAlertBanner(){
  </div>`;
 }
 
+function teamPage(){
+ const staff=S.user&&S.user.role!=='parent';
+ if(!staff)return empty('Acesso restrito','Esta área é exclusiva para professores e administração do Lagoinha Kids.');
+
+ const members=S.teamMembers||[];
+ const filter=S.teamFilter||'all';
+
+ const teachersCount=members.filter(m=>m.staff_role==='teacher'||(!m.staff_role&&m.role==='teacher')).length;
+ const monitorsCount=members.filter(m=>m.staff_role==='monitor').length;
+ const adminsCount=members.filter(m=>m.role==='admin').length;
+
+ const filtered=members.filter(m=>{
+  if(filter==='teachers')return m.staff_role==='teacher'||(!m.staff_role&&m.role==='teacher');
+  if(filter==='monitors')return m.staff_role==='monitor';
+  if(filter==='admins')return m.role==='admin';
+  return true;
+ });
+
+ const headerActions=`
+  <div class="team-header-actions">
+    <button class="btn primary" data-action="new-team-member">${icon('plus',16)} Novo Professor / Monitor</button>
+    <button class="btn secondary" data-action="delegate-team-role">🤝 Delegar a Membro</button>
+  </div>
+ `;
+
+ return `${title('Professores e Monitores','Equipe que cuida das turmas e conduz as aulinhas.',headerActions)}
+ <div class="filter-chips">
+  <button class="filter-chip ${filter==='all'?'active':''}" data-action="filter-team" data-filter="all">Todos (${members.length})</button>
+  <button class="filter-chip ${filter==='teachers'?'active':''}" data-action="filter-team" data-filter="teachers">👨‍🏫 Professores (${teachersCount})</button>
+  <button class="filter-chip ${filter==='monitors'?'active':''}" data-action="filter-team" data-filter="monitors">🤝 Monitores (${monitorsCount})</button>
+  <button class="filter-chip ${filter==='admins'?'active':''}" data-action="filter-team" data-filter="admins">🛡️ Coordenação (${adminsCount})</button>
+ </div>
+ ${filtered.length?`<div class="team-grid">${filtered.map(m=>{
+  const roleLabel=m.role==='admin'?'🛡️ Coordenação':m.staff_role==='monitor'?'🤝 Monitor(a)':'👨‍🏫 Professor(a)';
+  const rolePillClass=m.role==='admin'?'admin':m.staff_role==='monitor'?'monitor':'teacher';
+  const cleanPhone=(m.phone||'').replace(/\D/g,'');
+  const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${m.name}! Sou da equipe Lagoinha Kids.`)}`:'';
+  const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
+  const canEdit=S.user.role==='admin'||(S.user.role==='teacher'&&m.role!=='admin');
+
+  return `<article class="team-member-card">
+    <div class="team-card-top">
+      <div class="team-member-avatar-wrap">
+        ${m.avatar_url?`<img src="${escape(m.avatar_url)}" alt="${escape(m.name)}" class="team-member-avatar-img"/>`:`<span class="avatar big">${initials(m.name)}</span>`}
+      </div>
+      <div class="team-member-header-info">
+        <div class="team-badges-row">
+          <span class="team-role-pill ${rolePillClass}">${roleLabel}</span>
+          <span class="team-status-pill ${m.active?'active':'inactive'}">${m.active?'Ativo':'Desativado'}</span>
+        </div>
+        <h3 class="team-member-name">${escape(m.name)}</h3>
+        <p class="team-member-email">${escape(m.email)}</p>
+      </div>
+    </div>
+
+    <div class="team-card-body">
+      ${cleanPhone?`
+        <div class="team-contact-row">
+          <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="team-whatsapp-link">
+            ${icon('whatsapp',14)} <span>${escape(m.phone)} (Conversar)</span>
+          </a>
+        </div>
+      `:''}
+
+      <div class="team-rooms-section">
+        <span class="team-rooms-label">Turmas de atuação:</span>
+        <div class="team-rooms-chips">
+          ${assignedRooms.length?assignedRooms.map(rname=>`<span class="room-chip">${escape(rname)}</span>`).join(''):'<span class="soft-info">Nenhuma turma atribuída</span>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="team-card-footer">
+      ${canEdit?`<button type="button" class="mini-button secondary" data-action="edit-team-member" data-id="${m.id}">${icon('settings',14)} Gerenciar cadastro</button>`:'<span class="soft-info">Gerenciado pela coordenação</span>'}
+    </div>
+  </article>`;
+ }).join('')}</div>`:empty('Nenhum membro nesta categoria','Cadastre novos professores e monitores para fortalecer o ministério infantojuvenil.')}`;
+}
+
 function eventsPage(){
  const staff=S.user.role!=='parent';
  const audience=S.eventAudience||'all';
@@ -324,6 +417,7 @@ function renderInnerPage(){
    return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div><button class="text-link" data-page="rooms">Gerenciar turmas ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
  }
  if(S.page==='events')return eventsPage();
+ if(S.page==='team'&&S.user.role!=='parent')return teamPage();
  if(S.page==='notifications'){
   const unread=S.notifications.filter(n=>!n.read_at).length;
   const markAllBtn = unread ? `<button class="btn secondary" data-action="mark-all-read">${icon('check',16)} Marcar todas como lidas</button>` : '';
@@ -398,6 +492,97 @@ function faceModal(ch,mode){
  showModal('Conferência facial auxiliar',escape(ch.name)+' · '+escape(ch.room_name),`${!ch.face_allowed?`<div class="soft-info">O responsável ainda não autorizou o recurso. A conferência manual continua disponível.</div>${ch.parent_id?`<button class="btn secondary full" data-action="request-consent" data-id="${ch.id}">Solicitar autorização ao responsável</button>`:''}`:`<div class="face-tabs"><button class="${S.faceMode==='enroll'?'selected':''}" data-action="face-mode" data-mode="enroll" data-id="${ch.id}">Cadastrar / atualizar</button><button class="${S.faceMode==='verify'?'selected':''}" data-action="face-mode" data-mode="verify" data-id="${ch.id}" ${!ch.face_enrolled?'disabled':''}>Conferir 1:1</button></div><form data-form="face" data-id="${ch.id}"><label class="face-drop" tabindex="0" role="button" aria-label="Selecionar retrato"><input type="file" id="face-input" accept="image/jpeg,image/png,image/webp" hidden/><div id="face-placeholder">${icon('face',44)}<strong>Selecionar foto autorizada</strong><span>Um rosto · JPG, PNG ou WebP · até 8 MB</span></div><img id="face-preview" alt="Retrato selecionado" hidden/></label><button type="button" class="btn secondary full" data-action="face-camera">${icon('face',18)} Capturar com a câmera</button><div id="camera-region" hidden><video id="face-video" autoplay muted playsinline></video><button type="button" class="btn dark full" data-action="face-snap">Capturar retrato</button></div><p class="soft-info">${S.faceMode==='enroll'?'Somente o descritor criptografado será salvo no servidor, vinculado a este aluno.':'O resultado é uma medida de similaridade, não uma confirmação de identidade.'} Modelo ainda não validado para crianças. Sem prova de vida. Não registra entrada ou saída.</p><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${S.faceMode==='enroll'?'Salvar cadastro autorizado':'Comparar com cadastro'} ${icon('arrow',18)}</button><div id="face-result" aria-live="polite"></div></form>${ch.face_enrolled?`<button class="text-link danger-link" data-action="delete-face" data-id="${ch.id}">Excluir descritor cadastrado</button>`:''}`}`);
 }
 function userModal(user){showModal(user?'Gerenciar acesso':'Mais uma pessoa para cuidar.',user?escape(user.name):'Atribua o perfil adequado e as turmas de atuação.',`<form data-form="${user?'edit-user':'user'}" ${user?`data-id="${user.id}"`:''}>${user?`<label class="checkbox-label"><input type="checkbox" name="active" ${user.active?'checked':''}/>Acesso ativo</label>`:`<label>Nome completo<input name="name" required minlength="2" maxlength="100"/></label><label>E-mail<input name="email" type="email" required maxlength="200"/></label><label>Senha inicial<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Pelo menos 12 caracteres"/></label><label>Perfil<select name="role"><option value="teacher">Professor(a)</option><option value="parent">Responsável</option><option value="admin">Administração / desenvolvimento</option></select></label>`}<fieldset><legend>Turmas de atuação (perfil professor)</legend>${S.rooms.map(r=>`<label class="checkbox-label"><input type="checkbox" name="rooms" value="${r.id}" ${user?.rooms.includes(r.id)?'checked':''}/>${escape(r.name)}</label>`).join('')}</fieldset><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${user?'Salvar acesso':'Criar usuário'}</button></form>`);}
+function teamMemberModal(member=null){
+ const isEdit=Boolean(member);
+ const titleText=isEdit?'Gerenciar Membro da Equipe':'Cadastrar Professor ou Monitor';
+ const subText=isEdit?escape(member.name):'Cadastre um voluntário como professor ou monitor para atuar nas turmas.';
+ const isTargetAdmin=member?.role==='admin';
+ const currentRole=member?.staff_role||(member?.role==='admin'?'admin':'teacher');
+
+ const html=`<form data-form="team-member" ${isEdit?`data-id="${member.id}"`:''}>
+  <label>Nome completo
+    <input name="name" value="${escape(member?.name||'')}" required minlength="2" maxlength="100" placeholder="Nome completo do voluntário"/>
+  </label>
+  <label>E-mail
+    <input name="email" type="email" value="${escape(member?.email||'')}" required maxlength="200" placeholder="email@exemplo.com"/>
+  </label>
+  <label>Celular / WhatsApp
+    <input name="phone" type="tel" value="${escape(member?.phone||'')}" maxlength="30" placeholder="(31) 99999-9999"/>
+  </label>
+  ${!isEdit?`
+    <label>Senha inicial
+      <input name="password" type="password" required minlength="12" maxlength="128" placeholder="Mínimo 12 caracteres (ex: LagoinhaKids#2026)"/>
+    </label>
+  `:`
+    <label>Nova senha (opcional)
+      <input name="password" type="password" minlength="12" maxlength="128" placeholder="Deixe em branco para manter a senha atual"/>
+    </label>
+  `}
+  <label>Função no Ministério
+    <select name="staff_role" ${isTargetAdmin&&S.user.role!=='admin'?'disabled':''}>
+      <option value="teacher" ${currentRole==='teacher'?'selected':''}>👨‍🏫 Professor(a) — Conduz a aulinha e chamada</option>
+      <option value="monitor" ${currentRole==='monitor'?'selected':''}>🤝 Monitor(a) — Apoio na sala e acolhimento</option>
+      ${S.user.role==='admin'?`<option value="admin" ${member?.role==='admin'?'selected':''}>🛡️ Coordenação / Admin</option>`:''}
+    </select>
+  </label>
+  ${isEdit?`
+    <label class="checkbox-label" style="margin: 12px 0;">
+      <input type="checkbox" name="active" ${member.active?'checked':''}/>
+      <span>Acesso ativo na equipe</span>
+    </label>
+  `:''}
+  <fieldset style="border: 1px solid #27272a; border-radius: 8px; padding: 12px; margin: 14px 0;">
+    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas de Atuação</legend>
+    <p class="soft-info" style="margin-top: 0; margin-bottom: 8px; font-size: 11.5px;">Selecione as turmas em que este voluntário atuará:</p>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      ${S.rooms.map(r=>`
+        <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="rooms" value="${r.id}" ${member?.rooms?.includes(r.id)?'checked':''}/>
+          <span><strong>${escape(r.name)}</strong> (${r.min_age} a ${r.max_age} anos)</span>
+        </label>
+      `).join('')}
+    </div>
+  </fieldset>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit">${isEdit?'Salvar alterações':'Cadastrar Membro'} ${icon('check',17)}</button>
+ </form>`;
+ showModal(titleText,subText,html);
+}
+
+function delegateRoleModal(){
+ const candidates=S.teamCandidates||[];
+ const html=`<form data-form="delegate-team">
+  <p class="soft-info" style="margin-top:0;margin-bottom:12px;">Selecione um membro ou responsável já cadastrado no Lagoinha Kids para delegar a função de professor ou monitor.</p>
+  <label>Membro Cadastrado
+    <select name="user_id" required>
+      <option value="">Selecione um membro...</option>
+      ${candidates.map(c=>`<option value="${c.id}">${escape(c.name)} · ${escape(c.email)}</option>`).join('')}
+    </select>
+  </label>
+  ${!candidates.length?'<p class="soft-info" style="color:#ef4444;">Não há membros candidatos disponíveis no momento.</p>':''}
+  <label>Função a Delegar
+    <select name="staff_role" required>
+      <option value="teacher">👨‍🏫 Professor(a) — Condução da aulinha e chamada</option>
+      <option value="monitor">🤝 Monitor(a) — Monitor de apoio na turma</option>
+    </select>
+  </label>
+  <fieldset style="border: 1px solid #27272a; border-radius: 8px; padding: 12px; margin: 14px 0;">
+    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas de Atuação</legend>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      ${S.rooms.map(r=>`
+        <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="rooms" value="${r.id}"/>
+          <span><strong>${escape(r.name)}</strong> (${r.min_age} a ${r.max_age} anos)</span>
+        </label>
+      `).join('')}
+    </div>
+  </fieldset>
+  <p class="form-error" role="alert"></p>
+  <button class="btn primary full" type="submit" ${candidates.length?'':'disabled'}>Confirmar Delegação ${icon('check',17)}</button>
+ </form>`;
+ showModal('Delegar Função a Membro','Promova um usuário para a equipe de ministério infantil.',html);
+}
+
 function stopCamera(){S.stream?.getTracks().forEach(t=>t.stop());S.stream=null;}
 modal.addEventListener('close',()=>{stopCamera();S.faceFile=null;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=null;});
 modal.addEventListener('cancel',(e)=>{if(S.busy||!allowDiscard())e.preventDefault();});
@@ -791,6 +976,18 @@ document.addEventListener('click',async e=>{
  const action=el.dataset.action,ch=S.children.find(x=>x.id===Number(el.dataset.id));
  try{
  if(await school.action(action,el,ch))return;
+ if(action==='new-team-member'){teamMemberModal();return;}
+ if(action==='delegate-team-role'){delegateRoleModal();return;}
+ if(action==='edit-team-member'){
+  const member=S.teamMembers?.find(m=>m.id===Number(el.dataset.id));
+  if(member)teamMemberModal(member);
+  return;
+ }
+ if(action==='filter-team'){
+  S.teamFilter=el.dataset.filter;
+  render();
+  return;
+ }
  if(action==='guest-checkout'){showModal('Saída do visitante','Confira o responsável e o código entregue na chegada.',`<form data-form="guest-checkout" data-id="${Number(el.dataset.id)}"><label>Código de retirada<input name="claim_code" autocomplete="off" required maxlength="30"/></label><label class="checkbox-label"><input type="checkbox" name="confirmed" required/>Conferi presencialmente o responsável.</label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar saída</button></form>`);return;}
  if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal});return;}
  if(action==='clear-event-banner'){setEventBannerPreview('');toast('Banner removido.');return;}
@@ -975,6 +1172,60 @@ document.addEventListener('submit',async e=>{
   if(kind==='reset'){if(values.password!==values.confirm)throw new Error('As senhas não conferem.');await api('/auth/reset',{method:'POST',body:values});modal.close();history.replaceState({},'',location.pathname);renderLogin();toast('Senha atualizada. Entre com sua nova senha.');return;}
   if(kind==='family-invite'){const r=await api(`/children/${cid}/family/invites`,{method:'POST',body:values});showModal('Convite criado','Envie este link à pessoa autorizada. Válido por 48 horas.',`<label>Link do convite<input readonly value="${escape(r.url)}"/></label>`);return;}
   const schoolResult=await school.submit(form,values);if(schoolResult){modal.close();await load();toast(schoolResult.message||schoolResult);if(schoolResult.roomId)school.lessonForm(schoolResult.roomId);return;}
+  if(kind==='team-member'){
+   const uid=form.dataset.id?Number(form.dataset.id):null;
+   const roomInputs=form.querySelectorAll('input[name="rooms"]:checked');
+   const rooms=Array.from(roomInputs).map(i=>Number(i.value));
+   if(uid){
+    const body={
+     name:values.name.trim(),
+     email:values.email.trim(),
+     staff_role:values.staff_role||'teacher',
+     phone:values.phone?.trim()||'',
+     rooms,
+     active:values.active==='on'||values.active==='true'
+    };
+    if(values.password&&values.password.trim()){
+     body.password=values.password.trim();
+    }
+    if(S.user.role==='admin'&&values.role){
+     body.role=values.role;
+    }
+    await api(`/team/member/${uid}`,{method:'PATCH',body});
+    modal.close();
+    await load();
+    toast('Cadastro da equipe atualizado com sucesso! ✓');
+    return;
+   }else{
+    const body={
+     name:values.name.trim(),
+     email:values.email.trim(),
+     password:values.password.trim(),
+     staff_role:values.staff_role||'teacher',
+     phone:values.phone?.trim()||'',
+     rooms
+    };
+    await api('/team/member',{method:'POST',body});
+    modal.close();
+    await load();
+    toast('Novo membro da equipe cadastrado com sucesso! 🎉');
+    return;
+   }
+  }
+  if(kind==='delegate-team'){
+   const roomInputs=form.querySelectorAll('input[name="rooms"]:checked');
+   const rooms=Array.from(roomInputs).map(i=>Number(i.value));
+   const body={
+    user_id:Number(values.user_id),
+    staff_role:values.staff_role||'teacher',
+    rooms
+   };
+   await api('/team/delegate',{method:'POST',body});
+   modal.close();
+   await load();
+   toast('Função delegada com sucesso! 🤝');
+   return;
+  }
   if(kind==='create-event'||kind==='event-form'){
    const evId=form.dataset.id;
    if(!values.title||values.title.trim().length<2)throw new Error('Informe o título do evento (mínimo 2 caracteres).');

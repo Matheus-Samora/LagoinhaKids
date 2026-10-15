@@ -25,11 +25,18 @@ NATIVE_ORIGINS={'https://localhost','capacitor://localhost'}
 def fail(code,message,status=400): raise HTTPException(status,detail={'code':code,'message':message})
 def google_ready(): return bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))
 def public_user(row):
+    keys = row.keys() if hasattr(row, 'keys') else []
+    staff_r = row['staff_role'] if 'staff_role' in keys else ''
+    if not staff_r and row['role'] == 'teacher':
+        staff_r = 'teacher'
+    elif not staff_r and row['role'] == 'admin':
+        staff_r = 'admin'
     return {k:row[k] for k in ('id','name','email','role','active')} | {
-        'email_verified':bool(row['email_verified']) if 'email_verified' in row.keys() else False,
-        'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in row.keys() else False,
-        'phone': row['phone'] if 'phone' in row.keys() else '',
-        'avatar_url': row['avatar_url'] if 'avatar_url' in row.keys() else '',
+        'staff_role': staff_r,
+        'email_verified':bool(row['email_verified']) if 'email_verified' in keys else False,
+        'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in keys else False,
+        'phone': row['phone'] if 'phone' in keys else '',
+        'avatar_url': row['avatar_url'] if 'avatar_url' in keys else '',
         'google_linked': bool(row['google_sub'])
     }
 
@@ -365,6 +372,7 @@ def users(user=Depends(admin)):
     with s.db() as c: return [public_user(r)|{'rooms':[x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]} for r in c.execute('SELECT * FROM users ORDER BY name')]
 class UserIn(Register):
     role:str='parent'
+    staff_role:str=''
     rooms:list[int]=[]
 @app.post('/api/users')
 def create_user(data:UserIn,user=Depends(admin)):
@@ -372,7 +380,7 @@ def create_user(data:UserIn,user=Depends(admin)):
     validate_password(data.password)
     with s.db() as c:
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=?',(rid,)).fetchone() for rid in data.rooms): fail('room','Turma inválida.')
-        try: uid=c.execute('INSERT INTO users(name,email,password,role,created_at) VALUES(?,?,?,?,?)',(data.name,email(data.email),s.password_hash(data.password),data.role,s.now())).lastrowid
+        try: uid=c.execute('INSERT INTO users(name,email,password,role,staff_role,created_at) VALUES(?,?,?,?,?,?)',(data.name,email(data.email),s.password_hash(data.password),data.role,data.staff_role or '',s.now())).lastrowid
         except sqlite3.IntegrityError: fail('exists','E-mail já cadastrado.',409)
         if data.role=='teacher':
             for rid in set(data.rooms):
@@ -385,6 +393,7 @@ class UserUpdate(BaseModel):
     active:bool
     rooms:list[int]=[]
     role:str|None=None
+    staff_role:str|None=None
     name:str|None=Field(default=None,min_length=2,max_length=100)
     email:str|None=Field(default=None,max_length=200)
     password:str|None=Field(default=None,max_length=128)
@@ -402,9 +411,10 @@ def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
             validate_password(data.password)
         target_email=email(data.email) if data.email is not None else row['email']
         target_avatar=data.avatar_url.strip() if data.avatar_url is not None else (row['avatar_url'] if 'avatar_url' in row.keys() else '')
+        s_role=data.staff_role if data.staff_role is not None else (row['staff_role'] if 'staff_role' in row.keys() else '')
         if row['role']=='parent' and role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():fail('parent','Este responsável tem filhos vinculados. Ajuste os vínculos antes de mudar o perfil.',409)
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1',(rid,)).fetchone() for rid in data.rooms):fail('room','Turma inválida.')
-        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=?,avatar_url=? WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,target_avatar,uid))
+        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=?,avatar_url=?,staff_role=? WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,target_avatar,s_role,uid))
         except sqlite3.IntegrityError:fail('email','E-mail já cadastrado.',409)
         if target_email!=row['email']:c.execute('UPDATE users SET google_sub=NULL WHERE id=?',(uid,))
         owned=[r[0] for r in c.execute('SELECT id FROM rooms WHERE created_by=?',(uid,))]
@@ -420,6 +430,129 @@ def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
         if not data.active or data.password or role!=row['role'] or target_email!=row['email']:c.execute('DELETE FROM sessions WHERE user_id=?',(uid,))
         s.audit(c,user['id'],'user_access_updated')
     return {'ok':True}
+
+@app.get('/api/team')
+def get_team(user=Depends(staff)):
+    with s.db() as c:
+        staff_rows = c.execute('''
+            SELECT u.*
+            FROM users u
+            WHERE u.role IN ('admin','teacher')
+            ORDER BY u.name
+        ''').fetchall()
+        members = []
+        for r in staff_rows:
+            rooms = [x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]
+            members.append(public_user(r) | {'rooms': rooms})
+        candidates = [public_user(r) for r in c.execute('''
+            SELECT * FROM users WHERE role='parent' AND active=1 ORDER BY name
+        ''').fetchall()]
+        return {'members': members, 'candidates': candidates}
+
+class TeamMemberIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    email: str = Field(max_length=200)
+    password: str = Field(min_length=12, max_length=128)
+    staff_role: str = Field(default='teacher')
+    rooms: list[int] = []
+    phone: str | None = Field(default='', max_length=30)
+
+@app.post('/api/team/member')
+def create_team_member(data: TeamMemberIn, user=Depends(staff)):
+    s_role = data.staff_role if data.staff_role in ('teacher', 'monitor') else 'teacher'
+    validate_password(data.password)
+    target_mail = email(data.email)
+    with s.db() as c:
+        if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
+            fail('room', 'Turma inválida.')
+        try:
+            uid = c.execute('''
+                INSERT INTO users(name, email, password, role, staff_role, phone, created_at)
+                VALUES(?,?,?,?,?,?,?)
+            ''', (data.name.strip(), target_mail, s.password_hash(data.password), 'teacher', s_role, (data.phone or '').strip(), s.now())).lastrowid
+        except sqlite3.IntegrityError:
+            fail('exists', 'E-mail já cadastrado.', 409)
+        for rid in set(data.rooms):
+            c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)', (uid, rid))
+            if s_role == 'teacher':
+                c.execute('UPDATE rooms SET teacher_id=? WHERE id=? AND (teacher_id IS NULL OR teacher_id=created_by)', (uid, rid))
+            elif s_role == 'monitor':
+                c.execute('UPDATE rooms SET monitor_id=? WHERE id=? AND monitor_id IS NULL', (uid, rid))
+        s.audit(c, user['id'], 'team_member_created', uid)
+    return {'id': uid, 'staff_role': s_role}
+
+class TeamDelegateIn(BaseModel):
+    user_id: int
+    staff_role: str = Field(default='teacher')
+    rooms: list[int] = []
+
+@app.post('/api/team/delegate')
+def delegate_team_member(data: TeamDelegateIn, user=Depends(staff)):
+    s_role = data.staff_role if data.staff_role in ('teacher', 'monitor') else 'teacher'
+    with s.db() as c:
+        target = c.execute('SELECT * FROM users WHERE id=?', (data.user_id,)).fetchone()
+        if not target:
+            fail('missing', 'Usuário não encontrado.', 404)
+        if target['role'] == 'admin' and user['role'] != 'admin':
+            fail('forbidden', 'Não é permitido alterar administradores.', 403)
+        if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
+            fail('room', 'Turma inválida.')
+        c.execute('UPDATE users SET role="teacher", staff_role=? WHERE id=?', (s_role, data.user_id))
+        c.execute('DELETE FROM teacher_rooms WHERE user_id=?', (data.user_id,))
+        for rid in set(data.rooms):
+            c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)', (data.user_id, rid))
+            if s_role == 'teacher':
+                c.execute('UPDATE rooms SET teacher_id=? WHERE id=? AND (teacher_id IS NULL OR teacher_id=created_by)', (data.user_id, rid))
+            elif s_role == 'monitor':
+                c.execute('UPDATE rooms SET monitor_id=? WHERE id=? AND monitor_id IS NULL', (data.user_id, rid))
+        s.audit(c, user['id'], 'team_role_delegated', data.user_id)
+    return {'ok': True, 'staff_role': s_role}
+
+class TeamMemberUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    email: str | None = Field(default=None, max_length=200)
+    staff_role: str | None = None
+    role: str | None = None
+    active: bool | None = None
+    rooms: list[int] | None = None
+    password: str | None = Field(default=None, max_length=128)
+
+@app.patch('/api/team/member/{uid}')
+def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(staff)):
+    with s.db() as c:
+        target = c.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        if not target:
+            fail('missing', 'Usuário não encontrado.', 404)
+        if target['role'] == 'admin' and user['role'] != 'admin':
+            fail('forbidden', 'Você não pode alterar o cadastro de um administrador.', 403)
+        if data.role == 'admin' and user['role'] != 'admin':
+            fail('forbidden', 'Apenas administradores podem conceder o perfil de administrador.', 403)
+        target_role = data.role or target['role']
+        if target_role not in ('admin', 'teacher', 'parent'):
+            fail('role', 'Perfil inválido.')
+        s_role = data.staff_role if data.staff_role is not None else target['staff_role']
+        if target_role == 'teacher' and s_role not in ('teacher', 'monitor'):
+            s_role = 'teacher'
+        name_val = (data.name or target['name']).strip()
+        email_val = email(data.email) if data.email is not None else target['email']
+        active_val = int(data.active) if data.active is not None else target['active']
+        try:
+            c.execute('UPDATE users SET name=?, email=?, role=?, staff_role=?, active=? WHERE id=?',
+                      (name_val, email_val, target_role, s_role, active_val, uid))
+        except sqlite3.IntegrityError:
+            fail('email', 'E-mail já cadastrado.', 409)
+        if data.rooms is not None:
+            if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
+                fail('room', 'Turma inválida.')
+            c.execute('DELETE FROM teacher_rooms WHERE user_id=?', (uid,))
+            for rid in set(data.rooms):
+                c.execute('INSERT INTO teacher_rooms VALUES(?,?)', (uid, rid))
+        if data.password:
+            validate_password(data.password)
+            c.execute('UPDATE users SET password=? WHERE id=?', (s.password_hash(data.password), uid))
+            c.execute('DELETE FROM sessions WHERE user_id=?', (uid,))
+        s.audit(c, user['id'], 'team_member_updated', uid)
+    return {'ok': True}
 
 class AvatarIn(BaseModel):
     avatar_url:str=Field(default='',max_length=500)
@@ -490,6 +623,13 @@ def download_apk():
 def _save_uploaded_image(raw: bytes, filename: str, user_id: int):
     if not raw or len(raw) > 10 * 1024 * 1024:
         fail('size', 'Arquivo muito grande. O limite é 10 MB.', 400)
+    if raw.startswith(b'%PDF') or (filename and filename.lower().endswith('.pdf')):
+        media_id = f"doc_{secrets.token_hex(10)}.pdf"
+        with s.db() as c:
+            c.execute('INSERT INTO media(id, filename, content_type, data, created_by, created_at) VALUES(?,?,?,?,?,?)',
+                      (media_id, filename or 'material.pdf', 'application/pdf', raw, user_id, s.now()))
+            c.commit()
+        return {'url': f'/api/media/{media_id}', 'id': media_id, 'size': len(raw), 'filename': filename or 'material.pdf'}
     try:
         from PIL import Image
         img = Image.open(io.BytesIO(raw))

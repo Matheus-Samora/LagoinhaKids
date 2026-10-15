@@ -67,15 +67,12 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
 
  function roomForm(r){
   const isEdit=Boolean(r);
-  const currentOwner=r?.created_by||S.user.id;
   const coverUrl=r?.cover_url||'';
-  const availableStaff=S.users&&S.users.length?S.users.filter(u=>['admin','teacher'].includes(u.role)&&u.active):[];
-  const staffSelect=availableStaff.length>1?`
-    <label>Professor(a) responsável
-      <select name="owner_id">
-        ${availableStaff.map(u=>`<option value="${u.id}" ${u.id===currentOwner?'selected':''}>${e(u.name)} (${u.role==='admin'?'Coordenação':'Professor(a)'})</option>`).join('')}
-      </select>
-    </label>`:`<input type="hidden" name="owner_id" value="${currentOwner}"/>`;
+  const allStaff=S.teamMembers?.length?S.teamMembers:(S.users?.filter(u=>['admin','teacher'].includes(u.role)&&u.active)||[]);
+  const teachers=allStaff.filter(u=>u.staff_role!=='monitor');
+  const monitors=allStaff.filter(u=>u.staff_role==='monitor'||u.staff_role==='teacher'||u.role==='teacher');
+  const currentTeacher=r?.teacher_id||r?.created_by||S.user.id;
+  const currentMonitor=r?.monitor_id||'';
 
   showModal(
     isEdit ? 'Editar turma' : 'Criar nova turma',
@@ -143,7 +140,20 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
       <label>Vagas por aulinha (capacidade)
         <input name="capacity" type="number" min="1" max="100" required value="${r?.capacity??15}"/>
       </label>
-      ${staffSelect}
+      <div class="form-grid">
+        <label>Professor(a) da turma
+          <select name="teacher_id" required>
+            ${teachers.map(u=>`<option value="${u.id}" ${u.id===currentTeacher?'selected':''}>${e(u.name)} (${u.role==='admin'?'Coordenação':'Professor(a)'})</option>`).join('')}
+          </select>
+        </label>
+        <label>Monitor(a) de apoio
+          <select name="monitor_id">
+            <option value="">Nenhum monitor atribuído</option>
+            ${monitors.map(u=>`<option value="${u.id}" ${u.id===currentMonitor?'selected':''}>${e(u.name)} (${u.staff_role==='monitor'?'Monitor(a)':'Professor(a)'})</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <input type="hidden" name="owner_id" value="${currentTeacher}"/>
       ${errorSlot}
       <button class="btn primary full" type="submit">${isEdit ? 'Salvar alterações' : 'Criar turma'} ${icon('check',17)}</button>
       ${isEdit ? `
@@ -163,7 +173,83 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  }
  function lessonForm(roomId,lesson){
   const tomorrow=new Date(Date.now()+86400000);
-  showModal(lesson?'Editar aulinha':'Nova aulinha','Publique o dia e o horário para as famílias confirmarem a presença.',`<form data-form="lesson" ${lesson?`data-id="${lesson.id}"`:''}><label>Turma<select name="room_id">${roomOptions(lesson?.room_id||roomId)}</select></label><label>Dia da aula<input name="day" type="date" min="${day(new Date())}" value="${lesson?lesson.starts_at.slice(0,10):day(tomorrow)}" required/></label><div class="form-grid"><label>Início<input name="start" type="time" value="${lesson?lesson.starts_at.slice(11,16):'10:00'}" required/></label><label>Fim<input name="end" type="time" value="${lesson?lesson.ends_at.slice(11,16):'11:00'}" required/></label></div>${!lesson?'<label>Repetir semanalmente<select name="repeat_weeks"><option value="1">Só esta data</option><option value="4">4 semanas</option><option value="8">8 semanas</option><option value="12">12 semanas</option></select></label>':''}${errorSlot}<button class="btn primary full" type="submit">${lesson?'Salvar horário':'Publicar aulinha'}</button></form>${lesson?`<button class="text-link danger-link" data-action="cancel-lesson" data-id="${lesson.id}">Cancelar esta aulinha</button>`:''}`);
+  const targetRoomId=lesson?.room_id || roomId;
+  const targetRoom=S.rooms.find(r=>r.id===targetRoomId);
+  const allStaff=S.teamMembers?.length?S.teamMembers:(S.users?.filter(u=>['admin','teacher'].includes(u.role)&&u.active)||[]);
+  const teachers=allStaff.filter(u=>u.staff_role!=='monitor');
+  const monitors=allStaff.filter(u=>u.staff_role==='monitor'||u.staff_role==='teacher'||u.role==='teacher');
+  const selectedTeacher=lesson?.teacher_id || targetRoom?.teacher_id || targetRoom?.created_by || S.user.id;
+  const selectedMonitor=lesson?.monitor_id || targetRoom?.monitor_id || '';
+  const materialsUrl=lesson?.materials_url || '';
+  const notesText=lesson?.notes || '';
+
+  showModal(
+    lesson ? 'Editar aulinha' : 'Nova aulinha',
+    'Publique o dia, horário, professores, materiais e instruções da aula.',
+    `<form data-form="lesson" ${lesson ? `data-id="${lesson.id}"` : ''}>
+      <label>Turma
+        <select name="room_id">${roomOptions(targetRoomId)}</select>
+      </label>
+      <label>Dia da aula
+        <input name="day" type="date" min="${day(new Date())}" value="${lesson ? lesson.starts_at.slice(0,10) : day(tomorrow)}" required/>
+      </label>
+      <div class="form-grid">
+        <label>Início
+          <input name="start" type="time" value="${lesson ? lesson.starts_at.slice(11,16) : '10:00'}" required/>
+        </label>
+        <label>Fim
+          <input name="end" type="time" value="${lesson ? lesson.ends_at.slice(11,16) : '11:00'}" required/>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>Professor(a) da aula
+          <select name="teacher_id">
+            ${teachers.map(u => `<option value="${u.id}" ${u.id === selectedTeacher ? 'selected' : ''}>${e(u.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label>Monitor(a) da aula
+          <select name="monitor_id">
+            <option value="">Nenhum monitor nesta aula</option>
+            ${monitors.map(u => `<option value="${u.id}" ${u.id === selectedMonitor ? 'selected' : ''}>${e(u.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="lesson-materials-group">
+        <label>Materiais em anexo (PDF, Guia, Imagens ou Link)
+          <div class="lesson-material-input-wrap">
+            <input type="text" name="materials_url" id="lesson-materials-url-input" value="${e(materialsUrl)}" placeholder="https://... ou envie um arquivo ao lado"/>
+            <label class="btn secondary media-upload-btn" tabindex="0" title="Anexar arquivo de material (PDF ou Imagem)">
+              <span>📎 Anexar</span>
+              <input type="file" id="lesson-material-file-input" accept=".pdf,application/pdf,image/*" hidden/>
+            </label>
+          </div>
+        </label>
+        <div id="lesson-material-status" class="lesson-material-status ${materialsUrl ? 'has-file' : ''}">
+          ${materialsUrl ? `<span>✓ Material vinculado: <a href="${e(materialsUrl)}" target="_blank" rel="noopener noreferrer">${e(materialsUrl)}</a></span>` : '<small class="soft-info">Você pode anexar um PDF com a lição, desenhos para colorir ou slides.</small>'}
+        </div>
+      </div>
+
+      <label>Instruções, lembretes e notas da aula
+        <textarea name="notes" rows="3" maxlength="1000" placeholder="Escreva aqui instruções sobre a aula, lembretes de materiais para os pais (ex: trazer bíblia infantil) e avisos para a equipe...">${e(notesText)}</textarea>
+      </label>
+
+      ${!lesson ? `
+        <label>Repetir semanalmente
+          <select name="repeat_weeks">
+            <option value="1">Só esta data</option>
+            <option value="4">4 semanas</option>
+            <option value="8">8 semanas</option>
+            <option value="12">12 semanas</option>
+          </select>
+        </label>
+      ` : ''}
+
+      ${errorSlot}
+      <button class="btn primary full" type="submit">${lesson ? 'Salvar horário' : 'Publicar aulinha'}</button>
+    </form>
+    ${lesson ? `<button class="text-link danger-link" data-action="cancel-lesson" data-id="${lesson.id}">Cancelar esta aulinha</button>` : ''}`
+  );
  }
  let currentCarouselIndex = 0;
  function renderParentEventsCarousel(){
@@ -282,7 +368,30 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const cards=S.lessons.map(l=>{
    const compatible=ch&&ageAt(ch.birthday,l.starts_at)>=l.min_age&&ageAt(ch.birthday,l.starts_at)<=l.max_age;
    const confirmed=ch&&l.confirmed_children.includes(ch.id);const waiting=ch&&(l.waiting_children||[]).includes(ch.id);
-   return `<article class="lesson-card ${confirmed?'confirmed':''}"><span class="lesson-day">${dateLabel(l.starts_at)}</span><h2>${e(l.room_name)}</h2><div class="lesson-time">${icon('clock',18)} ${time(l.starts_at)} – ${time(l.ends_at)}</div><p>${l.min_age} a ${l.max_age} anos · ${l.available} vagas disponíveis</p>${calendarLinks(l)}${l.theme?`<div style="margin:6px 0;padding:6px 10px;background:#27272a;border-radius:6px;font-size:12px;color:#f4f4f5;">📖 <strong>Tema:</strong> ${e(l.theme)}</div>`:''}${confirmed?`<div class="confirmed-label">${icon('check',16)} Presença confirmada</div><button class="btn secondary full" data-action="cancel-presence" data-id="${l.id}" data-child="${ch.id}">Cancelar confirmação</button>`:waiting?`<p class="soft-info">Na lista de espera. Se surgir uma vaga, confirmaremos sua participação e enviaremos um aviso.</p><button class="btn secondary full" data-action="leave-waitlist" data-id="${l.id}" data-child="${ch.id}">Sair da lista</button>`:!ch?`<button class="btn primary full" data-action="new-child">Cadastrar filho para confirmar</button>`:!compatible?'<p class="soft-info">Esta turma atende outra faixa etária. Escolha outro filho ou consulte a equipe.</p>':`<button class="btn primary full" data-action="${l.available===0?'join-waitlist':'confirm-presence'}" data-id="${l.id}" data-child="${ch.id}">${l.available===0?'Entrar na lista de espera':'Confirmar presença'} ${icon('check',16)}</button>`}</article>`;
+    return `<article class="lesson-card ${confirmed?'confirmed':''}">
+      <span class="lesson-day">${dateLabel(l.starts_at)}</span>
+      <h2>${e(l.room_name)}</h2>
+      <div class="lesson-time">${icon('clock',18)} ${time(l.starts_at)} – ${time(l.ends_at)}</div>
+      <p>${l.min_age} a ${l.max_age} anos · ${l.available} vagas disponíveis</p>
+      <div class="lesson-staff-row">
+        <span class="lesson-staff-tag">👨‍🏫 ${e(l.teacher_name || 'Professor(a)')}</span>
+        ${l.monitor_name ? `<span class="lesson-staff-tag">🤝 Monitor: ${e(l.monitor_name)}</span>` : ''}
+      </div>
+      ${l.materials_url ? `
+        <a href="${e(l.materials_url)}" target="_blank" rel="noopener noreferrer" class="lesson-material-btn">
+          ${icon('download', 15)} <span>Baixar / Abrir Materiais da Aula</span>
+        </a>
+      ` : ''}
+      ${l.notes ? `
+        <div class="lesson-notes-card">
+          <strong>📝 Instruções & Lembretes:</strong>
+          <p>${e(l.notes)}</p>
+        </div>
+      ` : ''}
+      ${calendarLinks(l)}
+      ${l.theme?`<div style="margin:6px 0;padding:6px 10px;background:#27272a;border-radius:6px;font-size:12px;color:#f4f4f5;">📖 <strong>Tema:</strong> ${e(l.theme)}</div>`:''}
+      ${confirmed?`<div class="confirmed-label">${icon('check',16)} Presença confirmada</div><button class="btn secondary full" data-action="cancel-presence" data-id="${l.id}" data-child="${ch.id}">Cancelar confirmação</button>`:waiting?`<p class="soft-info">Na lista de espera. Se surgir uma vaga, confirmaremos sua participação e enviaremos um aviso.</p><button class="btn secondary full" data-action="leave-waitlist" data-id="${l.id}" data-child="${ch.id}">Sair da lista</button>`:!ch?`<button class="btn primary full" data-action="new-child">Cadastrar filho para confirmar</button>`:!compatible?'<p class="soft-info">Esta turma atende outra faixa etária. Escolha outro filho ou consulte a equipe.</p>':`<button class="btn primary full" data-action="${l.available===0?'join-waitlist':'confirm-presence'}" data-id="${l.id}" data-child="${ch.id}">${l.available===0?'Entrar na lista de espera':'Confirmar presença'} ${icon('check',16)}</button>`}
+    </article>`;
   }).join('');
   return `${title('Aulinhas','Dias e horários publicados pela equipe.',`<button class="btn secondary" data-action="refresh-school">Atualizar horários</button>`)}${ch?`<div class="lesson-toolbar"><label>Para qual filho?<select id="lesson-child">${S.children.map(c=>`<option value="${c.id}" ${c.id===ch.id?'selected':''}>${e(c.name)}</option>`).join('')}</select></label><span class="schedule-zone">Horários de São Paulo</span></div>`:'<p class="soft-info">Você pode consultar os horários abaixo. Cadastre seu filho para confirmar a participação.</p>'}${cards?`<div class="lesson-cards">${cards}</div>`:empty('A equipe ainda não publicou horários','As turmas foram cadastradas, mas cada aulinha precisa de uma data e horário. Peça à equipe para publicar em Minhas turmas → Publicar horário.')}${!S.lessons.length&&S.rooms.length?`<section class="panel"><h2>Turmas cadastradas</h2>${S.rooms.map(r=>`<p><strong>${e(r.name)}</strong> · ${r.min_age} a ${r.max_age} anos · Aguardando publicação de horários</p>`).join('')}</section>`:''}<p class="muted-note">Horários atualizados automaticamente enquanto o app está aberto. A confirmação reserva a participação; a equipe confere a chegada e a saída.</p>`;
  }
@@ -314,7 +423,10 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
            <button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir turma">${icon('close',14)} <span>Excluir</span></button>
          </div>
        </header>
-       <p class="muted-note">Responsável: ${e(r.owner_name||'Equipe Lagoinha Kids')}</p>
+        <div class="room-staff-info-row">
+          <span class="room-staff-pill">👨‍🏫 Professor(a): <strong>${e(r.teacher_name || r.owner_name || 'A definir')}</strong></span>
+          <span class="room-staff-pill">🤝 Monitor(a): <strong>${e(r.monitor_name || 'Nenhum atribuído')}</strong></span>
+        </div>
        <div class="simple-room-actions">
          <button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button>
          <button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button>
@@ -335,6 +447,22 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const lesson=S.lessons.find(l=>l.id===S.selectedLesson);
   if(!lesson)S.selectedLesson=null;
   const children=lesson?S.children.filter(ch=>lesson.confirmed_children.includes(ch.id)):S.children;
+  const lessonDetails = lesson ? `
+    <div class="attendance-lesson-details-card" style="margin-bottom:12px;padding:12px 16px;background:#18181b;color:#ffffff;border:1px solid #27272a;border-radius:12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:700;color:#ffffff;background:#27272a;padding:2px 8px;border-radius:6px;">👨‍🏫 Professor(a): ${e(lesson.teacher_name || 'Equipe')}</span>
+          ${lesson.monitor_name ? `<span style="font-size:12px;font-weight:700;color:#e4e4e7;background:#27272a;padding:2px 8px;border-radius:6px;">🤝 Monitor: ${e(lesson.monitor_name)}</span>` : ''}
+        </div>
+        ${lesson.notes ? `<p style="font-size:12px;color:#d4d4d8;margin:2px 0 0 0;"><strong>📝 Instruções:</strong> ${e(lesson.notes)}</p>` : ''}
+      </div>
+      ${lesson.materials_url ? `
+        <a href="${e(lesson.materials_url)}" target="_blank" rel="noopener noreferrer" class="mini-button" style="background:#ffffff;color:#09090b;font-weight:700;text-decoration:none;">
+          ${icon('download', 14)} Abrir Materiais
+        </a>
+      ` : ''}
+    </div>
+  ` : '';
   const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes de Hoje (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável / Contato</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<a href="https://wa.me/55${g.guardian_phone.replace(/\\D/g,'')}" target="_blank" style="color:#22c55e;">WhatsApp: ${e(g.guardian_phone)}</a>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
   return `${title('Chamada','Acompanhe as crianças e faça o check-in.',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} 📷 Ler QR Code (Check-in)</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Check-in Visitante (30s)</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
   <div class="scanner-desk-bar">
@@ -350,6 +478,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
       <button type="button" class="btn primary" data-action="desk-barcode-search">Check-in</button>
     </div>
   </div>
+  ${lessonDetails}
   <section class="panel"><div class="lesson-toolbar inside"><label>Aulinha<select id="lesson-filter"><option value="">Todos os alunos das minhas turmas</option>${S.lessons.map(l=>`<option value="${l.id}" ${l.id===S.selectedLesson?'selected':''}>${e(l.room_name)} · ${dateLabel(l.starts_at)} · ${time(l.starts_at)}</option>`).join('')}</select></label></div>${rosterRows(children,lesson)}</section>${guestsSection}<p class="muted-note">A confirmação da família não substitui a conferência presencial do responsável na chegada e na saída.</p>`;
  }
  function studentCardsList(children, room){
@@ -728,11 +857,24 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(type==='simple-room'){
    const data={name:values.name,min_age:Number(values.min_age),max_age:Number(values.max_age),capacity:Number(values.capacity),cover_url:values.cover_url||''};
    if(values.owner_id)data.owner_id=Number(values.owner_id);
+   if(values.teacher_id)data.teacher_id=Number(values.teacher_id);
+   if(values.monitor_id)data.monitor_id=Number(values.monitor_id);
    if(id)data.version=S.rooms.find(r=>r.id===Number(id))?.version;
    const result=await api(id?`/rooms/${id}`:'/rooms',{method:id?'PATCH':'POST',body:data});return id?'Turma salva.':{message:'Turma criada. Agora publique o primeiro horário.',roomId:result.id};
   }
   if(type==='lesson'){
-   await api(id?`/lessons/${id}`:'/lessons',{method:id?'PATCH':'POST',body:{room_id:Number(values.room_id),title:'Aulinha',starts_at:`${values.day}T${values.start}:00-03:00`,ends_at:`${values.day}T${values.end}:00-03:00`,repeat_weeks:Number(values.repeat_weeks)||1}});return 'Aulinha publicada.';
+   await api(id?`/lessons/${id}`:'/lessons',{method:id?'PATCH':'POST',body:{
+     room_id:Number(values.room_id),
+     title:values.title||'Aulinha',
+     starts_at:`${values.day}T${values.start}:00-03:00`,
+     ends_at:`${values.day}T${values.end}:00-03:00`,
+     repeat_weeks:Number(values.repeat_weeks)||1,
+     teacher_id:values.teacher_id?Number(values.teacher_id):null,
+     monitor_id:values.monitor_id?Number(values.monitor_id):null,
+     materials_url:(values.materials_url||'').trim(),
+     notes:(values.notes||'').trim()
+   }});
+   return 'Aulinha publicada.';
   }
   if(type==='lesson-student'){await api(`/lessons/${id}/presence`,{method:'POST',body:{child_id:Number(values.child_id)}});return 'Aluno adicionado à chamada.';}
   if(type==='cancel-lesson'){await api(`/lessons/${id}`,{method:'DELETE'});return 'Aulinha cancelada. Famílias avisadas.';}
@@ -790,6 +932,32 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     }catch(err){
      if(prevArea)prevArea.innerHTML=`<span style="font-size:22px;color:#a1a1aa;">${icon('kids', 28)}</span>`;
      toast(err.message||'Não foi possível enviar a foto.',true);
+    }
+   });
+   return;
+  }
+  if(event.target.id==='lesson-material-file-input'){
+   const file=event.target.files[0];
+   if(!file)return;
+   const statusBox=document.getElementById('lesson-material-status');
+   const inputUrl=document.getElementById('lesson-materials-url-input');
+   if(statusBox){
+     statusBox.innerHTML='<span class="spin">●</span> Enviando material de aula...';
+   }
+   Promise.resolve().then(async()=>{
+    try{
+     const data=new FormData();
+     data.append('file',file);
+     const res=await api('/avatar/upload',{method:'POST',body:data});
+     if(inputUrl)inputUrl.value=res.url;
+     if(statusBox){
+       statusBox.className='lesson-material-status has-file';
+       statusBox.innerHTML=`<span>✓ Arquivo anexado: <a href="${e(res.url)}" target="_blank" rel="noopener noreferrer">${e(file.name)}</a></span>`;
+     }
+     toast('Material anexado com sucesso! 📎');
+    }catch(err){
+     if(statusBox)statusBox.innerHTML=`<span style="color:#ef4444;">Erro ao anexar arquivo: ${e(err.message||'Tente novamente')}</span>`;
+     toast(err.message||'Erro ao anexar arquivo.',true);
     }
    });
    return;

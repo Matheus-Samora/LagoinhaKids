@@ -85,6 +85,8 @@ def migrate_safety_and_health(conn):
             conn.execute('ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ""')
         if 'avatar_url' not in u_fields:
             conn.execute('ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ""')
+        if 'staff_role' not in u_fields:
+            conn.execute('ALTER TABLE users ADD COLUMN staff_role TEXT NOT NULL DEFAULT ""')
     if 'attendance' in tables:
         a_fields = {r[1] for r in conn.execute('PRAGMA table_info(attendance)')}
         if 'claim_code' not in a_fields:
@@ -139,11 +141,22 @@ def migrate_safety_and_health(conn):
         id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),
         endpoint TEXT NOT NULL UNIQUE,keys_json TEXT NOT NULL,session_token TEXT NOT NULL,updated_at TEXT NOT NULL)''')
 
+    if 'rooms' in tables:
+        r_fields = {r[1] for r in conn.execute('PRAGMA table_info(rooms)')}
+        if 'teacher_id' not in r_fields:
+            conn.execute('ALTER TABLE rooms ADD COLUMN teacher_id INTEGER REFERENCES users(id)')
+        if 'monitor_id' not in r_fields:
+            conn.execute('ALTER TABLE rooms ADD COLUMN monitor_id INTEGER REFERENCES users(id)')
+
     if 'lessons' in tables:
         l_fields = {r[1] for r in conn.execute('PRAGMA table_info(lessons)')}
-        for col in ('theme', 'memory_verse', 'family_question'):
+        for col in ('theme', 'memory_verse', 'family_question', 'materials_url', 'notes'):
             if col not in l_fields:
                 conn.execute(f'ALTER TABLE lessons ADD COLUMN {col} TEXT NOT NULL DEFAULT ""')
+        if 'teacher_id' not in l_fields:
+            conn.execute('ALTER TABLE lessons ADD COLUMN teacher_id INTEGER REFERENCES users(id)')
+        if 'monitor_id' not in l_fields:
+            conn.execute('ALTER TABLE lessons ADD COLUMN monitor_id INTEGER REFERENCES users(id)')
 
     conn.execute('''CREATE TABLE IF NOT EXISTS events(
         id INTEGER PRIMARY KEY,
