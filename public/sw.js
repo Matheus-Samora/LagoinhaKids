@@ -6,10 +6,10 @@ self.addEventListener('fetch',event=>{
 });
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{};}catch{}
- event.waitUntil(self.registration.showNotification('Lagoinha Kids',{
+ event.waitUntil(Promise.all([self.clients.matchAll({type:'window',includeUncontrolled:true}).then(windows=>{for(const client of windows)client.postMessage({type:'NEW_NOTICE'});}),self.registration.showNotification('Lagoinha Kids',{
   body:'Você recebeu um novo aviso. Abra o aplicativo para conferir.',icon:'/logo.png',badge:'/logo.png',
   tag:data.tag||`notice-${data.id||Date.now()}`,data:{url:'/#notifications',id:data.id||null}
- }));
+ })]));
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();

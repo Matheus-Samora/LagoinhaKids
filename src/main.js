@@ -753,7 +753,7 @@ async function checkLiveUpdate(){
 }
 let syncing=false,liveRevision=null;
 async function syncLive(){
- if(!S.user||S.busy||syncing)return;
+ if(!S.user||document.hidden||S.busy||syncing)return;
  syncing=true;const uid=S.user.id;
  try{
   const revision=(await api('/sync')).revision;if(revision===liveRevision)return;
@@ -1079,6 +1079,7 @@ function checkAutoPromptPush(){
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message',(event)=>{
+    if(event.data?.type==='NEW_NOTICE'){void syncLive();return;}
     if(event.data?.type==='PAGING_ACKNOWLEDGED'){
       toast('🏃 Resposta registrada! Os professores e o administrativo já foram avisados que você está a caminho.');
       void load();
