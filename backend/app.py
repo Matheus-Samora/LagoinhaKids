@@ -13,10 +13,10 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Kids',version='1.4.1')
+app=FastAPI(title='Lagoinha Kids',version='1.4.2')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
-MAX_UPLOAD=8*1024*1024
+MAX_UPLOAD=10*1024*1024
 MultiPartParser.spool_max_size=MAX_UPLOAD+65536
 COOKIE='lagoinha_session'
 MUTATE={'POST','PUT','PATCH','DELETE'}
@@ -733,7 +733,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '1.4.1',
+        'version': '1.4.2',
         'build': get_build_id(),
         'app': 'Lagoinha Kids',
         'timestamp': s.now()

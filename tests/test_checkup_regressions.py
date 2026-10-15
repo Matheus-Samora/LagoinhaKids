@@ -101,3 +101,20 @@ def test_team_admin_creation_and_phone_update_are_honest():
     with s.db() as c:
         row=c.execute('SELECT role,phone FROM users WHERE id=?',(uid,)).fetchone()
         assert row['role']=='admin' and row['phone']=='31999990000'
+
+def test_pdf_material_upload_save_and_authenticated_download():
+    admin=client(1);teacher=client(2)
+    pdf=b'%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF'
+    r=teacher.post('/api/upload',files={'file':('licao.pdf',pdf,'application/pdf')})
+    assert r.status_code==200
+    url=r.json()['url']
+    payload={'room_id':1,'title':'Aula com material','starts_at':'2026-11-25T10:00:00-03:00','ends_at':'2026-11-25T11:00:00-03:00','materials_url':url}
+    lesson=teacher.post('/api/lessons',json=payload)
+    assert lesson.status_code==200
+    saved=next(l for l in client(3).get('/api/lessons').json() if l['id']==lesson.json()['id'])
+    assert saved['materials_url']==url
+    download=client(3).get(url)
+    assert download.status_code==200 and download.content==pdf
+    assert download.headers['content-type']=='application/pdf'
+    assert TestClient(app).get(url).status_code==401
+    assert client(3).post('/api/upload',files={'file':('licao.pdf',pdf,'application/pdf')}).status_code==403

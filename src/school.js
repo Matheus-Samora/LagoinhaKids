@@ -941,6 +941,10 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    if(!file)return;
    const statusBox=document.getElementById('lesson-material-status');
    const inputUrl=document.getElementById('lesson-materials-url-input');
+   const saveButton=event.target.closest('form')?.querySelector('button[type="submit"]');
+   if(file.size>10*1024*1024){toast('O material deve ter no máximo 10 MB.',true);event.target.value='';return;}
+   if(file.type!=='application/pdf'&&!file.type.startsWith('image/')&&!file.name.toLowerCase().endsWith('.pdf')){toast('Selecione um PDF ou uma imagem.',true);event.target.value='';return;}
+   if(saveButton)saveButton.disabled=true;
    if(statusBox){
      statusBox.innerHTML='<span class="spin">●</span> Enviando material de aula...';
    }
@@ -948,7 +952,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     try{
      const data=new FormData();
      data.append('file',file);
-     const res=await api('/avatar/upload',{method:'POST',body:data});
+     const res=await api('/upload',{method:'POST',body:data});
      if(inputUrl)inputUrl.value=res.url;
      if(statusBox){
        statusBox.className='lesson-material-status has-file';
@@ -958,6 +962,9 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     }catch(err){
      if(statusBox)statusBox.innerHTML=`<span style="color:#ef4444;">Erro ao anexar arquivo: ${e(err.message||'Tente novamente')}</span>`;
      toast(err.message||'Erro ao anexar arquivo.',true);
+    }finally{
+     if(saveButton)saveButton.disabled=false;
+     event.target.value='';
     }
    });
    return;

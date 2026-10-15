@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const save={disabled:false},input={value:''},status={innerHTML:'',className:''};
+let resolveUpload;const request=new Promise(r=>resolveUpload=r);const routes=[];
+const context=vm.createContext({document:{addEventListener(){},getElementById:id=>id==='lesson-material-status'?status:input},FormData,Promise,console});
+vm.runInContext(fs.readFileSync('src/school.js','utf8').replace("import './school.css';",'').replace('export function','function'),context);
+const ui=context.createSchoolUI({S:{},api:(route)=>{routes.push(route);return request;},escape:x=>x,toast(){}});
+const target={id:'lesson-material-file-input',files:[new File(['%PDF-test'],'licao.pdf',{type:'application/pdf'})],closest:()=>({querySelector:()=>save})};
+ui.change({target});await new Promise(r=>setImmediate(r));
+assert.equal(save.disabled,true);assert.deepEqual(routes,['/upload']);
+resolveUpload({url:'/api/media/test.pdf'});await new Promise(r=>setImmediate(r));
+assert.equal(input.value,'/api/media/test.pdf');assert.equal(save.disabled,false);
+assert(status.innerHTML.includes('licao.pdf'));
+console.log('Material upload: correct endpoint, submit protection and saved URL verified');
