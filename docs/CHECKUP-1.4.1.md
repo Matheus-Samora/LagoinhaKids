@@ -16,6 +16,8 @@ Data: 15/10/2026. Base analisada: commit 665f2b0 (inclui novos módulos do Antig
 
 - Removido worker duplicado iniciado ao importar a API, que concorria com o processo supervisionado e com os testes; fila processada pelo worker supervisionado a cada três segundos.
 
+- Notificações locais em primeiro plano também usam texto genérico. Ao abrir um push, detalhes do chamado são buscados pela sessão autorizada, sem confundir o ID do aviso com o ID do chamado.
+
 ## Cobertura verificada
 | Área | Evidência |
 |---|---|

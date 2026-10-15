@@ -1597,7 +1597,7 @@ function showIncomingCallOverlay(call) {
       <div class="phone-call-header">
         <span class="phone-call-type">CHAMADA DA SALINHA</span>
         <span class="phone-call-status-pulse">
-          <span class="phone-status-dot"></span> Ligação em andamento...
+          <span class="phone-status-dot"></span> Aguardando sua resposta...
         </span>
       </div>
 
@@ -1751,8 +1751,8 @@ async function initNativeNotifications(){
 
 async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging }){
   const urgent=kind==='urgent_call'||isPaging;
-  const notifTitle=title || (urgent ? '🚨 CHAMADO NO TELÃO - LAGOINHA KIDS' : 'Lagoinha Kids');
-  const notifBody=message || (urgent ? 'Atenção: Por favor, dirija-se à salinha do seu filho.' : 'Você recebeu um novo aviso. Abra o aplicativo para conferir.');
+  const notifTitle=urgent?'Lagoinha Kids — chamado da salinha':'Lagoinha Kids';
+  const notifBody=urgent?'A equipe precisa falar com você. Abra o aplicativo.':'Você recebeu um novo aviso. Abra o aplicativo para conferir.';
 
   // 1. Se estiver no app nativo (APK Android / iOS)
   if(NATIVE){
@@ -1900,9 +1900,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message',(event)=>{
     if(event.data?.type==='NEW_NOTICE'){void syncLive();return;}
     if(event.data?.type==='URGENT_INCOMING_CALL'||event.data?.type==='TRIGGER_CALL_MODAL'){
-      if(S.user?.role==='parent'){
-        showIncomingCallOverlay(event.data.payload);
-      }
+      // Fetch authorized call details; a push ID identifies a notification, not a paging request.
       void syncLive();
       return;
     }
