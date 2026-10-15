@@ -27,14 +27,24 @@ def deliver_batch(limit=50):
             if not tokens and not subscriptions:
                 with s.db() as c:c.execute('UPDATE outbox SET next_attempt=? WHERE id=?',(int(time.time())+3600,row['id']))
                 continue
-            for subscription in subscriptions:web_push.send(subscription,row['notification_id'])
+            delivered_any = False
+            for subscription in subscriptions:
+                try:
+                    if web_push.send(subscription,row['notification_id']):
+                        delivered_any = True
+                except Exception as ex:
+                    print(f"WebPush delivery error: {ex}")
             for device in tokens:
-                token=device['token']
-                # Do not put children's names, health details or pickup codes on lock screens.
-                response=send_apns(token,row['notification_id']) if device['platform']=='ios' else httpx.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',headers={'Authorization':'Bearer '+credentials.token},json={'message':{'token':token,'notification':{'title':'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'data':{'notification_id':str(row['notification_id'])}}},timeout=15)
-                if response.status_code==410 or (device['platform']=='android' and response.status_code==404):
-                    with s.db() as c:c.execute('DELETE FROM device_tokens WHERE token=?',(token,))
-                else:response.raise_for_status()
+                try:
+                    token=device['token']
+                    response=send_apns(token,row['notification_id']) if device['platform']=='ios' else httpx.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',headers={'Authorization':'Bearer '+credentials.token},json={'message':{'token':token,'notification':{'title':'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'data':{'notification_id':str(row['notification_id'])}}},timeout=15)
+                    if response.status_code==410 or (device['platform']=='android' and response.status_code==404):
+                        with s.db() as c:c.execute('DELETE FROM device_tokens WHERE token=?',(token,))
+                    else:
+                        response.raise_for_status()
+                        delivered_any = True
+                except Exception as ex:
+                    print(f"Native push delivery error: {ex}")
             with s.db() as c:c.execute('UPDATE outbox SET status="sent",delivered_at=? WHERE id=?',(s.now(),row['id']))
             sent+=1
         except Exception:

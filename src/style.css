@@ -4102,3 +4102,290 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(min-width:861px){.update-banner{bottom:24px;left:auto;width:360px}}
 @media(pointer:coarse){button,.mini-button{min-height:44px;min-width:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* ==========================================================================
+   Emergency Incoming Call Overlay (Estilo Ligação Telefônica)
+   ========================================================================== */
+.incoming-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 9, 11, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 16px;
+  animation: callOverlayFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes callOverlayFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.incoming-call-card {
+  background: #18181b;
+  color: #ffffff;
+  border: 1px solid #3f3f46;
+  border-radius: 28px;
+  max-width: 420px;
+  width: 100%;
+  padding: 32px 24px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px rgba(239, 68, 68, 0.25);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.incoming-call-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #ef4444);
+  background-size: 200% 100%;
+  animation: urgentShimmer 2s linear infinite;
+}
+
+@keyframes urgentShimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.call-urgency-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.call-siren-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
+  animation: pulseSiren 1.2s ease-in-out infinite;
+}
+
+@keyframes pulseSiren {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.call-sub-header {
+  font-size: 12.5px;
+  color: #a1a1aa;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.call-pulse-container {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  margin: 10px auto 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-pulse-ring {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  opacity: 0.8;
+  animation: ringPulse 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.call-pulse-ring:nth-child(2) {
+  animation-delay: 0.65s;
+}
+
+.call-pulse-ring:nth-child(3) {
+  animation-delay: 1.3s;
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  60% { opacity: 0.4; }
+  100% { transform: scale(1.65); opacity: 0; }
+}
+
+.call-avatar-circle {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  background: #27272a;
+  border: 3px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  z-index: 2;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  animation: shakeAvatar 2s ease-in-out infinite;
+}
+
+@keyframes shakeAvatar {
+  0%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(-8deg); }
+  20%, 40% { transform: rotate(8deg); }
+  50% { transform: rotate(0deg); }
+}
+
+.call-info {
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.call-child-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+}
+
+.call-location-badge {
+  margin: 0 0 10px 0;
+  font-size: 13.5px;
+  color: #d4d4d8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.call-reason-text {
+  font-size: 14px;
+  color: #e4e4e7;
+  margin: 0 0 14px 0;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 14px;
+  border-radius: 10px;
+}
+
+.call-claim-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px dashed rgba(239, 68, 68, 0.5);
+  padding: 8px 18px;
+  border-radius: 12px;
+}
+
+.call-claim-box small {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fca5a5;
+  letter-spacing: 0.8px;
+}
+
+.call-screen-code {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 1px;
+}
+
+.call-actions-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-arrive-primary {
+  background: #22c55e;
+  color: #000000;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.45);
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-arrive-primary:hover {
+  background: #16a34a;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(34, 197, 94, 0.55);
+}
+
+.btn-arrive-primary:active {
+  transform: translateY(0);
+}
+
+.btn-arrive-icon {
+  font-size: 20px;
+}
+
+.call-secondary-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+.btn-silence-call {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid #3f3f46;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 11px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+
+.btn-silence-call:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.btn-dismiss-call {
+  background: transparent;
+  color: #a1a1aa;
+  border: none;
+  font-size: 12.5px;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.btn-dismiss-call:hover {
+  color: #ffffff;
+}
+

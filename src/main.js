@@ -673,16 +673,32 @@ document.addEventListener('click',async e=>{
  }
  if(action==='digital-id'){if(ch)digitalIdModal(ch);return;}
  if(action==='paging-call'){if(ch)pagingModal(ch);return;}
- if(action==='on-my-way'){
+ if(action==='on-my-way'||action==='call-on-my-way'){
+  emergencyRingtone.stop();
   const cid=Number(el.dataset.childId||0)||null;
   const pid=Number(el.dataset.id||0)||null;
   try{
     const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:cid,paging_id:pid}});
+    dismissIncomingCallOverlay();
     toast(`🏃 Resposta confirmada! A equipe e o administrativo foram avisados que você está a caminho de ${res.child_name||'seu filho'}.`);
     await load();
   }catch(err){
     toast(err.message||'Erro ao avisar a equipe.',true);
   }
+  return;
+ }
+ if(action==='silence-call-overlay'){
+  emergencyRingtone.stop();
+  const btn=document.getElementById('silence-call-btn');
+  if(btn){
+    btn.innerHTML='🔕 Toque Silenciado ✓';
+    btn.disabled=true;
+  }
+  toast('Toque silenciado.');
+  return;
+ }
+ if(action==='dismiss-call-overlay'){
+  dismissIncomingCallOverlay();
   return;
  }
  if(action==='resolve-paging'){await api(`/paging/${el.dataset.id}/resolve`,{method:'POST'});await load();toast('Chamado no telão resolvido.');return;}
@@ -927,24 +943,28 @@ async function syncLive(){
       });
     }
   }
-  if(S.user.role==='parent' && activePaging && activePaging.length > 0){
-    for(const p of activePaging){
-      if(p.status==='active'){
-        const key='seen_p_'+p.id;
-        if(!sessionStorage.getItem(key)){
-          sessionStorage.setItem(key,'true');
-          sendSystemNotification({
-            title:'⚠️ Chamado da Salinha - '+p.child_name,
-            message:`Atenção: Por favor, compareça à salinha (${p.reason}). Código no telão: ${p.claim_code}`,
-            tag:'urgent-call-'+p.id,
-            id:p.id,
-            child_id:p.child_id,
-            paging_id:p.id,
-            kind:'urgent_call',
-            isPaging:true,
-            url:'/?page=overview'
-          });
-        }
+  if(S.user.role==='parent'){
+    const urgentActive = activePaging && activePaging.find(p=>p.status==='active');
+    if(urgentActive){
+      const key='call_prompted_'+urgentActive.id;
+      if(!sessionStorage.getItem(key)){
+        sessionStorage.setItem(key,'true');
+        showIncomingCallOverlay(urgentActive);
+        sendSystemNotification({
+          title:'🚨 Chamado no Telão: '+urgentActive.child_name,
+          message:`Atenção: Por favor, compareça à salinha (${urgentActive.reason||'Acolhimento necessário'}). Código no telão: ${urgentActive.claim_code}`,
+          tag:'urgent-call-'+urgentActive.id,
+          id:urgentActive.id,
+          child_id:urgentActive.child_id,
+          paging_id:urgentActive.id,
+          kind:'urgent_call',
+          isPaging:true,
+          url:'/?page=overview'
+        });
+      }
+    }else{
+      if(document.getElementById('emergency-call-overlay') && (!activePaging || !activePaging.some(p=>p.status==='active'))){
+        dismissIncomingCallOverlay();
       }
     }
   }
@@ -992,6 +1012,184 @@ document.addEventListener('input',event=>{if(event.target.closest('form'))formDi
 modal.addEventListener('close',()=>{formDirty=false;});
 window.addEventListener('beforeunload',event=>{if(formDirty){event.preventDefault();event.returnValue='';}});
 
+class EmergencyRingtone {
+  constructor() {
+    this.ctx = null;
+    this.timer = null;
+    this.isPlaying = false;
+  }
+
+  start() {
+    if (this.isPlaying) return;
+    this.isPlaying = true;
+
+    try {
+      if ('vibrate' in navigator) {
+        navigator.vibrate([1000, 300, 1000, 300, 1000, 300, 1500]);
+      }
+    } catch {}
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    try {
+      this.ctx = new AudioCtx();
+    } catch (e) {
+      console.warn('AudioContext failed:', e);
+      return;
+    }
+
+    const ring = () => {
+      if (!this.isPlaying || !this.ctx) return;
+      try {
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        const now = this.ctx.currentTime;
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(440, now);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(480, now);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+        gain.gain.setValueAtTime(0.3, now + 1.7);
+        gain.gain.linearRampToValueAtTime(0, now + 1.8);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 1.85);
+        osc2.stop(now + 1.85);
+
+        if ('vibrate' in navigator) {
+          try {
+            navigator.vibrate([1000, 300, 1000, 300]);
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('Ringtone pulse error:', err);
+      }
+
+      if (this.isPlaying) {
+        this.timer = setTimeout(ring, 3200);
+      }
+    };
+
+    ring();
+  }
+
+  stop() {
+    this.isPlaying = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(0);
+      } catch {}
+    }
+    if (this.ctx) {
+      try {
+        this.ctx.close();
+      } catch {}
+      this.ctx = null;
+    }
+  }
+}
+
+const emergencyRingtone = new EmergencyRingtone();
+
+function showIncomingCallOverlay(call) {
+  if (!call) return;
+  if (document.getElementById('emergency-call-overlay')) return;
+
+  emergencyRingtone.start();
+
+  const childName = call.child_name || 'Seu Filho(a)';
+  const roomName = call.room_name || 'Salinha';
+  const reason = call.reason || 'Acolhimento necessário';
+  const claimCode = call.claim_code || '';
+  const childId = call.child_id || '';
+  const pagingId = call.id || call.paging_id || '';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'emergency-call-overlay';
+  overlay.className = 'incoming-call-overlay';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Chamado de Emergência do Ministério Infantil');
+
+  overlay.innerHTML = `
+    <div class="incoming-call-card">
+      <div class="call-urgency-header">
+        <span class="call-siren-badge">🚨 CHAMADO NO TELÃO</span>
+        <span class="call-sub-header">Ministério Infantil · Lagoinha</span>
+      </div>
+
+      <div class="call-pulse-container">
+        <div class="call-pulse-ring"></div>
+        <div class="call-pulse-ring"></div>
+        <div class="call-pulse-ring"></div>
+        <div class="call-avatar-circle">
+          ${icon('speaker', 38)}
+        </div>
+      </div>
+
+      <div class="call-info">
+        <h2 class="call-child-name">${escape(childName)}</h2>
+        <p class="call-location-badge">
+          <span>${icon('home', 15)} ${escape(roomName)}</span>
+        </p>
+        <p class="call-reason-text"><strong>Motivo:</strong> ${escape(reason)}</p>
+        ${claimCode ? `
+          <div class="call-claim-box">
+            <small>CÓDIGO NO TELÃO DO AUDITÓRIO</small>
+            <strong class="call-screen-code">${escape(claimCode)}</strong>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="call-actions-group">
+        <button type="button" class="btn-arrive-primary" data-action="call-on-my-way" data-child-id="${childId}" data-id="${pagingId}">
+          <span class="btn-arrive-icon">🏃</span>
+          <span class="btn-arrive-label">ESTOU A CAMINHO!</span>
+        </button>
+
+        <div class="call-secondary-actions">
+          <button type="button" class="btn-silence-call" id="silence-call-btn" data-action="silence-call-overlay">
+            <span>🔕</span> Silenciar Toque
+          </button>
+          <button type="button" class="btn-dismiss-call" data-action="dismiss-call-overlay">
+            Abrir Aplicativo
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+}
+
+function dismissIncomingCallOverlay() {
+  emergencyRingtone.stop();
+  const el = document.getElementById('emergency-call-overlay');
+  if (el) el.remove();
+}
+
+document.addEventListener('pointerdown', () => {
+  if (emergencyRingtone.isPlaying && emergencyRingtone.ctx && emergencyRingtone.ctx.state === 'suspended') {
+    emergencyRingtone.ctx.resume();
+  }
+}, { passive: true });
 
 function hasPushPermission(){
   if(typeof Notification!=='undefined'&&Notification.permission==='granted'&&localStorage.getItem('lagoinha_web_push_registered')==='true')return true;
@@ -1072,10 +1270,9 @@ async function initNativeNotifications(){
 }
 
 async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging }){
-  const notifTitle='Lagoinha Kids';
-  if(!NATIVE)return;
   const urgent=kind==='urgent_call'||isPaging;
-  const notifBody='Você recebeu um novo aviso. Abra o aplicativo para conferir.';
+  const notifTitle=title || (urgent ? '🚨 CHAMADO NO TELÃO - LAGOINHA KIDS' : 'Lagoinha Kids');
+  const notifBody=message || (urgent ? 'Atenção: Por favor, dirija-se à salinha do seu filho.' : 'Você recebeu um novo aviso. Abra o aplicativo para conferir.');
 
   // 1. Se estiver no app nativo (APK Android / iOS)
   if(NATIVE){
@@ -1125,7 +1322,7 @@ async function sendSystemNotification({ title, message, tag, url, id, child_id, 
       kind:kind||'general',
       isPaging:urgent
     },
-    vibrate:urgent?[300,150,300,150,300,150,400]:[200,100,200]
+    vibrate:urgent?[1000,300,1000,300,1000,300,1500]:[200,100,200]
   };
 
   if(urgent){
@@ -1222,7 +1419,16 @@ function checkAutoPromptPush(){
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message',(event)=>{
     if(event.data?.type==='NEW_NOTICE'){void syncLive();return;}
+    if(event.data?.type==='URGENT_INCOMING_CALL'||event.data?.type==='TRIGGER_CALL_MODAL'){
+      if(S.user?.role==='parent'){
+        showIncomingCallOverlay(event.data.payload);
+      }
+      void syncLive();
+      return;
+    }
     if(event.data?.type==='PAGING_ACKNOWLEDGED'){
+      emergencyRingtone.stop();
+      dismissIncomingCallOverlay();
       toast('🏃 Resposta registrada! Os professores e o administrativo já foram avisados que você está a caminho.');
       void load();
     }

@@ -14,7 +14,7 @@ def records(monkeypatch):
     monkeypatch.delenv('GOOGLE_CLIENT_ID',raising=False)
     monkeypatch.delenv('GOOGLE_CLIENT_SECRET',raising=False)
     with s.db() as c:
-        for table in ['web_subscriptions','paging_requests','guest_checkins','event_registrations','events','mfa_recovery','outbox','attendance_events','family_invites','family_links','waitlist','auth_tokens','terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
+        for table in ['media','web_subscriptions','paging_requests','guest_checkins','event_registrations','events','mfa_recovery','outbox','attendance_events','family_invites','family_links','waitlist','auth_tokens','terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
             c.execute(f'DELETE FROM {table}')
         for uid,role in [(1,'admin'),(2,'teacher'),(3,'parent'),(4,'parent')]:
             c.execute('INSERT INTO users(id,name,email,password,role,created_at) VALUES(?,?,?,?,?,?)',(uid,f'User {uid}',f'user{uid}@example.test',s.password_hash(PASSWORD),role,s.now()))
