@@ -7,3 +7,15 @@ node_modules
 android
 public/*.apk
 Lagoinha-Kids-acessos-locais.md
+.venv
+ios
+dist
+.pytest_cache
+**/__pycache__
+*.pem
+*.key
+*.jks
+*.keystore
+*service-account*.json
+ACESSOS*.md
+outputs
