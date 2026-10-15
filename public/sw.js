@@ -27,9 +27,7 @@ self.addEventListener('push', event => {
     ? `🚨 CHAMADO NO TELÃO: ${data.child_name || 'Seu Filho(a)'}!`
     : (data.title || 'Lagoinha Kids');
 
-  const body = isUrgent
-    ? `Atenção: Seu filho está precisando de você na salinha (${data.room_name || 'Ministério Infantil'}). Motivo: ${data.reason || 'Acolhimento necessário'}. Código no telão: ${data.claim_code || ''}`
-    : (data.body || 'Você recebeu um novo aviso. Abra o aplicativo para conferir.');
+  const body = isUrgent ? 'A equipe precisa falar com você. Abra o aplicativo.' : 'Você recebeu um novo aviso. Abra o aplicativo para conferir.';
 
   const options = {
     body: body,
@@ -83,45 +81,12 @@ self.addEventListener('notificationclick', event => {
 
   notification.close();
 
-  // 1. Resposta rápida direta da tela de bloqueio / notificação:
-  if (action === 'on_my_way') {
-    event.waitUntil(
-      (async () => {
-        try {
-          const bodyPayload = JSON.stringify({
-            paging_id: data.paging_id || null,
-            child_id: data.child_id || null
-          });
-          await fetch('/api/paging/on-my-way', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: bodyPayload
-          });
-
-          await self.registration.showNotification('✅ Resposta Enviada!', {
-            body: `A equipe da salinha já sabe que você está a caminho de ${data.child_name || 'seu filho(a)'}.`,
-            icon: '/logo.png',
-            tag: 'ack-confirmed-' + Date.now(),
-            vibrate: [200, 100, 200]
-          });
-
-          const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-          for (const client of windows) {
-            client.postMessage({ type: 'PAGING_ACKNOWLEDGED', payload: data });
-          }
-        } catch (e) {
-          console.warn('Erro ao responder "A Caminho" pelo Service Worker:', e);
-        }
-      })()
-    );
-    return;
-  }
-
+  // Acknowledgement requires an authenticated app session and CSRF protection.
+  // Open the app so the parent can review and confirm the actual call.
   // 2. Abrir / Focar o aplicativo diretamente no chamado:
   event.waitUntil(
     (async () => {
-      const targetUrl = data.url || (data.urgent ? '/#overview' : '/#notifications');
+      const targetUrl = '/#notifications';
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const client of windows) {
         if (new URL(client.url).origin === self.location.origin) {

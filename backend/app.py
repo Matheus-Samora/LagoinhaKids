@@ -13,7 +13,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Kids',version='1.4.0')
+app=FastAPI(title='Lagoinha Kids',version='1.4.1')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=8*1024*1024
@@ -129,7 +129,9 @@ class Register(Login):
     terms_accepted:bool=False
 
 @app.get('/api/health')
-def health(): return {'status':'ok','application':'Lagoinha Kids','google_enabled':google_ready(),'push_enabled':bool(push_platforms()),'biometric_liveness':False}
+def health():
+    from .web_push_transport import ready as web_push_ready
+    return {'status':'ok','application':'Lagoinha Kids','google_enabled':google_ready(),'push_enabled':bool(push_platforms()) or web_push_ready(),'native_push_enabled':bool(push_platforms()),'biometric_liveness':False}
 @app.post('/api/auth/login')
 def login(data:Login,request:Request,response:Response):
     addr=request.client.host if request.client else 'unknown'
@@ -443,11 +445,17 @@ def get_team(user=Depends(staff)):
         members = []
         for r in staff_rows:
             rooms = [x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]
-            members.append(public_user(r) | {'rooms': rooms})
+            if user['role']!='admin' and r['id']!=user['id'] and not any(room_allowed(c,user,rid) for rid in rooms):
+                continue
+            visible=public_user(r)
+            if user['role']!='admin':
+                visible={k:visible[k] for k in ('id','name','role','active','staff_role','avatar_url')}
+                rooms=[rid for rid in rooms if room_allowed(c,user,rid)]
+            members.append(visible | {'rooms': rooms})
         candidates = [public_user(r) for r in c.execute('''
             SELECT * FROM users WHERE role='parent' AND active=1 ORDER BY name
         ''').fetchall()]
-        return {'members': members, 'candidates': candidates}
+        return {'members': members, 'candidates': candidates if user['role']=='admin' else []}
 
 class TeamMemberIn(BaseModel):
     name: str = Field(min_length=2, max_length=100)
@@ -458,8 +466,8 @@ class TeamMemberIn(BaseModel):
     phone: str | None = Field(default='', max_length=30)
 
 @app.post('/api/team/member')
-def create_team_member(data: TeamMemberIn, user=Depends(staff)):
-    s_role = data.staff_role if data.staff_role in ('teacher', 'monitor') else 'teacher'
+def create_team_member(data: TeamMemberIn, user=Depends(admin)):
+    s_role = data.staff_role if data.staff_role in ('teacher', 'monitor', 'admin') else 'teacher'
     validate_password(data.password)
     target_mail = email(data.email)
     with s.db() as c:
@@ -469,7 +477,7 @@ def create_team_member(data: TeamMemberIn, user=Depends(staff)):
             uid = c.execute('''
                 INSERT INTO users(name, email, password, role, staff_role, phone, created_at)
                 VALUES(?,?,?,?,?,?,?)
-            ''', (data.name.strip(), target_mail, s.password_hash(data.password), 'teacher', s_role, (data.phone or '').strip(), s.now())).lastrowid
+            ''', (data.name.strip(), target_mail, s.password_hash(data.password), 'admin' if s_role=='admin' else 'teacher', s_role, (data.phone or '').strip(), s.now())).lastrowid
         except sqlite3.IntegrityError:
             fail('exists', 'E-mail já cadastrado.', 409)
         for rid in set(data.rooms):
@@ -487,7 +495,7 @@ class TeamDelegateIn(BaseModel):
     rooms: list[int] = []
 
 @app.post('/api/team/delegate')
-def delegate_team_member(data: TeamDelegateIn, user=Depends(staff)):
+def delegate_team_member(data: TeamDelegateIn, user=Depends(admin)):
     s_role = data.staff_role if data.staff_role in ('teacher', 'monitor') else 'teacher'
     with s.db() as c:
         target = c.execute('SELECT * FROM users WHERE id=?', (data.user_id,)).fetchone()
@@ -497,7 +505,10 @@ def delegate_team_member(data: TeamDelegateIn, user=Depends(staff)):
             fail('forbidden', 'Não é permitido alterar administradores.', 403)
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
             fail('room', 'Turma inválida.')
+        if target['role']=='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(data.user_id,)).fetchone():
+            fail('parent','Transfira os vínculos dos filhos antes de alterar o perfil.',409)
         c.execute('UPDATE users SET role="teacher", staff_role=? WHERE id=?', (s_role, data.user_id))
+        c.execute('DELETE FROM sessions WHERE user_id=?',(data.user_id,))
         c.execute('DELETE FROM teacher_rooms WHERE user_id=?', (data.user_id,))
         for rid in set(data.rooms):
             c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)', (data.user_id, rid))
@@ -509,6 +520,7 @@ def delegate_team_member(data: TeamDelegateIn, user=Depends(staff)):
     return {'ok': True, 'staff_role': s_role}
 
 class TeamMemberUpdate(BaseModel):
+    phone: str | None = Field(default=None,max_length=30)
     name: str | None = Field(default=None, min_length=2, max_length=100)
     email: str | None = Field(default=None, max_length=200)
     staff_role: str | None = None
@@ -518,7 +530,7 @@ class TeamMemberUpdate(BaseModel):
     password: str | None = Field(default=None, max_length=128)
 
 @app.patch('/api/team/member/{uid}')
-def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(staff)):
+def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(admin)):
     with s.db() as c:
         target = c.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
         if not target:
@@ -533,6 +545,10 @@ def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(staff)):
         s_role = data.staff_role if data.staff_role is not None else target['staff_role']
         if target_role == 'teacher' and s_role not in ('teacher', 'monitor'):
             s_role = 'teacher'
+        if target['role']=='parent' and target_role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():
+            fail('parent','Transfira os vínculos dos filhos antes de alterar o perfil.',409)
+        if uid==user['id'] and (target_role!='admin' or data.active is False):
+            fail('self','Você não pode remover seu próprio acesso administrativo.',409)
         name_val = (data.name or target['name']).strip()
         email_val = email(data.email) if data.email is not None else target['email']
         active_val = int(data.active) if data.active is not None else target['active']
@@ -541,6 +557,8 @@ def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(staff)):
                       (name_val, email_val, target_role, s_role, active_val, uid))
         except sqlite3.IntegrityError:
             fail('email', 'E-mail já cadastrado.', 409)
+        if data.phone is not None:
+            c.execute('UPDATE users SET phone=? WHERE id=?',(data.phone.strip(),uid))
         if data.rooms is not None:
             if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
                 fail('room', 'Turma inválida.')
@@ -551,6 +569,10 @@ def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(staff)):
             validate_password(data.password)
             c.execute('UPDATE users SET password=? WHERE id=?', (s.password_hash(data.password), uid))
             c.execute('DELETE FROM sessions WHERE user_id=?', (uid,))
+        if email_val!=target['email']:
+            c.execute('UPDATE users SET google_sub=NULL,email_verified=0 WHERE id=?',(uid,))
+        if email_val!=target['email'] or target_role!=target['role'] or active_val!=target['active'] or data.rooms is not None:
+            c.execute('DELETE FROM sessions WHERE user_id=?',(uid,))
         s.audit(c, user['id'], 'team_member_updated', uid)
     return {'ok': True}
 
@@ -658,16 +680,18 @@ def _save_uploaded_image(raw: bytes, filename: str, user_id: int):
 
 @app.post('/api/upload')
 async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
-    raw = await file.read()
+    raw = await file.read(10 * 1024 * 1024 + 1)
     return _save_uploaded_image(raw, file.filename or 'upload.webp', user['id'])
 
 @app.post('/api/avatar/upload')
 async def upload_avatar(file: UploadFile = File(...), user = Depends(session)):
-    raw = await file.read()
+    raw = await file.read(10 * 1024 * 1024 + 1)
+    if raw.startswith(b'%PDF') or (file.filename or '').lower().endswith('.pdf'):
+        fail('image','Selecione uma imagem para a foto de perfil.')
     return _save_uploaded_image(raw, file.filename or 'avatar.webp', user['id'])
 
 @app.api_route('/api/media/{media_id}', methods=['GET', 'HEAD'])
-def get_media(media_id: str):
+def get_media(media_id: str, user=Depends(session)):
     with s.db() as c:
         row = c.execute('SELECT content_type, data FROM media WHERE id = ?', (media_id,)).fetchone()
     if not row or not row['data']:
@@ -676,7 +700,8 @@ def get_media(media_id: str):
         content=bytes(row['data']),
         media_type=row['content_type'],
         headers={
-            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
             'Content-Disposition': 'inline'
         }
     )
@@ -708,7 +733,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '1.4.0',
+        'version': '1.4.1',
         'build': get_build_id(),
         'app': 'Lagoinha Kids',
         'timestamp': s.now()

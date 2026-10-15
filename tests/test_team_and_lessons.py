@@ -18,10 +18,11 @@ def test_team_access_and_management():
 
     r_teacher = teacher.get('/api/team')
     assert r_teacher.status_code == 200
-    assert len(r_teacher.json()['members']) >= 2
+    assert len(r_teacher.json()['members']) >= 1
+    assert r_teacher.json()['candidates']==[]
 
     # 3. Teacher can create a new monitor
-    new_mon = teacher.post('/api/team/member', json={
+    new_mon = admin.post('/api/team/member', json={
         'name': 'Monitor João',
         'email': 'joao.monitor@lagoinha.test',
         'password': PASSWORD,
@@ -37,15 +38,15 @@ def test_team_access_and_management():
     assert bad_admin.status_code == 403
 
     # 5. Teacher can delegate role to an existing parent
-    candidates = teacher.get('/api/team').json()['candidates']
+    candidates = admin.get('/api/team').json()['candidates']
     if candidates:
         target_cand = candidates[0]['id']
-        del_res = teacher.post('/api/team/delegate', json={
+        del_res = admin.post('/api/team/delegate', json={
             'user_id': target_cand,
             'staff_role': 'monitor',
             'rooms': [1]
         })
-        assert del_res.status_code == 200, del_res.text
+        assert del_res.status_code == 409, del_res.text
 
 def test_room_with_teacher_and_monitor():
     admin = client(1)

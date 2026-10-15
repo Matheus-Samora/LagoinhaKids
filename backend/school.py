@@ -38,14 +38,17 @@ def validate_room(c,data,user,is_edit=False):
     owner=data.teacher_id or data.owner_id or user['id']
     if not is_edit and user['role']!='admin' and owner!=user['id']:fail('owner','Você só pode criar turmas em seu próprio nome.',403)
     if not c.execute('SELECT 1 FROM users WHERE id=? AND role IN ("teacher","admin") AND active=1',(owner,)).fetchone():fail('owner','Escolha um professor ou administrador ativo.')
-    if data.monitor_id and not c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(data.monitor_id,)).fetchone():
+    if data.monitor_id and not c.execute('SELECT 1 FROM users WHERE id=? AND active=1 AND role IN ("teacher","admin")',(data.monitor_id,)).fetchone():
         fail('monitor','Monitor inválido.')
     return owner
 def sync_owner(c,rid,owner):
+    room=c.execute('SELECT monitor_id FROM rooms WHERE id=?',(rid,)).fetchone()
     c.execute('DELETE FROM teacher_rooms WHERE room_id=?',(rid,))
     role_row = c.execute('SELECT role FROM users WHERE id=?',(owner,)).fetchone()
     if role_row and role_row[0]=='teacher':
-        c.execute('INSERT INTO teacher_rooms VALUES(?,?)',(owner,rid))
+        c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)',(owner,rid))
+    if room and room['monitor_id']:
+        c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)',(room['monitor_id'],rid))
 
 @router.get('/rooms')
 def rooms(user=Depends(session)):
@@ -92,7 +95,9 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
             owner=existing['teacher_id'] or existing['created_by'] or user['id']
         else:
             owner=data.teacher_id or data.owner_id or existing['teacher_id'] or existing['created_by'] or user['id']
-        data=data.model_copy(update={'owner_id':owner})
+        if user['role']!='admin' and data.teacher_id is not None and data.teacher_id!=owner:
+            fail('owner','Somente a administração pode transferir a turma.',403)
+        data=data.model_copy(update={'owner_id':owner,'teacher_id':owner})
         owner=validate_room(c,data,user,is_edit=True)
         t_id=data.teacher_id or owner
         m_id=data.monitor_id
@@ -222,9 +227,20 @@ class LessonIn(BaseModel):
     monitor_id:int|None=None
     materials_url:str|None=Field(default='',max_length=500)
     notes:str|None=Field(default='',max_length=2000)
+def validate_lesson_staff(c,data,user):
+    for uid in (data.teacher_id,data.monitor_id):
+        if uid is None:continue
+        member=c.execute('SELECT * FROM users WHERE id=? AND active=1 AND role IN ("teacher","admin")',(uid,)).fetchone()
+        if not member or not room_allowed(c,dict(member),data.room_id):
+            fail('staff','Escolha um membro da equipe vinculado a esta turma.')
+    url=(data.materials_url or '').strip()
+    if url and not (url.startswith('https://') or url.startswith('/api/media/')):
+        fail('materials','Use um link HTTPS ou envie o material pelo aplicativo.')
+
 def normalize_lesson(c,data,user,lid=None):
     if not data.title.strip():fail('title','Informe o nome da aulinha.')
     room=room_for_edit(c,user,data.room_id)
+    validate_lesson_staff(c,data,user)
     if not room['active']:fail('room','Turma arquivada.')
     start=(data.starts_at.replace(tzinfo=TZ) if data.starts_at.tzinfo is None else data.starts_at.astimezone(TZ))
     end=(data.ends_at.replace(tzinfo=TZ) if data.ends_at.tzinfo is None else data.ends_at.astimezone(TZ))

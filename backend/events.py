@@ -283,6 +283,8 @@ def get_event_participants(event_id: int, user=Depends(staff)):
                 r.guardian_id,
                 r.notes,
                 r.created_at AS registered_at,
+                ch.room_id, ch.parent_id,
+                ch.id AS id,
                 ch.name AS child_name,
                 ch.birthday AS child_birthday,
                 coalesce(ch.avatar_url, '') AS child_avatar_url,
@@ -303,7 +305,9 @@ def get_event_participants(event_id: int, user=Depends(staff)):
         ''', (event_id,)).fetchall()
         res = []
         for r in rows:
+            if not child_visible(c,user,r):continue
             d = dict(r)
+            d.pop('id',None);d.pop('parent_id',None)
             d['child_age'] = age_on(d['child_birthday'], ev['starts_at'])
             res.append(d)
         return {
@@ -329,6 +333,7 @@ def staff_register_participant(event_id: int, data: StaffRegisterIn, user=Depend
         if not child:
             fail('child_not_found', 'Criança não encontrada.', 404)
 
+        child_allowed(c,user,data.child_id)
         existing = c.execute('SELECT id FROM event_registrations WHERE event_id = ? AND child_id = ?', (event_id, data.child_id)).fetchone()
         if existing:
             fail('already_registered', f'{child["name"]} já está inscrito(a) neste evento.', 400)
@@ -337,6 +342,10 @@ def staff_register_participant(event_id: int, data: StaffRegisterIn, user=Depend
         if count >= event['max_capacity']:
             fail('capacity_full', 'Vagas esgotadas para este evento.', 400)
 
+        child_allowed(c,user,data.child_id)
+        age=age_on(child['birthday'],event['starts_at'])
+        if not event['min_age']<=age<=event['max_age']:
+            fail('age','A idade da criança não corresponde à faixa etária do evento.')
         guardian_id = child['parent_id'] or user['id']
         cur = c.execute('''
             INSERT INTO event_registrations(event_id, child_id, guardian_id, notes, created_at)
@@ -361,8 +370,7 @@ def staff_register_participant(event_id: int, data: StaffRegisterIn, user=Depend
 @router.delete('/events/{event_id}/register/{child_id}')
 def cancel_event_registration(event_id: int, child_id: int, user=Depends(session)):
     with s.db() as c:
-        if user['role'] == 'parent':
-            child_allowed(c, user, child_id)
+        child_allowed(c, user, child_id)
         deleted = c.execute('DELETE FROM event_registrations WHERE event_id = ? AND child_id = ?', (event_id, child_id)).rowcount
         if not deleted:
             fail('not_registered', 'Inscrição não encontrada.', 404)

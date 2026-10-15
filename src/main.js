@@ -265,12 +265,12 @@ function teamPage(){
   return true;
  });
 
- const headerActions=`
+ const headerActions=S.user.role==='admin'?`
   <div class="team-header-actions">
     <button class="btn primary" data-action="new-team-member">${icon('plus',16)} Novo Professor / Monitor</button>
     <button class="btn secondary" data-action="delegate-team-role">🤝 Delegar a Membro</button>
   </div>
- `;
+ `:'';
 
  return `${title('Professores e Monitores','Equipe que cuida das turmas e conduz as aulinhas.',headerActions)}
  <div class="filter-chips">
@@ -285,7 +285,7 @@ function teamPage(){
   const cleanPhone=(m.phone||'').replace(/\D/g,'');
   const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${m.name}! Sou da equipe Lagoinha Kids.`)}`:'';
   const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
-  const canEdit=S.user.role==='admin'||(S.user.role==='teacher'&&m.role!=='admin');
+  const canEdit=S.user.role==='admin';
 
   return `<article class="team-member-card">
     <div class="team-card-top">
@@ -746,7 +746,7 @@ function guestCheckinModal(){
 async function uploadImageFile(file){
  if(!file)throw new Error('Nenhum arquivo selecionado.');
  if(!file.type.startsWith('image/'))throw new Error('Selecione uma imagem válida (JPG, PNG, WebP ou GIF).');
- if(file.size > 15 * 1024 * 1024)throw new Error('A imagem deve ter no máximo 15 MB.');
+ if(file.size > 10 * 1024 * 1024)throw new Error('A imagem deve ter no máximo 10 MB.');
  const data = new FormData();
  data.append('file', file);
  const res = await api('/upload', { method: 'POST', body: data });
@@ -756,7 +756,7 @@ async function uploadImageFile(file){
 async function uploadAvatarFile(file){
  if(!file)throw new Error('Nenhum arquivo selecionado.');
  if(!file.type.startsWith('image/'))throw new Error('Selecione uma imagem válida (JPG, PNG ou WebP).');
- if(file.size > 15 * 1024 * 1024)throw new Error('A foto deve ter no máximo 15 MB.');
+ if(file.size > 10 * 1024 * 1024)throw new Error('A foto deve ter no máximo 10 MB.');
  const data = new FormData();
  data.append('file', file);
  const res = await api('/avatar/upload', { method: 'POST', body: data });

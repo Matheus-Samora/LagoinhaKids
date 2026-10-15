@@ -33,7 +33,7 @@ def deliver_batch(limit=50):
                     if web_push.send(subscription,row['notification_id']):
                         delivered_any = True
                 except Exception as ex:
-                    print(f"WebPush delivery error: {ex}")
+                    pass  # Provider errors can contain private subscription endpoints.
             for device in tokens:
                 try:
                     token=device['token']
@@ -44,7 +44,9 @@ def deliver_batch(limit=50):
                         response.raise_for_status()
                         delivered_any = True
                 except Exception as ex:
-                    print(f"Native push delivery error: {ex}")
+                    pass
+            if not delivered_any:
+                raise RuntimeError('Nenhum provedor confirmou o envio.')
             with s.db() as c:c.execute('UPDATE outbox SET status="sent",delivered_at=? WHERE id=?',(s.now(),row['id']))
             sent+=1
         except Exception:

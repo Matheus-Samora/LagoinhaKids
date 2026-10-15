@@ -19,34 +19,18 @@ def send(subscription,notification_id):
     try:
         notice = None
         with s.db() as c:
-            notice = c.execute('''
-                SELECT n.*, ch.name as child_name, rm.name as room_name, pr.claim_code, pr.reason, pr.id as paging_id
-                FROM notifications n
-                LEFT JOIN children ch ON ch.id = n.child_id
-                LEFT JOIN rooms rm ON rm.id = ch.room_id
-                LEFT JOIN paging_requests pr ON pr.child_id = n.child_id AND pr.status IN ('active', 'on_my_way')
-                WHERE n.id = ?
-            ''', (notification_id,)).fetchone()
+            notice = c.execute('SELECT kind FROM notifications WHERE id=?',(notification_id,)).fetchone()
 
         is_urgent = bool(notice and notice['kind'] == 'urgent_call')
-        title = notice['title'] if notice else 'Lagoinha Kids'
-        body = notice['message'] if notice else 'Você recebeu um novo aviso. Abra o aplicativo para conferir.'
-        tag = f"urgent-call-{notice['child_id']}" if is_urgent else f"notice-{notification_id}"
-
+        # Lock-screen payloads must never contain child names, health details or pickup codes.
         payload = {
-            'title': title,
-            'body': body,
-            'tag': tag,
-            'url': '/#overview' if is_urgent else '/#notifications',
+            'title': 'Lagoinha Kids — chamado da salinha' if is_urgent else 'Lagoinha Kids',
+            'body': 'A equipe precisa falar com você. Abra o aplicativo.' if is_urgent else 'Você recebeu um novo aviso. Abra o aplicativo para conferir.',
+            'tag': f'notice-{notification_id}',
+            'url': '/#notifications',
             'id': notification_id,
-            'kind': notice['kind'] if notice else 'general',
+            'kind': 'urgent_call' if is_urgent else 'general',
             'urgent': is_urgent,
-            'child_id': notice['child_id'] if notice else None,
-            'child_name': notice['child_name'] if notice else None,
-            'room_name': notice['room_name'] if notice else None,
-            'claim_code': notice['claim_code'] if notice else None,
-            'reason': notice['reason'] if notice else None,
-            'paging_id': notice['paging_id'] if notice else None,
         }
 
         webpush(

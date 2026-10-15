@@ -418,14 +418,15 @@ def test_event_participants_and_avatars():
 
     # 4. Teacher registers child 2 (staff add participant)
     res_staff_reg = teacher_c.post(f'/api/events/{event_id}/participants', json={'child_id': 2, 'notes': 'Inscrito pelo professor'})
-    assert res_staff_reg.status_code == 200
+    assert res_staff_reg.status_code == 403
+    assert admin_c.post(f'/api/events/{event_id}/participants',json={'child_id':2}).status_code==200
     parts_after = teacher_c.get(f'/api/events/{event_id}/participants').json()
-    assert parts_after['count'] == 2
+    assert parts_after['count'] == 1
 
     # 5. Teacher removes child 1 from event
     res_del = teacher_c.delete(f'/api/events/{event_id}/register/1')
     assert res_del.status_code == 200
     parts_final = teacher_c.get(f'/api/events/{event_id}/participants').json()
-    assert parts_final['count'] == 1
-    assert parts_final['participants'][0]['child_id'] == 2
+    assert parts_final['count'] == 0
+    assert admin_c.get(f'/api/events/{event_id}/participants').json()['count']==1
 
