@@ -1,0 +1,25 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const source=fs.readFileSync('src/main.js','utf8');
+const fn=source.slice(source.indexOf('async function sendSystemNotification('),source.indexOf('function promptPushPermissionModal('));
+const notices=[];
+function Notification(title,options){notices.push({title,options});}
+Notification.permission='granted';
+const context=vm.createContext({NATIVE:false,Notification,navigator:{},console,Date});
+vm.runInContext(fn,context);
+await context.sendSystemNotification({title:'Private child',message:'Private health and pickup code',kind:'urgent_call'});
+assert.equal(notices.length,1);
+assert(!JSON.stringify(notices).includes('Private'));
+const handlers={};const displayed=[];const opened=[];let pending;
+const worker=vm.createContext({self:{addEventListener:(name,cb)=>handlers[name]=cb,location:{origin:'https://example.test'},clients:{matchAll:async()=>[],openWindow:async url=>opened.push(url)},registration:{showNotification:async(title,options)=>displayed.push({title,options})}},Date,URL,console});
+vm.runInContext(fs.readFileSync('public/sw.js','utf8'),worker);
+handlers.push({data:{json:()=>({urgent:true,child_name:'Private child',reason:'Private health',claim_code:'PRIVATE'})},waitUntil:p=>pending=p});
+await pending;
+assert(!displayed[0].title.includes('Private'));
+assert(!displayed[0].options.body.includes('Private'));
+handlers.notificationclick({action:'on_my_way',notification:{data:{urgent:true},close(){}},waitUntil:p=>pending=p});
+await pending;
+assert.deepEqual(opened,['/#notifications']);
+assert.equal(displayed.length,1,'Must not report acknowledgement before an authenticated confirmation');
+console.log('3 notification behavior checks passed');

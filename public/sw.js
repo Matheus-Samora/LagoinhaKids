@@ -23,9 +23,7 @@ self.addEventListener('push', event => {
   } catch {}
 
   const isUrgent = Boolean(data.urgent || data.kind === 'urgent_call');
-  const title = isUrgent
-    ? `🚨 CHAMADO NO TELÃO: ${data.child_name || 'Seu Filho(a)'}!`
-    : (data.title || 'Lagoinha Kids');
+  const title = isUrgent ? 'Lagoinha Kids — chamado da salinha' : 'Lagoinha Kids';
 
   const body = isUrgent ? 'A equipe precisa falar com você. Abra o aplicativo.' : 'Você recebeu um novo aviso. Abra o aplicativo para conferir.';
 
