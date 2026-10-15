@@ -903,7 +903,9 @@ function eventParticipantsModal(evId){
  const ev=S.events.find(x=>x.id===Number(evId));
  if(!ev)return;
  showModal(`Inscritos: ${escape(ev.title)}`,'Carregando lista de participantes...',`<div style="text-align:center;padding:32px 0;"><span class="spin">●</span><p style="margin-top:10px;">Buscando inscrições confirmadas...</p></div>`);
- api(`/events/${ev.id}/participants`).then(list=>{
+ api(`/events/${ev.id}/participants`).then(response=>{
+  const list=Array.isArray(response)?response:response?.participants;
+  if(!Array.isArray(list))throw new Error('Não foi possível interpretar a lista de inscritos. Atualize e tente novamente.');
   const regCount=list.length;
   const enrolledIds=new Set(list.map(p=>p.child_id));
   const availableChildren=S.children.filter(c=>!enrolledIds.has(c.id));
