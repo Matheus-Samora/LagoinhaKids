@@ -58,4 +58,4 @@ if __name__=='__main__':
     while True:
         print(json.dumps(deliver_batch()))
         if args.once:break
-        time.sleep(10)
+        time.sleep(3)

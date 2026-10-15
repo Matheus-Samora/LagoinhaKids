@@ -468,11 +468,6 @@ def trigger_paging(data: PagingCreate, user=Depends(staff)):
             ))
 
         s.audit(c, user['id'], 'paging_call', data.child_id)
-        try:
-            from .app import dispatch_push_now
-            dispatch_push_now()
-        except Exception:
-            pass
         return {
             'id': paging_id,
             'child_id': data.child_id,

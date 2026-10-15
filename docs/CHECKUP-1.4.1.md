@@ -14,6 +14,8 @@ Data: 15/10/2026. Base analisada: commit 665f2b0 (inclui novos módulos do Antig
 - A ação da notificação abre o app para confirmar o chamado com sessão e proteção CSRF; retirada a falsa confirmação direta pelo service worker.
 - Saúde distingue disponibilidade de push web e nativo.
 
+- Removido worker duplicado iniciado ao importar a API, que concorria com o processo supervisionado e com os testes; fila processada pelo worker supervisionado a cada três segundos.
+
 ## Cobertura verificada
 | Área | Evidência |
 |---|---|

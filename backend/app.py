@@ -759,27 +759,3 @@ def serve_index():
 
 if WEB_DIR.is_dir(): app.mount('/',StaticFiles(directory=WEB_DIR,html=True),name='frontend')
 
-def dispatch_push_now():
-    def _run():
-        try:
-            from .push_worker import deliver_batch
-            deliver_batch(limit=25)
-        except Exception:
-            pass
-    import threading
-    threading.Thread(target=_run, daemon=True).start()
-
-def _push_background_loop():
-    import time
-    from .push_worker import deliver_batch
-    while True:
-        try:
-            deliver_batch(limit=50)
-        except Exception:
-            pass
-        time.sleep(3)
-
-if not os.getenv('PYTEST_CURRENT_TEST'):
-    import threading
-    threading.Thread(target=_push_background_loop, daemon=True).start()
-
