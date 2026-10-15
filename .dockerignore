@@ -5,7 +5,6 @@ work
 .env.*
 node_modules
 android
-public/*.apk
 Lagoinha-Kids-acessos-locais.md
 .venv
 ios

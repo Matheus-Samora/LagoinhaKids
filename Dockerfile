@@ -12,6 +12,7 @@ COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend backend
 COPY --from=frontend /web/dist dist
+COPY --from=frontend /web/public public
 ENV KIDS_DATA_DIR=/data
 RUN mkdir /data && useradd --system --uid 10001 kids && chown kids /data
 USER kids

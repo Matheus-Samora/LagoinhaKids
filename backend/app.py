@@ -462,6 +462,7 @@ def delete_face(cid:int,user=Depends(session)):
 @app.api_route('/download/lagoinha-kids.apk', methods=['GET', 'HEAD'])
 def download_apk():
     apk_paths = [
+        s.ROOT / 'dist' / 'lagoinha-kids.apk',
         s.ROOT / 'public' / 'lagoinha-kids.apk',
         s.ROOT / 'android' / 'app' / 'build' / 'outputs' / 'apk' / 'debug' / 'app-debug.apk',
     ]

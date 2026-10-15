@@ -14,6 +14,7 @@ __pycache__/
 **/__pycache__/
 .pytest_cache/
 *.apk
+!public/lagoinha-kids.apk
 *.jks
 *.keystore
 *service-account*.json

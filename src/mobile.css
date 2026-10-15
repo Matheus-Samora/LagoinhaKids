@@ -135,9 +135,43 @@
     margin-left: auto;
   }
 
-  .topbar-date-chip,
-  .topbar-action-pill.secondary {
+  .topbar-date-chip {
     display: none !important;
+  }
+
+  .topbar-action-pill.secondary {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: #18181b;
+    border: 1px solid #27272a;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .topbar-action-pill.secondary:active {
+    background: #27272a;
+  }
+
+  @media (max-width: 440px) {
+    .topbar-action-pill.secondary {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: inline-grid !important;
+      place-items: center;
+    }
+    .topbar-action-pill.secondary span {
+      display: none !important;
+    }
   }
 
   .topbar-action-pill.primary {
@@ -715,4 +749,109 @@
     padding-left: 10px;
     padding-right: 10px;
   }
+}
+
+/* Smart Install Banner for Mobile Browsers */
+.mobile-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #18181b;
+  border-bottom: 1px solid #27272a;
+  padding: 10px 16px;
+  color: #ffffff;
+  animation: bannerSlideDown 0.2s ease-out;
+}
+
+@keyframes bannerSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mobile-install-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mobile-install-banner-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #27272a;
+  color: #ffffff;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.mobile-install-banner-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mobile-install-banner-text strong {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.mobile-install-banner-text small {
+  font-size: 11px;
+  color: #a1a1aa;
+  line-height: 1.2;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-install-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-install-banner-cta {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #09090b;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-install-banner-cta:hover,
+.btn-install-banner-cta:active {
+  background: #e4e4e7;
+}
+
+.btn-install-banner-dismiss {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  border: none;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  font-size: 14px;
+  transition: color 0.15s;
+}
+
+.btn-install-banner-dismiss:hover,
+.btn-install-banner-dismiss:active {
+  color: #ffffff;
 }
