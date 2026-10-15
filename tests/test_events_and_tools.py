@@ -351,3 +351,81 @@ def test_media_upload_and_room_event_covers():
     assert ev_check['title'] == 'FestKids 2026'
     assert ev_check['price'] == '30'
     assert ev_check['banner_url'] == media_url
+
+def test_event_participants_and_avatars():
+    import io
+    from PIL import Image
+
+    admin_c = client(1)
+    teacher_c = client(2)
+    parent_c = client(3)
+
+    # 1. Parent and staff can upload avatar
+    img = Image.new('RGB', (60, 60), color='blue')
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG')
+    buf.seek(0)
+
+    res_av = parent_c.post('/api/avatar/upload', files={'file': ('me.jpg', buf.getvalue(), 'image/jpeg')})
+    assert res_av.status_code == 200, res_av.text
+    av_url = res_av.json()['url']
+
+    # Update parent avatar
+    res_me = parent_c.post('/api/me/avatar', json={'avatar_url': av_url})
+    assert res_me.status_code == 200
+    me_data = parent_c.get('/api/me').json()
+    assert me_data['user']['avatar_url'] == av_url
+
+    # Update child avatar
+    res_ch_av = parent_c.post('/api/children/1/avatar', json={'avatar_url': av_url})
+    assert res_ch_av.status_code == 200
+    children = parent_c.get('/api/children').json()
+    ch1 = next(c for c in children if c['id'] == 1)
+    assert ch1['avatar_url'] == av_url
+
+    # 2. Create event and register child
+    res_ev = admin_c.post('/api/events', json={
+        'title': 'Acampamento Kids 2026',
+        'description': 'Acampamento com gincana e brincadeiras.',
+        'category': 'Acampamento',
+        'target_audience': 'kids',
+        'min_age': 2,
+        'max_age': 12,
+        'starts_at': '2026-11-10T09:00:00',
+        'ends_at': '2026-11-12T18:00:00',
+        'location': 'Sítio Lagoinha',
+        'price': 'R$ 150',
+        'max_capacity': 20
+    })
+    assert res_ev.status_code == 200
+    event_id = res_ev.json()['id']
+
+    # Parent registers child 1
+    res_reg = parent_c.post(f'/api/events/{event_id}/register', json={'child_id': 1, 'notes': 'Alergia a amendoim'})
+    assert res_reg.status_code == 200
+
+    # 3. Teacher views participants list
+    res_parts = teacher_c.get(f'/api/events/{event_id}/participants')
+    assert res_parts.status_code == 200
+    p_data = res_parts.json()
+    assert p_data['count'] == 1
+    p1 = p_data['participants'][0]
+    assert p1['child_id'] == 1
+    assert p1['child_name'] == 'Aluno fictício A'
+    assert p1['child_avatar_url'] == av_url
+    assert p1['notes'] == 'Alergia a amendoim'
+    assert p1['guardian_name'] == 'User 3'
+
+    # 4. Teacher registers child 2 (staff add participant)
+    res_staff_reg = teacher_c.post(f'/api/events/{event_id}/participants', json={'child_id': 2, 'notes': 'Inscrito pelo professor'})
+    assert res_staff_reg.status_code == 200
+    parts_after = teacher_c.get(f'/api/events/{event_id}/participants').json()
+    assert parts_after['count'] == 2
+
+    # 5. Teacher removes child 1 from event
+    res_del = teacher_c.delete(f'/api/events/{event_id}/register/1')
+    assert res_del.status_code == 200
+    parts_final = teacher_c.get(f'/api/events/{event_id}/participants').json()
+    assert parts_final['count'] == 1
+    assert parts_final['participants'][0]['child_id'] == 2
+

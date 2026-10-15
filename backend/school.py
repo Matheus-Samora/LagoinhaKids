@@ -97,6 +97,7 @@ class ChildIn(BaseModel):
     birthday:date
     room_id:int|None=None
     parent_id:int|None=None
+    avatar_url:str|None=Field(default='',max_length=500)
     allergies:str|None=Field(default='',max_length=250)
     medical_conditions:str|None=Field(default='',max_length=250)
     emergency_medication:str|None=Field(default='',max_length=250)
@@ -106,6 +107,8 @@ class ChildIn(BaseModel):
 def validate_child(c,data,user):
     validate_birth(data.birthday)
     if not data.name.strip():fail('name','Informe o nome da criança.')
+    if data.avatar_url and not (data.avatar_url.startswith('https://') or data.avatar_url.startswith('http://') or data.avatar_url.startswith('/api/media/') or data.avatar_url.startswith('/')):
+        fail('avatar','A foto da criança deve usar HTTPS ou ser enviada pelo app.')
     if user['role']=='parent':
         if data.parent_id not in (None,user['id']) or data.room_id is not None:fail('parent','O cadastro será vinculado à sua conta. Escolha a turma ao confirmar uma aulinha.',403)
         return user['id'],None
@@ -120,7 +123,7 @@ def children(lesson_id:int|None=None,user=Depends(session)):
         if lesson_id is not None:
             lesson=c.execute('SELECT * FROM lessons WHERE id=?',(lesson_id,)).fetchone()
             if not lesson or (user['role']!='parent' and not room_allowed(c,user,lesson['room_id'])):fail('lesson','Aula não permitida.',403)
-        rows=c.execute('SELECT ch.id,ch.name,ch.birthday,ch.room_id,ch.parent_id,ch.face_allowed,ch.consent_at,ch.face_template IS NOT NULL face_enrolled,coalesce(r.name,"Ainda sem turma") room_name,coalesce(r.color,"#e4e4e7") color,u.name parent_name,u.email parent_email,coalesce(a.status,"absent") status,a.in_at,a.out_at,coalesce(ch.allergies,"") allergies,coalesce(ch.medical_conditions,"") medical_conditions,coalesce(ch.emergency_medication,"") emergency_medication,coalesce(ch.special_needs,"") special_needs,coalesce(ch.authorized_pickups,"") authorized_pickups,coalesce(a.claim_code,"") claim_code,coalesce(a.checkout_guardian,"") checkout_guardian FROM children ch LEFT JOIN rooms r ON r.id=ch.room_id LEFT JOIN users u ON u.id=ch.parent_id LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=? WHERE ch.archived=0 AND (?!="parent" OR ch.parent_id=? OR EXISTS(SELECT 1 FROM family_links f WHERE f.child_id=ch.id AND f.user_id=? AND f.active=1)) ORDER BY ch.name',(s.today(),user['role'],user['id'],user['id'])).fetchall()
+        rows=c.execute('SELECT ch.id,ch.name,ch.birthday,ch.room_id,ch.parent_id,ch.face_allowed,ch.consent_at,ch.face_template IS NOT NULL face_enrolled,coalesce(r.name,"Ainda sem turma") room_name,coalesce(r.color,"#e4e4e7") color,coalesce(ch.avatar_url,"") avatar_url,u.name parent_name,u.email parent_email,coalesce(a.status,"absent") status,a.in_at,a.out_at,coalesce(ch.allergies,"") allergies,coalesce(ch.medical_conditions,"") medical_conditions,coalesce(ch.emergency_medication,"") emergency_medication,coalesce(ch.special_needs,"") special_needs,coalesce(ch.authorized_pickups,"") authorized_pickups,coalesce(a.claim_code,"") claim_code,coalesce(a.checkout_guardian,"") checkout_guardian FROM children ch LEFT JOIN rooms r ON r.id=ch.room_id LEFT JOIN users u ON u.id=ch.parent_id LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=? WHERE ch.archived=0 AND (?!="parent" OR ch.parent_id=? OR EXISTS(SELECT 1 FROM family_links f WHERE f.child_id=ch.id AND f.user_id=? AND f.active=1)) ORDER BY ch.name',(s.today(),user['role'],user['id'],user['id'])).fetchall()
         result=[]
         for row in rows:
             if not child_visible(c,user,row):continue
@@ -132,7 +135,7 @@ def children(lesson_id:int|None=None,user=Depends(session)):
 def create_child(data:ChildIn,user=Depends(session)):
     with s.db() as c:
         parent,rid=validate_child(c,data,user)
-        cid=c.execute('INSERT INTO children(name,birthday,room_id,parent_id,created_at,allergies,medical_conditions,emergency_medication,special_needs,authorized_pickups) VALUES(?,?,?,?,?,?,?,?,?,?)',(data.name.strip(),str(data.birthday),rid,parent,s.now(),(data.allergies or '').strip(),(data.medical_conditions or '').strip(),(data.emergency_medication or '').strip(),(data.special_needs or '').strip(),(data.authorized_pickups or '').strip())).lastrowid
+        cid=c.execute('INSERT INTO children(name,birthday,room_id,parent_id,created_at,avatar_url,allergies,medical_conditions,emergency_medication,special_needs,authorized_pickups) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(data.name.strip(),str(data.birthday),rid,parent,s.now(),(data.avatar_url or '').strip(),(data.allergies or '').strip(),(data.medical_conditions or '').strip(),(data.emergency_medication or '').strip(),(data.special_needs or '').strip(),(data.authorized_pickups or '').strip())).lastrowid
         s.audit(c,user['id'],'child_created',cid)
     return {'id':cid}
 
@@ -153,12 +156,27 @@ def edit_child(cid:int,data:ChildIn,user=Depends(session)):
         if user['role']=='parent':
             if old['parent_id']!=user['id']:fail('owner','Somente o responsável principal pode editar o cadastro.',403)
             rid=old['room_id']
-        c.execute('UPDATE children SET name=?,birthday=?,room_id=?,parent_id=?,allergies=?,medical_conditions=?,emergency_medication=?,special_needs=?,authorized_pickups=? WHERE id=?',(data.name.strip(),str(data.birthday),rid,parent,(data.allergies or '').strip(),(data.medical_conditions or '').strip(),(data.emergency_medication or '').strip(),(data.special_needs or '').strip(),(data.authorized_pickups or '').strip(),cid))
+        target_avatar=data.avatar_url.strip() if data.avatar_url is not None else (old['avatar_url'] if 'avatar_url' in old.keys() else '')
+        c.execute('UPDATE children SET name=?,birthday=?,room_id=?,parent_id=?,avatar_url=?,allergies=?,medical_conditions=?,emergency_medication=?,special_needs=?,authorized_pickups=? WHERE id=?',(data.name.strip(),str(data.birthday),rid,parent,target_avatar,(data.allergies or '').strip(),(data.medical_conditions or '').strip(),(data.emergency_medication or '').strip(),(data.special_needs or '').strip(),(data.authorized_pickups or '').strip(),cid))
         if parent!=old['parent_id']:
             c.execute('UPDATE children SET face_allowed=0,face_template=NULL,consent_at=NULL WHERE id=?',(cid,))
             c.execute('UPDATE family_links SET active=0 WHERE child_id=?',(cid,));c.execute('DELETE FROM family_invites WHERE child_id=?',(cid,))
         s.audit(c,user['id'],'child_updated',cid)
     return {'ok':True}
+
+class ChildAvatarIn(BaseModel):
+    avatar_url:str=Field(default='',max_length=500)
+
+@router.post('/children/{cid}/avatar')
+def update_child_avatar(cid:int,data:ChildAvatarIn,user=Depends(session)):
+    url=data.avatar_url.strip()
+    if url and not (url.startswith('https://') or url.startswith('http://') or url.startswith('/api/media/') or url.startswith('/')):
+        fail('invalid_url','URL de foto da criança inválida.')
+    with s.db() as c:
+        child_allowed(c,user,cid)
+        c.execute('UPDATE children SET avatar_url=? WHERE id=?',(url,cid))
+        s.audit(c,user['id'],'child_avatar_updated',cid)
+    return {'ok':True,'avatar_url':url}
 @router.delete('/children/{cid}')
 def archive_child(cid:int,user=Depends(session)):
     if user['role']=='teacher':fail('forbidden','Somente a família ou a administração pode arquivar o cadastro.',403)

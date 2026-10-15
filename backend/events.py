@@ -269,10 +269,100 @@ def register_for_event(event_id: int, data: EventRegisterIn, user=Depends(sessio
         s.audit(c, user['id'], 'event_register', data.child_id)
         return {'id': reg_id, 'event_id': event_id, 'child_id': data.child_id, 'status': 'confirmed', 'ok': True}
 
+@router.get('/events/{event_id}/participants')
+def get_event_participants(event_id: int, user=Depends(staff)):
+    with s.db() as c:
+        ev = c.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
+        if not ev:
+            fail('event_not_found', 'Evento não encontrado.', 404)
+        rows = c.execute('''
+            SELECT 
+                r.id AS registration_id,
+                r.event_id,
+                r.child_id,
+                r.guardian_id,
+                r.notes,
+                r.created_at AS registered_at,
+                ch.name AS child_name,
+                ch.birthday AS child_birthday,
+                coalesce(ch.avatar_url, '') AS child_avatar_url,
+                coalesce(ch.allergies, '') AS allergies,
+                coalesce(ch.medical_conditions, '') AS medical_conditions,
+                coalesce(ch.emergency_medication, '') AS emergency_medication,
+                coalesce(ch.special_needs, '') AS special_needs,
+                coalesce(rm.name, 'Sem turma') AS room_name,
+                coalesce(u.name, 'Não informado') AS guardian_name,
+                coalesce(u.phone, '') AS guardian_phone,
+                coalesce(u.email, '') AS guardian_email
+            FROM event_registrations r
+            JOIN children ch ON ch.id = r.child_id
+            LEFT JOIN rooms rm ON rm.id = ch.room_id
+            LEFT JOIN users u ON u.id = r.guardian_id
+            WHERE r.event_id = ?
+            ORDER BY r.id DESC
+        ''', (event_id,)).fetchall()
+        res = []
+        for r in rows:
+            d = dict(r)
+            d['child_age'] = age_on(d['child_birthday'], ev['starts_at'])
+            res.append(d)
+        return {
+            'event': dict(ev),
+            'participants': res,
+            'count': len(res),
+            'max_capacity': ev['max_capacity']
+        }
+
+class StaffRegisterIn(BaseModel):
+    child_id: int
+    notes: str = Field(default='', max_length=500)
+
+@router.post('/events/{event_id}/participants')
+def staff_register_participant(event_id: int, data: StaffRegisterIn, user=Depends(staff)):
+    now = s.now()
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        event = c.execute('SELECT * FROM events WHERE id = ? AND active = 1', (event_id,)).fetchone()
+        if not event:
+            fail('event_not_found', 'Evento não encontrado ou inativo.', 404)
+        child = c.execute('SELECT * FROM children WHERE id = ? AND archived = 0', (data.child_id,)).fetchone()
+        if not child:
+            fail('child_not_found', 'Criança não encontrada.', 404)
+
+        existing = c.execute('SELECT id FROM event_registrations WHERE event_id = ? AND child_id = ?', (event_id, data.child_id)).fetchone()
+        if existing:
+            fail('already_registered', f'{child["name"]} já está inscrito(a) neste evento.', 400)
+
+        count = c.execute('SELECT COUNT(*) FROM event_registrations WHERE event_id = ?', (event_id,)).fetchone()[0]
+        if count >= event['max_capacity']:
+            fail('capacity_full', 'Vagas esgotadas para este evento.', 400)
+
+        guardian_id = child['parent_id'] or user['id']
+        cur = c.execute('''
+            INSERT INTO event_registrations(event_id, child_id, guardian_id, notes, created_at)
+            VALUES(?, ?, ?, ?, ?)
+        ''', (event_id, data.child_id, guardian_id, data.notes.strip(), now))
+        reg_id = cur.lastrowid
+
+        if child['parent_id']:
+            c.execute('''
+                INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at)
+                VALUES(?, ?, 'event_registration', 'Inscrição em Evento! 🎉', ?, ?, ?)
+            ''', (
+                child['parent_id'],
+                child['id'],
+                f'{child["name"]} foi inscrito(a) em {event["title"]} pela equipe.',
+                user['id'],
+                now
+            ))
+        s.audit(c, user['id'], 'staff_event_register', data.child_id)
+        return {'id': reg_id, 'ok': True}
+
 @router.delete('/events/{event_id}/register/{child_id}')
 def cancel_event_registration(event_id: int, child_id: int, user=Depends(session)):
     with s.db() as c:
-        child_allowed(c, user, child_id)
+        if user['role'] == 'parent':
+            child_allowed(c, user, child_id)
         deleted = c.execute('DELETE FROM event_registrations WHERE event_id = ? AND child_id = ?', (event_id, child_id)).rowcount
         if not deleted:
             fail('not_registered', 'Inscrição não encontrada.', 404)

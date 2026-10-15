@@ -1,5 +1,5 @@
 import './school.css';
-export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refresh,render,age,statusName,time,navigateTo,openScanner,uploadImage,roomPresets=[]}){
+export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refresh,render,age,statusName,time,navigateTo,openScanner,uploadImage,uploadAvatar,roomPresets=[],kidAvatar}){
  const dateLabel=value=>new Intl.DateTimeFormat('pt-BR',{weekday:'short',day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date(value));
  const day=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(value);
  const ageAt=(birth,when)=>{const [y,m,d]=when.slice(0,10).split('-').map(Number),[by,bm,bd]=birth.split('-').map(Number);return y-by-((m<bm||(m===bm&&d<bd))?1:0);};
@@ -13,7 +13,28 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  function childForm(ch,defaultRoomId){
   const parent=S.user.role==='parent';
   const targetRoom=ch?.room_id || defaultRoomId || (Number(S.room)||null);
+  const avatarUrl=ch?.avatar_url||'';
   showModal(ch?'Editar cadastro':parent?'Cadastrar meu filho':'Adicionar aluno',parent?'Preencha as informações do seu filho. Alergias e cuidados médicos são fundamentais para a segurança.':'Escolha uma turma sob sua responsabilidade.',`<form data-form="simple-child" ${ch?`data-id="${ch.id}"`:''}>
+   <div class="child-avatar-picker" style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:12px;background:#18181b;border:1px solid #27272a;border-radius:12px;">
+     <div style="width:64px;height:64px;border-radius:14px;overflow:hidden;background:#09090b;border:2px solid #3f3f46;display:flex;align-items:center;justify-content:center;flex-shrink:0;" id="child-avatar-preview-box">
+       ${avatarUrl ? `
+         <img src="${e(avatarUrl)}" alt="Foto da criança" style="width:100%;height:100%;object-fit:cover;" id="child-avatar-preview-img"/>
+       ` : `
+         <span style="font-size:22px;color:#a1a1aa;">${icon('kids', 28)}</span>
+       `}
+     </div>
+     <div style="flex:1;">
+       <strong style="display:block;font-size:13px;color:#ffffff;margin-bottom:4px;">Foto de Perfil do Filho</strong>
+       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+         <label class="btn secondary btn-sm media-upload-btn" tabindex="0" style="padding:6px 12px;font-size:12px;cursor:pointer;">
+           <span>📷 Enviar foto</span>
+           <input type="file" id="child-avatar-form-file-input" accept="image/jpeg,image/png,image/webp" hidden/>
+         </label>
+         <button type="button" class="mini-button danger-button" id="clear-child-avatar-form-btn" data-action="clear-child-form-avatar" ${avatarUrl ? '' : 'hidden'}>Remover</button>
+       </div>
+       <input type="hidden" name="avatar_url" id="child-avatar-url-input" value="${e(avatarUrl)}"/>
+     </div>
+   </div>
    <label>Nome da criança<input name="name" value="${e(ch?.name||'')}" required minlength="2" maxlength="100" autocomplete="off" placeholder="Nome completo"/></label>
    <label>Data de nascimento<input name="birthday" type="date" value="${e(ch?.birthday||'')}" required max="${day(new Date())}"/></label>
    ${parent?'':`<label>Turma<select name="room_id" required>${roomOptions(targetRoom)}</select></label>`}
@@ -144,10 +165,117 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const tomorrow=new Date(Date.now()+86400000);
   showModal(lesson?'Editar aulinha':'Nova aulinha','Publique o dia e o horário para as famílias confirmarem a presença.',`<form data-form="lesson" ${lesson?`data-id="${lesson.id}"`:''}><label>Turma<select name="room_id">${roomOptions(lesson?.room_id||roomId)}</select></label><label>Dia da aula<input name="day" type="date" min="${day(new Date())}" value="${lesson?lesson.starts_at.slice(0,10):day(tomorrow)}" required/></label><div class="form-grid"><label>Início<input name="start" type="time" value="${lesson?lesson.starts_at.slice(11,16):'10:00'}" required/></label><label>Fim<input name="end" type="time" value="${lesson?lesson.ends_at.slice(11,16):'11:00'}" required/></label></div>${!lesson?'<label>Repetir semanalmente<select name="repeat_weeks"><option value="1">Só esta data</option><option value="4">4 semanas</option><option value="8">8 semanas</option><option value="12">12 semanas</option></select></label>':''}${errorSlot}<button class="btn primary full" type="submit">${lesson?'Salvar horário':'Publicar aulinha'}</button></form>${lesson?`<button class="text-link danger-link" data-action="cancel-lesson" data-id="${lesson.id}">Cancelar esta aulinha</button>`:''}`);
  }
+ let currentCarouselIndex = 0;
+ function renderParentEventsCarousel(){
+  if(!S.events || !S.events.length) return '';
+  const now = new Date();
+  const upcoming = S.events.filter(e => {
+   try {
+    return new Date(e.ends_at || e.starts_at) >= new Date(now.getTime() - 86400000);
+   } catch {
+    return true;
+   }
+  });
+  if(!upcoming.length) return '';
+  if(currentCarouselIndex >= upcoming.length) currentCarouselIndex = 0;
+
+  return `
+   <section class="parent-carousel-section" aria-label="Programações e Eventos">
+     <div class="carousel-section-header">
+       <div>
+         <span class="carousel-section-eyebrow">AGENDA & EVENTOS</span>
+         <h2 class="carousel-section-title">Próximos Encontros ✦</h2>
+       </div>
+       ${upcoming.length > 1 ? `
+         <div class="carousel-controls-arrows">
+           <button type="button" class="carousel-arrow-btn" data-action="carousel-prev" title="Evento anterior" aria-label="Anterior">‹</button>
+           <button type="button" class="carousel-arrow-btn" data-action="carousel-next" title="Próximo evento" aria-label="Próximo">›</button>
+         </div>
+       ` : ''}
+     </div>
+
+     <div class="parent-carousel-viewport" id="parent-carousel-viewport">
+       <div class="parent-carousel-track" id="parent-carousel-track" style="transform:translateX(-${currentCarouselIndex * 100}%);">
+         ${upcoming.map((ev, index) => {
+           const regCount = ev.registrations_count || 0;
+           const cap = ev.max_capacity || 100;
+           const spotsLeft = cap - regCount;
+           const isRegistered = ev.user_registered_children && ev.user_registered_children.length > 0;
+           const startDate = new Date(ev.starts_at);
+           const dateBadge = new Intl.DateTimeFormat('pt-BR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'}).format(startDate).toUpperCase();
+           const audLabel = ev.target_audience === 'kids' ? 'Kids (0 a 11 anos)' : ev.target_audience === 'teens' ? 'Teens (12 a 17 anos)' : 'Toda a Família';
+
+           return `
+             <div class="parent-carousel-slide ${index === currentCarouselIndex ? 'active' : ''}">
+               <div class="carousel-slide-card">
+                 <div class="carousel-slide-banner">
+                   ${ev.banner_url ? `
+                     <img src="${e(ev.banner_url)}" alt="${e(ev.title)}" class="carousel-banner-img" loading="lazy"/>
+                   ` : `
+                     <div class="carousel-banner-placeholder">
+                       <span>LAGOINHA KIDS & TEENS</span>
+                     </div>
+                   `}
+                   <div class="carousel-banner-top-badges">
+                     <span class="carousel-category-pill">${e(ev.category)}</span>
+                     <span class="carousel-date-pill">📅 ${dateBadge}</span>
+                   </div>
+                 </div>
+
+                 <div class="carousel-slide-body">
+                   <div class="carousel-title-row">
+                     <h3 class="carousel-event-title">${e(ev.title)}</h3>
+                     <span class="carousel-price-tag">${e(ev.price || 'Gratuito')}</span>
+                   </div>
+
+                   <p class="carousel-event-desc">${e(ev.description)}</p>
+
+                   <div class="carousel-meta-row">
+                     <span class="carousel-meta-pill">${icon('home', 14)} ${e(ev.location || 'Templo Lagoinha')}</span>
+                     <span class="carousel-meta-pill">${icon('kids', 14)} ${audLabel}</span>
+                     <span class="carousel-meta-pill ${spotsLeft <= 5 ? 'urgent' : ''}">
+                       ${spotsLeft > 0 ? `🎟️ ${spotsLeft} vagas restantes` : '❌ Esgotado'}
+                     </span>
+                   </div>
+
+                   <div class="carousel-actions-row">
+                     ${isRegistered ? `
+                       <div class="carousel-registered-badge">
+                         <span>✓ Inscrição confirmada!</span>
+                         <button type="button" class="mini-button" data-action="cancel-event-reg" data-id="${ev.id}">Cancelar</button>
+                       </div>
+                     ` : `
+                       <button type="button" class="btn primary carousel-cta-btn" data-action="register-event" data-id="${ev.id}" ${spotsLeft <= 0 ? 'disabled' : ''}>
+                         ${spotsLeft <= 0 ? 'Vagas Esgotadas' : 'Inscrever meu filho ✦'}
+                       </button>
+                     `}
+                     <button type="button" class="btn secondary carousel-details-btn" data-page="events">
+                       Ver mural completo
+                     </button>
+                   </div>
+                 </div>
+               </div>
+             </div>
+           `;
+         }).join('')}
+       </div>
+     </div>
+
+     ${upcoming.length > 1 ? `
+       <div class="carousel-dots-indicator">
+         ${upcoming.map((_, i) => `
+           <button type="button" class="carousel-dot ${i === currentCarouselIndex ? 'active' : ''}" data-action="carousel-goto" data-index="${i}" aria-label="Ir para evento ${i+1}"></button>
+         `).join('')}
+       </div>
+     ` : ''}
+   </section>
+  `;
+ }
  function parentHome(){
   const activeCurriculum = S.lessons.find(l=>l.theme&&l.theme.trim());
   const devCard = activeCurriculum?`<section class="devotional-card"><div class="devotional-header"><span class="devotional-tag">📖 DISCIPULADO FAMILIAR</span><span style="font-size:11px;color:#a1a1aa;">${e(activeCurriculum.room_name||'Salinha')}</span></div><div class="devotional-theme">${e(activeCurriculum.theme)}</div>${activeCurriculum.memory_verse?`<div class="devotional-verse-box"><div class="devotional-verse-text">"${e(activeCurriculum.memory_verse)}"</div><div class="devotional-verse-ref">Versículo para memorizar</div></div>`:''}${activeCurriculum.family_question?`<div class="devotional-question-box"><strong>💬 Conversa no caminho de volta:</strong><p style="margin:4px 0 0 0;">${e(activeCurriculum.family_question)}</p></div>`:''}</section>`:'';
-  return `${title('Meus filhos','Cadastre seus filhos e escolha as aulinhas.',`<button class="btn primary" data-action="new-child">${icon('plus',17)} Adicionar filho</button>`)}${devCard}${S.children.length?`<div class="simple-family-grid">${S.children.map(ch=>`<article class="simple-child-card"><div class="person"><span class="kid-avatar big">${initials(ch.name)}</span><div><h2>${childName(ch)}</h2><p>${age(ch.birthday)} anos${ch.status==='present'?' · Na salinha':''}</p>${ch.claim_code&&ch.status==='present'?`<div style="margin-top:6px;"><span class="claim-tag-badge">RECIBO DOS PAIS · CÓDIGO: ${e(ch.claim_code)}</span></div>`:''}${ch.allergies?`<div style="margin-top:4px;"><span class="allergy-badge">⚠️ ALERGIA: ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div style="margin-top:4px;"><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div>${ch.status==='present'?`<div class="pickup-receipt"><span>Na salinha · Código de retirada</span><strong>${e(ch.claim_code||'Procure a equipe')}</strong><small>Apresente à equipe no momento de buscar.</small></div>`:''}<div class="simple-child-actions"><button class="btn primary" data-action="child-lessons" data-id="${ch.id}">Ver aulinhas ${icon('arrow',16)}</button><button class="btn secondary" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',16)} Carteirinha</button><button class="btn secondary" data-action="edit-child" data-id="${ch.id}">Editar</button></div><details class="child-extra"><summary>Mais opções</summary><button class="text-link" data-action="family" data-id="${ch.id}">Responsáveis e autorizações</button><button class="text-link" data-action="child-history" data-id="${ch.id}">Histórico de presença</button><button class="text-link" data-action="consent" data-id="${ch.id}">Autorização facial</button><button class="text-link" data-action="notify" data-kind="pickup_ready" data-id="${ch.id}">Avisar que cheguei para buscar</button><button class="text-link danger-link" data-action="archive-child" data-id="${ch.id}">Arquivar cadastro</button></details></article>`).join('')}</div><section class="simple-next panel"><h2>Próximo passo</h2><p>Escolha uma aulinha com dia e horário disponíveis e toque em <strong>Confirmar presença</strong>.</p><button class="btn secondary" data-page="lessons">Ver aulinhas disponíveis ${icon('arrow',16)}</button></section>`:empty('Vamos cadastrar seu filho?','Toque em “Adicionar filho”. Depois, escolha uma aulinha disponível.')}`;
+  const eventsCarousel = renderParentEventsCarousel();
+  return `${title('Meus filhos','Cadastre seus filhos e escolha as aulinhas.',`<button class="btn primary" data-action="new-child">${icon('plus',17)} Adicionar filho</button>`)}${eventsCarousel}${devCard}${S.children.length?`<div class="simple-family-grid">${S.children.map(ch=>`<article class="simple-child-card"><div class="person">${kidAvatar ? kidAvatar(ch,'big') : `<span class="kid-avatar big">${initials(ch.name)}</span>`}<div><h2>${childName(ch)}</h2><p>${age(ch.birthday)} anos${ch.status==='present'?' · Na salinha':''}</p>${ch.claim_code&&ch.status==='present'?`<div style="margin-top:6px;"><span class="claim-tag-badge">RECIBO DOS PAIS · CÓDIGO: ${e(ch.claim_code)}</span></div>`:''}${ch.allergies?`<div style="margin-top:4px;"><span class="allergy-badge">⚠️ ALERGIA: ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div style="margin-top:4px;"><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div>${ch.status==='present'?`<div class="pickup-receipt"><span>Na salinha · Código de retirada</span><strong>${e(ch.claim_code||'Procure a equipe')}</strong><small>Apresente à equipe no momento de buscar.</small></div>`:''}<div class="simple-child-actions"><button class="btn primary" data-action="child-lessons" data-id="${ch.id}">Ver aulinhas ${icon('arrow',16)}</button><button class="btn secondary" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',16)} Carteirinha</button><button class="btn secondary" data-action="edit-child" data-id="${ch.id}">Editar</button></div><details class="child-extra"><summary>Mais opções</summary><button class="text-link" data-action="edit-child-avatar" data-id="${ch.id}">📷 Alterar foto do filho</button><button class="text-link" data-action="family" data-id="${ch.id}">Responsáveis e autorizações</button><button class="text-link" data-action="child-history" data-id="${ch.id}">Histórico de presença</button><button class="text-link" data-action="consent" data-id="${ch.id}">Autorização facial</button><button class="text-link" data-action="notify" data-kind="pickup_ready" data-id="${ch.id}">Avisar que cheguei para buscar</button><button class="text-link danger-link" data-action="archive-child" data-id="${ch.id}">Arquivar cadastro</button></details></article>`).join('')}</div><section class="simple-next panel"><h2>Próximo passo</h2><p>Escolha uma aulinha com dia e horário disponíveis e toque em <strong>Confirmar presença</strong>.</p><button class="btn secondary" data-page="lessons">Ver aulinhas disponíveis ${icon('arrow',16)}</button></section>`:empty('Vamos cadastrar seu filho?','Toque em “Adicionar filho”. Depois, escolha uma aulinha disponível.')}`;
  }
  function parentLessons(){
   const ch=selectedChild();
@@ -200,8 +328,8 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   }).join('')}</div>`:empty('Nenhuma turma cadastrada','Toque em “Criar turma” para cadastrar a primeira salinha e publicar horários.')}`;
  }
  function rosterRows(children,lesson){
-  const today=day(new Date());
-   return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{const p=S.activePaging?.find(x=>x.child_id===ch.id);const pagingBadge=p?(p.status==='on_my_way'?`<div style="margin-top:3px;"><span style="display:inline-block;background:#22c55e;color:#000000;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</span></div>`:`<div style="margin-top:3px;"><span style="display:inline-block;background:#ef4444;color:#ffffff;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">📢 Telão Ativo</span></div>`):'';return `<tr><td><div class="person"><span class="kid-avatar">${initials(ch.name)}</span><div><strong>${childName(ch)}</strong><small>${age(ch.birthday)} anos</small>${ch.claim_code&&ch.status==='present'?`<div><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${pagingBadge}${ch.allergies?`<div><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div></td><td><span class="status ${ch.status}">${lesson&&lesson.starts_at.slice(0,10)!==today?'Confirmado para a aula':statusName[ch.status]}</span></td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}" ${lesson&&lesson.starts_at.slice(0,10)!==today?'disabled title="A chamada de chegada fica disponível no dia da aula"':''}>${ch.status==='present'?'Registrar saída':'Marcar chegada'}</button><button class="mini-button" data-action="digital-id" data-id="${ch.id}" title="Carteirinha Digital">🪪</button><button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar no Telão">📢 Telão</button><button class="mini-button" data-action="student-options" data-id="${ch.id}">Opções</button></div></td></tr>`;}).join('')}</tbody></table></div>`:empty('Nenhum aluno confirmado ainda','As confirmações das famílias aparecerão aqui. Você também pode adicionar um aluno da sua turma.');
+   const today=day(new Date());
+    return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{const p=S.activePaging?.find(x=>x.child_id===ch.id);const pagingBadge=p?(p.status==='on_my_way'?`<div style="margin-top:3px;"><span style="display:inline-block;background:#22c55e;color:#000000;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</span></div>`:`<div style="margin-top:3px;"><span style="display:inline-block;background:#ef4444;color:#ffffff;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">📢 Telão Ativo</span></div>`):'';return `<tr><td><div class="person">${kidAvatar?kidAvatar(ch):`<span class="kid-avatar">${initials(ch.name)}</span>`}<div><strong>${childName(ch)}</strong><small>${age(ch.birthday)} anos</small>${ch.claim_code&&ch.status==='present'?`<div><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${pagingBadge}${ch.allergies?`<div><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div></td><td><span class="status ${ch.status}">${lesson&&lesson.starts_at.slice(0,10)!==today?'Confirmado para a aula':statusName[ch.status]}</span></td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}" ${lesson&&lesson.starts_at.slice(0,10)!==today?'disabled title="A chamada de chegada fica disponível no dia da aula"':''}>${ch.status==='present'?'Registrar saída':'Marcar chegada'}</button><button class="mini-button" data-action="digital-id" data-id="${ch.id}" title="Carteirinha Digital">🪪</button><button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar no Telão">📢 Telão</button><button class="mini-button" data-action="student-options" data-id="${ch.id}">Opções</button></div></td></tr>`;}).join('')}</tbody></table></div>`:empty('Nenhum aluno confirmado ainda','As confirmações das famílias aparecerão aqui. Você também pode adicionar um aluno da sua turma.');
  }
  function attendancePage(){
   const lesson=S.lessons.find(l=>l.id===S.selectedLesson);
@@ -267,7 +395,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
           <article class="room-student-card panel">
             <div class="student-card-top">
               <div class="person">
-                <span class="kid-avatar big" style="background:${ch.color||'#09090b'};">${initials(ch.name)}</span>
+                ${kidAvatar ? kidAvatar(ch, 'big') : `<span class="kid-avatar big" style="background:${ch.color||'#09090b'};">${initials(ch.name)}</span>`}
                 <div class="student-card-bio">
                   <div class="student-name-row">
                     <h3>${childName(ch)}</h3>
@@ -440,6 +568,31 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  async function changed(message){await refresh();toast(message);}
  async function action(action,el,ch){
   const id=Number(el.dataset.id);
+  if(action==='carousel-prev'){
+   const upcomingCount=S.events?S.events.length:0;
+   if(upcomingCount>1){currentCarouselIndex=(currentCarouselIndex-1+upcomingCount)%upcomingCount;render();}
+   return true;
+  }
+  if(action==='carousel-next'){
+   const upcomingCount=S.events?S.events.length:0;
+   if(upcomingCount>1){currentCarouselIndex=(currentCarouselIndex+1)%upcomingCount;render();}
+   return true;
+  }
+  if(action==='carousel-goto'){
+   currentCarouselIndex=Number(el.dataset.index)||0;
+   render();
+   return true;
+  }
+  if(action==='clear-child-form-avatar'){
+   const prev=document.getElementById('child-avatar-preview-box');
+   const input=document.getElementById('child-avatar-url-input');
+   const clearBtn=document.getElementById('clear-child-avatar-form-btn');
+   if(input)input.value='';
+   if(prev)prev.innerHTML=`<span style="font-size:22px;color:#a1a1aa;">${icon('kids', 28)}</span>`;
+   if(clearBtn)clearBtn.hidden=true;
+   toast('Foto removida.');
+   return true;
+  }
   if(action==='join-waitlist'||action==='leave-waitlist'){await api(action==='join-waitlist'?`/lessons/${id}/waitlist`:`/lessons/${id}/waitlist/${el.dataset.child}`,{method:action==='join-waitlist'?'POST':'DELETE',...(action==='join-waitlist'?{body:{child_id:Number(el.dataset.child)}}:{})});await changed(action==='join-waitlist'?'Você entrou na lista de espera.':'Você saiu da lista.');return true;}
   if(action==='refresh-school'){await changed('Horários atualizados.');return true;}
   if(action==='open-scanner'){if(openScanner)openScanner();return true;}
@@ -507,6 +660,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='student-options'){
    showModal(childName(ch),'O que você precisa fazer?',`<div class="student-menu">
      <button class="btn secondary full" data-action="edit-child" data-id="${id}">${icon('settings',16)} Editar cadastro completo</button>
+     <button class="btn secondary full" data-action="edit-child-avatar" data-id="${id}">📷 Alterar foto do aluno</button>
      <button class="btn secondary full" data-action="transfer-child" data-id="${id}">🔄 Mudar de turma (Transferir)</button>
      <button class="btn secondary full" data-action="digital-id" data-id="${id}">${icon('qrcode',16)} Carteirinha Digital</button>
      <button class="btn secondary full" data-action="paging-call" data-id="${id}">${icon('speaker',16)} Chamar no Telão / Celular</button>
@@ -542,7 +696,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  async function submit(form,values){
   const type=form.dataset.form,id=Number(form.dataset.id);
   if(type==='simple-child'){
-   const data={name:values.name,birthday:values.birthday,allergies:values.allergies||'',medical_conditions:values.medical_conditions||'',emergency_medication:values.emergency_medication||'',special_needs:values.special_needs||'',authorized_pickups:values.authorized_pickups||''};
+   const data={name:values.name,birthday:values.birthday,allergies:values.allergies||'',medical_conditions:values.medical_conditions||'',emergency_medication:values.emergency_medication||'',special_needs:values.special_needs||'',authorized_pickups:values.authorized_pickups||'',avatar_url:values.avatar_url||''};
    if(S.user.role!=='parent')data.room_id=Number(values.room_id);
    if(S.user.role==='admin')data.parent_id=values.parent_id?Number(values.parent_id):null;
    await api(id?`/children/${id}`:'/children',{method:id?'PATCH':'POST',body:data});return 'Cadastro salvo.';
@@ -560,7 +714,8 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
        medical_conditions:c.medical_conditions||'',
        emergency_medication:c.emergency_medication||'',
        special_needs:c.special_needs||'',
-       authorized_pickups:c.authorized_pickups||''
+       authorized_pickups:c.authorized_pickups||'',
+       avatar_url:c.avatar_url||''
      }
    });
    return 'Aluno transferido de turma com sucesso!';
@@ -610,6 +765,30 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
      toast('Foto de capa da turma enviada com sucesso! 📸');
     }catch(err){
      setRoomCoverPreview('');
+     toast(err.message||'Não foi possível enviar a foto.',true);
+    }
+   });
+   return;
+  }
+  if(event.target.id==='child-avatar-form-file-input'){
+   const file=event.target.files[0];
+   if(!file)return;
+   const prevArea=document.getElementById('child-avatar-preview-box');
+   const hiddenInp=document.getElementById('child-avatar-url-input');
+   const clearBtn=document.getElementById('clear-child-avatar-form-btn');
+   if(prevArea){
+    prevArea.innerHTML='<span class="spin" style="font-size:16px;">●</span>';
+   }
+   Promise.resolve().then(async()=>{
+    try{
+     if(!uploadAvatar)throw new Error('Função de upload indisponível.');
+     const url=await uploadAvatar(file);
+     if(hiddenInp)hiddenInp.value=url;
+     if(prevArea)prevArea.innerHTML=`<img src="${e(url)}" alt="Foto da criança" style="width:100%;height:100%;object-fit:cover;" id="child-avatar-preview-img"/>`;
+     if(clearBtn)clearBtn.hidden=false;
+     toast('Foto enviada com sucesso! 📸');
+    }catch(err){
+     if(prevArea)prevArea.innerHTML=`<span style="font-size:22px;color:#a1a1aa;">${icon('kids', 28)}</span>`;
      toast(err.message||'Não foi possível enviar a foto.',true);
     }
    });

@@ -29,6 +29,7 @@ def public_user(row):
         'email_verified':bool(row['email_verified']) if 'email_verified' in row.keys() else False,
         'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in row.keys() else False,
         'phone': row['phone'] if 'phone' in row.keys() else '',
+        'avatar_url': row['avatar_url'] if 'avatar_url' in row.keys() else '',
         'google_linked': bool(row['google_sub'])
     }
 
@@ -387,6 +388,7 @@ class UserUpdate(BaseModel):
     name:str|None=Field(default=None,min_length=2,max_length=100)
     email:str|None=Field(default=None,max_length=200)
     password:str|None=Field(default=None,max_length=128)
+    avatar_url:str|None=Field(default=None,max_length=500)
 @app.patch('/api/users/{uid}')
 def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
     with s.db() as c:
@@ -399,9 +401,10 @@ def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
             if uid==user['id']:fail('self','Troque sua própria senha em Minha conta.')
             validate_password(data.password)
         target_email=email(data.email) if data.email is not None else row['email']
+        target_avatar=data.avatar_url.strip() if data.avatar_url is not None else (row['avatar_url'] if 'avatar_url' in row.keys() else '')
         if row['role']=='parent' and role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():fail('parent','Este responsável tem filhos vinculados. Ajuste os vínculos antes de mudar o perfil.',409)
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1',(rid,)).fetchone() for rid in data.rooms):fail('room','Turma inválida.')
-        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=? WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,uid))
+        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=?,avatar_url=? WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,target_avatar,uid))
         except sqlite3.IntegrityError:fail('email','E-mail já cadastrado.',409)
         if target_email!=row['email']:c.execute('UPDATE users SET google_sub=NULL WHERE id=?',(uid,))
         owned=[r[0] for r in c.execute('SELECT id FROM rooms WHERE created_by=?',(uid,))]
@@ -417,6 +420,19 @@ def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
         if not data.active or data.password or role!=row['role'] or target_email!=row['email']:c.execute('DELETE FROM sessions WHERE user_id=?',(uid,))
         s.audit(c,user['id'],'user_access_updated')
     return {'ok':True}
+
+class AvatarIn(BaseModel):
+    avatar_url:str=Field(default='',max_length=500)
+
+@app.post('/api/me/avatar')
+def update_my_avatar(data:AvatarIn,user=Depends(session)):
+    url=data.avatar_url.strip()
+    if url and not (url.startswith('https://') or url.startswith('http://') or url.startswith('/api/media/') or url.startswith('/')):
+        fail('invalid_url','URL de foto de perfil inválida.')
+    with s.db() as c:
+        c.execute('UPDATE users SET avatar_url=? WHERE id=?',(url,user['id']))
+        s.audit(c,user['id'],'user_avatar_updated')
+    return {'ok':True,'avatar_url':url}
 @app.get('/api/audit')
 def audit_log(user=Depends(admin)):
     with s.db() as c: return [dict(r) for r in c.execute('SELECT a.*,u.name actor_name FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.id DESC LIMIT 100')]
@@ -471,9 +487,7 @@ def download_apk():
             return FileResponse(p, media_type='application/vnd.android.package-archive', filename='lagoinha-kids.apk')
     fail('not_found', 'APK em compilação ou indisponível.', 404)
 
-@app.post('/api/upload')
-async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
-    raw = await file.read()
+def _save_uploaded_image(raw: bytes, filename: str, user_id: int):
     if not raw or len(raw) > 10 * 1024 * 1024:
         fail('size', 'Arquivo muito grande. O limite é 10 MB.', 400)
     try:
@@ -498,9 +512,19 @@ async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
     media_id = f"img_{secrets.token_hex(10)}.webp"
     with s.db() as c:
         c.execute('INSERT INTO media(id, filename, content_type, data, created_by, created_at) VALUES(?,?,?,?,?,?)',
-                  (media_id, file.filename or 'upload.webp', content_type, compressed, user['id'], s.now()))
+                  (media_id, filename or 'upload.webp', content_type, compressed, user_id, s.now()))
         c.commit()
     return {'url': f'/api/media/{media_id}', 'id': media_id, 'size': len(compressed)}
+
+@app.post('/api/upload')
+async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
+    raw = await file.read()
+    return _save_uploaded_image(raw, file.filename or 'upload.webp', user['id'])
+
+@app.post('/api/avatar/upload')
+async def upload_avatar(file: UploadFile = File(...), user = Depends(session)):
+    raw = await file.read()
+    return _save_uploaded_image(raw, file.filename or 'avatar.webp', user['id'])
 
 @app.api_route('/api/media/{media_id}', methods=['GET', 'HEAD'])
 def get_media(media_id: str):

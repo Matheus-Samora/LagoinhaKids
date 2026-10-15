@@ -32,6 +32,15 @@ const statusName={absent:'Não chegou',present:'Na salinha',departed:'Saída reg
 const paths={overview:'Visão geral',children:'Alunos',rooms:'Turmas',attendance:'Chamada',events:'Mural de Eventos',lessons:'Aulinhas',notifications:'Notificações',users:'Usuários e acessos',settings:'Minha conta'};
 const escape=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=(name)=>escape(name.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join(''));
+const userAvatar=(user,size='mini')=>{
+ if(!user)return `<span class="avatar ${size}">LK</span>`;
+ if(user.avatar_url)return `<img src="${escape(user.avatar_url)}" alt="${escape(user.name)}" class="avatar-photo ${size}"/>`;
+ return `<span class="avatar ${size}">${initials(user.name||user.email||'LK')}</span>`;
+};
+const kidAvatar=(ch,size='')=>{
+ if(ch&&ch.avatar_url)return `<img src="${escape(ch.avatar_url)}" alt="${escape(ch.name)}" class="kid-avatar-img ${size}"/>`;
+ return `<span class="kid-avatar ${size}" style="background:${ch?.color||'#09090b'}">${initials(ch?.name||'LK')}</span>`;
+};
 const icon=(name,size=20)=>{const shapes={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',kids:'<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5v2"/>',rooms:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',check:'<path d="m5 12 4 4L19 6"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-11 12a2 2 0 0 0 4 0"/>',calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',speaker:'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',qrcode:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zm4 4h3v3h-3zm-4 4h3v-3h-3zm4-4h3v-3h-3z"/>',whatsapp:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',settings:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2M16 8l2-2"/><circle cx="12" cy="12" r="5"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',plus:'<path d="M12 5v14M5 12h14"/>',arrow:'<path d="M4 12h15m-6-6 6 6-6 6"/>',back:'<path d="M19 12H5m7 7-7-7 7-7"/>',face:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="9" cy="10" r=".5"/><circle cx="15" cy="10" r=".5"/><path d="M8 15q4 4 8 0"/>',out:'<path d="M9 4H4v16h5m5-13 5 5-5 5m-5-5h10"/>',shield:'<path d="m12 3 8 3v6q0 6-8 9-8-3-8-9V6Z"/><path d="m8 12 3 3 5-6"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 3"/>',heart:'<path d="M12 21 3 12C-3 4 7-1 12 6 17-1 27 4 21 12Z"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>'};return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[name]||shapes.home}</svg>`;};
 const age=(birth)=>{const b=new Date(birth+'T12:00:00');const n=new Date();return n.getFullYear()-b.getFullYear()-(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate())?1:0);};
 const time=(v)=>v?new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}).format(new Date(v)):'—';
@@ -181,7 +190,7 @@ window.addEventListener('popstate',()=>{
   const pageLabel = S.user.role==='parent'&&S.page==='overview'?'Meus filhos':(paths[S.page]||'Aulinhas');
   const formattedDate = new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date());
 
-  app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})"><span class="avatar mini">${initials(S.user.name)}</span><div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">lagoinha <strong>kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">NOSSO ESPAÇO</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions">${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>Check-in QR</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>Baixar App</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta"><span class="avatar mini">${initials(S.user.name)}</span></button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">Baixar App</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
+   app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">lagoinha <strong>kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">NOSSO ESPAÇO</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions">${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>Check-in QR</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>Baixar App</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">Baixar App</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
   app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
  }
 function title(title,subtitle,button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</div>`;}
@@ -274,6 +283,7 @@ function eventsPage(){
      ${isRegistered?`<button class="btn secondary" data-action="cancel-event-reg" data-id="${ev.id}">Inscrito ✓ (Cancelar)</button>`:`<button class="btn primary" data-action="register-event" data-id="${ev.id}" ${regCount>=cap?'disabled':''}>${regCount>=cap?'Esgotado':'Inscrever'}</button>`}
     </div>
     ${staff?`<div class="event-staff-actions">
+     <button class="mini-button secondary" data-action="view-participants" data-id="${ev.id}">👥 Inscritos (${regCount}/${cap})</button>
      <button class="mini-button" data-action="edit-event" data-id="${ev.id}">${icon('settings',14)} Editar</button>
      <button class="mini-button danger-button" data-action="delete-event" data-id="${ev.id}">${icon('trash',14)||''} Excluir</button>
     </div>`:''}
@@ -284,7 +294,7 @@ function eventsPage(){
 
 function roster(children,compact=false){return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th><th>${compact?'Entrada':'Responsável'}</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{
   const parentPhone=ch.parent_phone||'';
-  return `<tr><td><div class="person"><span class="kid-avatar" style="background:${ch.color}">${initials(ch.name)}</span><div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos ${ch.face_enrolled?'· Facial ativo':''}</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Conferência facial auxiliar" aria-label="Conferência facial de ${escape(ch.name)}" data-action="face" data-id="${ch.id}">${icon('face',18)}</button><button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
+  return `<tr><td><div class="person">${kidAvatar(ch)}<div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos ${ch.face_enrolled?'· Facial ativo':''}</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Conferência facial auxiliar" aria-label="Conferência facial de ${escape(ch.name)}" data-action="face" data-id="${ch.id}">${icon('face',18)}</button><button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
 }).join('')}</tbody></table></div>`:empty('Nenhum aluno por aqui','Ajuste a busca ou cadastre o primeiro aluno da turma.');}
 function empty(title,sub){return `<div class="empty">${icon('heart',30)}<h3>${title}</h3><p>${sub}</p></div>`;}
 function unreadBanner(){
@@ -350,7 +360,7 @@ function renderInnerPage(){
  if(S.page==='settings')return settingsPage();
  return '';
 }
-function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile"><span class="avatar big">${initials(S.user.name)}</span><div><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><span class="tag">${roles[S.user.role]}</span></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #27272a;border-radius:10px;background:#18181b;color:#ffffff;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:32px;height:32px;border-radius:8px;background:#27272a;display:inline-grid;place-items:center;color:#ffffff;flex-shrink:0;">${icon('download', 18)}</span><div><strong style="font-size:13px;color:#ffffff;display:block;">Aplicativo no Celular</strong><small style="font-size:11px;color:#a1a1aa;">Instale no Android ou iPhone ou baixe o APK</small></div></div><button type="button" class="btn primary full" data-action="install-modal" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 16)} Baixar / Instalar no Celular</button></div><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #e4e4e7;border-radius:10px;background:#fafafa;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><strong style="font-size:13px;display:flex;align-items:center;gap:6px;color:#09090b;">${icon('bell', 16)} Notificações no celular</strong><span class="push-status-pill">${hasPushPermission() ? 'Ativadas ✓' : 'Desativadas'}</span></div><p style="font-size:11.5px;color:#71717a;margin:0 0 10px 0;line-height:1.4;">Alertas de check-in, saída e chamadas das tias fora do app.</p><button type="button" class="btn secondary full" data-action="${hasPushPermission() ? 'test-push-notification' : 'open-push-modal'}">${hasPushPermission() ? '🔔 Enviar notificação de teste' : '🔔 Configurar e Ativar Notificações'}</button></div>${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
+function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile-card"><div class="profile-avatar-wrap">${userAvatar(S.user,'big')}<label class="avatar-upload-badge" title="Alterar foto de perfil" tabindex="0">${icon('settings',14)}<input type="file" id="user-avatar-file-input" accept="image/jpeg,image/png,image/webp" hidden/></label></div><div class="profile-details"><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;"><span class="tag">${roles[S.user.role]}</span><label class="btn secondary btn-sm" style="cursor:pointer;padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><span>📷 Trocar foto</span><input type="file" id="user-avatar-file-input-btn" accept="image/jpeg,image/png,image/webp" hidden/></label>${S.user.avatar_url?`<button type="button" class="mini-button danger-button" data-action="remove-user-avatar" style="padding:4px 8px;font-size:11px;">Remover foto</button>`:''}</div></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #27272a;border-radius:10px;background:#18181b;color:#ffffff;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:32px;height:32px;border-radius:8px;background:#27272a;display:inline-grid;place-items:center;color:#ffffff;flex-shrink:0;">${icon('download', 18)}</span><div><strong style="font-size:13px;color:#ffffff;display:block;">Aplicativo no Celular</strong><small style="font-size:11px;color:#a1a1aa;">Instale no Android ou iPhone ou baixe o APK</small></div></div><button type="button" class="btn primary full" data-action="install-modal" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 16)} Baixar / Instalar no Celular</button></div><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #e4e4e7;border-radius:10px;background:#fafafa;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><strong style="font-size:13px;display:flex;align-items:center;gap:6px;color:#09090b;">${icon('bell', 16)} Notificações no celular</strong><span class="push-status-pill">${hasPushPermission() ? 'Ativadas ✓' : 'Desativadas'}</span></div><p style="font-size:11.5px;color:#71717a;margin:0 0 10px 0;line-height:1.4;">Alertas de check-in, saída e chamadas das tias fora do app.</p><button type="button" class="btn secondary full" data-action="${hasPushPermission() ? 'test-push-notification' : 'open-push-modal'}">${hasPushPermission() ? '🔔 Enviar notificação de teste' : '🔔 Configurar e Ativar Notificações'}</button></div>${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
 
 function showModal(title,subtitle,html){modal.querySelector('#modal-content').innerHTML=`<div class="modal-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-button" data-action="close" aria-label="Fechar">${icon('close')}</button></div>${html}`;modal.showModal();}
 async function privacyModal(){
@@ -395,6 +405,35 @@ function selectFace(file){if(!file)return;if(!['image/jpeg','image/png','image/w
 document.addEventListener('change',async e=>{
  if(e.target.id==='face-input')selectFace(e.target.files[0]);
  if(e.target.id==='room-filter'){S.room=e.target.value;updateRoster();}
+ if(e.target.id==='user-avatar-file-input'||e.target.id==='user-avatar-file-input-btn'){
+  const file=e.target.files[0];
+  if(!file)return;
+  toast('Otimizando e enviando sua foto de perfil...');
+  try{
+   const url=await uploadAvatarFile(file);
+   await api('/me/avatar',{method:'POST',body:{avatar_url:url}});
+   S.user.avatar_url=url;
+   render();
+   toast('Foto de perfil atualizada com sucesso! 📸');
+  }catch(err){
+   toast(err.message||'Erro ao enviar foto de perfil.',true);
+  }
+ }
+ if(e.target.id==='child-avatar-modal-file-input'){
+  const file=e.target.files[0];
+  if(!file)return;
+  const cid=Number(e.target.dataset.id);
+  toast('Otimizando e enviando foto do aluno...');
+  try{
+   const url=await uploadAvatarFile(file);
+   await api(`/children/${cid}/avatar`,{method:'POST',body:{avatar_url:url}});
+   modal.close();
+   await load();
+   toast('Foto do aluno atualizada com sucesso! 📸');
+  }catch(err){
+   toast(err.message||'Erro ao enviar foto do aluno.',true);
+  }
+ }
  if(e.target.id==='event-banner-file-input'){
   const file=e.target.files[0];
   if(!file)return;
@@ -426,7 +465,7 @@ function digitalIdModal(ch){
    <span class="id-tag">${escape(room)}</span>
   </div>
   <div class="id-person">
-   <div class="id-avatar">${initials(ch.name)}</div>
+   ${ch.avatar_url ? `<img src="${escape(ch.avatar_url)}" alt="${escape(ch.name)}" class="id-avatar-img"/>` : `<div class="id-avatar">${initials(ch.name)}</div>`}
    <div class="id-info">
     <h3>${escape(ch.name)}</h3>
     <p>${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10)}</p>
@@ -442,6 +481,30 @@ function digitalIdModal(ch){
   ${ch.special_needs?`<div class="id-alert-banner">♿ <strong>CUIDADO:</strong> ${escape(ch.special_needs)}</div>`:''}
  </div>
  <button type="button" class="btn secondary full" data-action="close" style="margin-top:14px;">Fechar carteirinha</button>`);
+}
+
+function childAvatarModal(ch){
+ showModal(`Foto de ${escape(ch.name)}`, 'Adicione ou altere a foto do aluno.', `
+  <div class="avatar-edit-box" style="text-align:center;padding:16px 0;">
+   <div style="margin:0 auto 16px;width:96px;height:96px;border-radius:20px;overflow:hidden;border:3px solid #27272a;background:#09090b;display:flex;align-items:center;justify-content:center;">
+    ${ch.avatar_url ? `
+      <img src="${escape(ch.avatar_url)}" alt="${escape(ch.name)}" style="width:100%;height:100%;object-fit:cover;" id="child-avatar-modal-img"/>
+    ` : `
+      <span style="font-size:28px;font-weight:800;color:#ffffff;" id="child-avatar-modal-init">${initials(ch.name)}</span>
+    `}
+   </div>
+   <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+    <label class="btn primary" style="cursor:pointer;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;">
+     <span>📷 Escolher foto</span>
+     <input type="file" id="child-avatar-modal-file-input" data-id="${ch.id}" accept="image/jpeg,image/png,image/webp" hidden/>
+    </label>
+    ${ch.avatar_url ? `
+      <button type="button" class="btn secondary" data-action="remove-child-avatar" data-id="${ch.id}">Remover foto</button>
+    ` : ''}
+   </div>
+   <p class="soft-info" style="margin-top:14px;">A foto aparece na chamada, na carteirinha digital e quando a criança for chamada no telão.</p>
+  </div>
+ `);
 }
 
 function pagingModal(ch){
@@ -483,6 +546,16 @@ async function uploadImageFile(file){
  const data = new FormData();
  data.append('file', file);
  const res = await api('/upload', { method: 'POST', body: data });
+ return res.url;
+}
+
+async function uploadAvatarFile(file){
+ if(!file)throw new Error('Nenhum arquivo selecionado.');
+ if(!file.type.startsWith('image/'))throw new Error('Selecione uma imagem válida (JPG, PNG ou WebP).');
+ if(file.size > 15 * 1024 * 1024)throw new Error('A foto deve ter no máximo 15 MB.');
+ const data = new FormData();
+ data.append('file', file);
+ const res = await api('/avatar/upload', { method: 'POST', body: data });
  return res.url;
 }
 
@@ -622,7 +695,82 @@ function eventRegisterModal(ev){
  </form>`:`<p class="soft-info">Você não tem filhos cadastrados na faixa etária deste evento (${ev.min_age} a ${ev.max_age} anos). Cadastre seu filho em Meus filhos primeiro.</p><button type="button" class="btn primary full" data-action="close">Entendido</button>`);
 }
 
-const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,uploadImage:uploadImageFile,roomPresets:ROOM_PRESETS,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
+function eventParticipantsModal(evId){
+ const ev=S.events.find(x=>x.id===Number(evId));
+ if(!ev)return;
+ showModal(`Inscritos: ${escape(ev.title)}`,'Carregando lista de participantes...',`<div style="text-align:center;padding:32px 0;"><span class="spin">●</span><p style="margin-top:10px;">Buscando inscrições confirmadas...</p></div>`);
+ api(`/events/${ev.id}/participants`).then(list=>{
+  const regCount=list.length;
+  const enrolledIds=new Set(list.map(p=>p.child_id));
+  const availableChildren=S.children.filter(c=>!enrolledIds.has(c.id));
+
+  const content=`<div class="event-participants-view">
+   <div class="participants-summary-bar">
+    <div>
+     <strong style="font-size:15px;color:#ffffff;">${regCount} participante${regCount===1?'':'s'} confirmado${regCount===1?'':'s'}</strong>
+     <small style="display:block;color:#a1a1aa;margin-top:2px;">Capacidade: ${ev.max_capacity} vagas (${ev.max_capacity-regCount>0?`${ev.max_capacity-regCount} vagas restantes`:'Esgotado'})</small>
+    </div>
+    <span class="participants-ratio-badge ${regCount>=ev.max_capacity?'full':''}">${Math.min(100,Math.round((regCount/(ev.max_capacity||100))*100))}% lotado</span>
+   </div>
+
+   <div class="manual-enroll-box">
+    <strong style="display:block;font-size:12.5px;color:#ffffff;margin-bottom:8px;">➕ Inscrever aluno diretamente (Administração/Professores):</strong>
+    <form data-form="staff-add-participant" data-id="${ev.id}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+     <label style="flex:1;min-width:200px;margin-bottom:0;">Aluno
+      <select name="child_id" required style="margin-top:4px;">
+       <option value="">Selecione um aluno...</option>
+       ${availableChildren.map(c=>`<option value="${c.id}">${escape(c.name)} (${age(c.birthday)} anos · ${escape(c.room_name||'Salinha')})</option>`).join('')}
+      </select>
+     </label>
+     <label style="flex:1;min-width:140px;margin-bottom:0;">Observações
+      <input name="notes" placeholder="Alergias, cuidados..." style="margin-top:4px;"/>
+     </label>
+     <button class="btn primary" type="submit" ${availableChildren.length?'':'disabled'} style="height:42px;">Inscrever</button>
+    </form>
+    ${!availableChildren.length?'<small class="soft-info" style="margin-top:6px;display:block;">Todos os alunos cadastrados já estão inscritos.</small>':''}
+   </div>
+
+   <hr style="margin:16px 0;border:0;border-top:1px solid #27272a;"/>
+
+   ${list.length?`<div class="participants-list">
+    ${list.map(p=>{
+     const cleanPhone=(p.guardian_phone||'').replace(/\D/g,'');
+     const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá! Sou do ministério infantil sobre a inscrição de ${p.child_name} no evento ${ev.title}.`)}`:'';
+     return `<article class="participant-item-card">
+      <div class="participant-info-col">
+       <div class="participant-avatar-row">
+        ${p.child_avatar_url?`<img src="${escape(p.child_avatar_url)}" alt="${escape(p.child_name)}" class="kid-avatar-img"/>`:`<span class="kid-avatar" style="background:#09090b;">${initials(p.child_name)}</span>`}
+        <div>
+         <strong>${escape(p.child_name)}</strong>
+         <small>${p.child_age} anos · ${escape(p.room_name||'Salinha')}</small>
+        </div>
+       </div>
+       ${(p.allergies||p.emergency_medication||p.special_needs)?`<div class="participant-health-tags">
+        ${p.allergies?`<span class="allergy-badge">⚠️ ${escape(p.allergies)}</span>`:''}
+        ${p.emergency_medication?`<span class="allergy-badge med">💊 ${escape(p.emergency_medication)}</span>`:''}
+        ${p.special_needs?`<span class="allergy-badge special">♿ ${escape(p.special_needs)}</span>`:''}
+       </div>`:''}
+       <div class="participant-guardian-info">
+        <span>Responsável: <strong>${escape(p.guardian_name||'Cadastrado')}</strong></span>
+        ${p.guardian_phone?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><small style="color:#a1a1aa;">${escape(p.guardian_phone)}</small>${waLink?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" style="padding:2px 8px;font-size:11px;">${icon('whatsapp',13)} WhatsApp</a>`:''}</div>`:''}
+       </div>
+       ${p.notes?`<div class="participant-notes"><small>Obs: ${escape(p.notes)}</small></div>`:''}
+      </div>
+      <div class="participant-action-col">
+       <button type="button" class="mini-button danger-button" data-action="staff-cancel-reg" data-event-id="${ev.id}" data-child-id="${p.child_id}" title="Remover aluno do evento">Excluir ✕</button>
+      </div>
+     </article>`;
+    }).join('')}
+   </div>`:`<div class="empty" style="padding:24px 0;">${icon('kids',28)}<h3>Nenhum inscrito ainda</h3><p>Os responsáveis podem se inscrever pelo aplicativo ou você pode inscrever manualmente acima.</p></div>`}
+  </div>`;
+
+  showModal(`Inscritos: ${escape(ev.title)}`,`Gestão de participantes (${regCount}/${ev.max_capacity} vagas)`,content);
+ }).catch(err=>{
+  showModal(`Inscritos: ${escape(ev.title)}`,'Erro ao carregar',`<p class="form-error show">${escape(err.message)}</p>`);
+ });
+}
+
+const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,uploadImage:uploadImageFile,uploadAvatar:uploadAvatarFile,kidAvatar,roomPresets:ROOM_PRESETS,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
 initUSBScannerListener(S, (child, code) => {
  if (S.user && S.user.role !== 'parent') {
   openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age, attendanceModal });
@@ -652,6 +800,37 @@ document.addEventListener('click',async e=>{
  if(action==='apply-event-url'){const val=document.getElementById('event-url-input-field')?.value?.trim();if(val && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/'))){setEventBannerPreview(val);document.getElementById('event-url-drawer')?.setAttribute('hidden','');toast('Link de imagem aplicado!');}else{toast('Informe uma URL válida (ex: https://...).',true);}return;}
  if(action==='filter-events'){S.eventAudience=el.dataset.target;render();return;}
  if(action==='new-event'){eventFormModal();return;}
+ if(action==='view-participants'){eventParticipantsModal(Number(el.dataset.id));return;}
+ if(action==='staff-cancel-reg'){
+  const evId=Number(el.dataset.eventId),cid=Number(el.dataset.childId);
+  if(confirm('Deseja realmente remover esta criança do evento?')){
+   await api(`/events/${evId}/register/${cid}`,{method:'DELETE'});
+   await load();
+   eventParticipantsModal(evId);
+   toast('Participante removido do evento.');
+  }
+  return;
+ }
+ if(action==='edit-child-avatar'){
+  const c=S.children.find(x=>x.id===Number(el.dataset.id));
+  if(c)childAvatarModal(c);
+  return;
+ }
+ if(action==='remove-child-avatar'){
+  const cid=Number(el.dataset.id);
+  await api(`/children/${cid}/avatar`,{method:'POST',body:{avatar_url:''}});
+  modal.close();
+  await load();
+  toast('Foto do aluno removida.');
+  return;
+ }
+ if(action==='remove-user-avatar'){
+  await api('/me/avatar',{method:'POST',body:{avatar_url:''}});
+  S.user.avatar_url='';
+  render();
+  toast('Foto de perfil removida.');
+  return;
+ }
  if(action==='edit-event'){const ev=S.events.find(x=>x.id===Number(el.dataset.id));if(ev)eventFormModal(ev);return;}
  if(action==='delete-event'){
   const ev=S.events.find(x=>x.id===Number(el.dataset.id));
@@ -836,6 +1015,14 @@ document.addEventListener('submit',async e=>{
   if(kind==='delete-event'){
    await api(`/events/${form.dataset.id}`,{method:'DELETE'});
    modal.close();await load();toast('Evento excluído com sucesso.');return;
+  }
+  if(kind==='staff-add-participant'){
+   const evId=Number(form.dataset.id);
+   await api(`/events/${evId}/participants`,{method:'POST',body:{child_id:Number(values.child_id),notes:values.notes||''}});
+   await load();
+   eventParticipantsModal(evId);
+   toast('Aluno inscrito no evento com sucesso! 🎉');
+   return;
   }
   if(kind==='register-event-child'){
    await api(`/events/${form.dataset.id}/register`,{method:'POST',body:{child_id:Number(values.child_id),notes:values.notes||''}});
@@ -1113,6 +1300,11 @@ function showIncomingCallOverlay(call) {
   if (document.getElementById('emergency-call-overlay')) return;
 
   emergencyRingtone.start();
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([600, 250, 600, 250, 1000]);
+    } catch {}
+  }
 
   const childName = call.child_name || 'Seu Filho(a)';
   const roomName = call.room_name || 'Salinha';
@@ -1120,57 +1312,75 @@ function showIncomingCallOverlay(call) {
   const claimCode = call.claim_code || '';
   const childId = call.child_id || '';
   const pagingId = call.id || call.paging_id || '';
+  const childObj = S.children.find(c => c.id === Number(childId));
+  const childAvatar = childObj?.avatar_url || call.child_avatar_url || '';
 
   const overlay = document.createElement('div');
   overlay.id = 'emergency-call-overlay';
-  overlay.className = 'incoming-call-overlay';
+  overlay.className = 'incoming-call-overlay phone-call-screen';
   overlay.setAttribute('role', 'alertdialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'Chamado de Emergência do Ministério Infantil');
+  overlay.setAttribute('aria-label', 'Chamada da Salinha');
 
   overlay.innerHTML = `
-    <div class="incoming-call-card">
-      <div class="call-urgency-header">
-        <span class="call-siren-badge">🚨 CHAMADO NO TELÃO</span>
-        <span class="call-sub-header">Ministério Infantil · Lagoinha</span>
+    <div class="phone-call-container">
+      <div class="phone-call-header">
+        <span class="phone-call-type">CHAMADA DA SALINHA</span>
+        <span class="phone-call-status-pulse">
+          <span class="phone-status-dot"></span> Ligação em andamento...
+        </span>
       </div>
 
-      <div class="call-pulse-container">
-        <div class="call-pulse-ring"></div>
-        <div class="call-pulse-ring"></div>
-        <div class="call-pulse-ring"></div>
-        <div class="call-avatar-circle">
-          ${icon('speaker', 38)}
+      <div class="phone-call-avatar-stage">
+        <div class="phone-call-pulse-ring ring-1"></div>
+        <div class="phone-call-pulse-ring ring-2"></div>
+        <div class="phone-call-pulse-ring ring-3"></div>
+        <div class="phone-call-avatar-circle">
+          ${childAvatar ? `
+            <img src="${escape(childAvatar)}" alt="${escape(childName)}" class="phone-call-avatar-img"/>
+          ` : `
+            <svg class="phone-call-avatar-placeholder" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          `}
         </div>
       </div>
 
-      <div class="call-info">
-        <h2 class="call-child-name">${escape(childName)}</h2>
-        <p class="call-location-badge">
+      <div class="phone-call-details">
+        <h1 class="phone-call-child-name">${escape(childName)}</h1>
+        <p class="phone-call-room-line">
           <span>${icon('home', 15)} ${escape(roomName)}</span>
         </p>
-        <p class="call-reason-text"><strong>Motivo:</strong> ${escape(reason)}</p>
+        <p class="phone-call-reason-badge">
+          <span>⚠️ Motivo: ${escape(reason)}</span>
+        </p>
         ${claimCode ? `
-          <div class="call-claim-box">
-            <small>CÓDIGO NO TELÃO DO AUDITÓRIO</small>
-            <strong class="call-screen-code">${escape(claimCode)}</strong>
+          <div class="phone-call-code-chip">
+            <small>CÓDIGO NO TELÃO</small>
+            <strong>${escape(claimCode)}</strong>
           </div>
         ` : ''}
       </div>
 
-      <div class="call-actions-group">
-        <button type="button" class="btn-arrive-primary" data-action="call-on-my-way" data-child-id="${childId}" data-id="${pagingId}">
-          <span class="btn-arrive-icon">🏃</span>
-          <span class="btn-arrive-label">ESTOU A CAMINHO!</span>
-        </button>
+      <div class="phone-call-action-dock">
+        <!-- Silence / Decline -->
+        <div class="phone-call-btn-wrapper">
+          <button type="button" class="phone-call-btn decline" id="silence-call-btn" data-action="silence-call-overlay" aria-label="Silenciar chamada">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C2.87 9.17 7.18 7.5 12 7.5s9.13 1.67 11.71 4.17c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.1-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+            </svg>
+          </button>
+          <span class="phone-call-btn-text">Silenciar</span>
+        </div>
 
-        <div class="call-secondary-actions">
-          <button type="button" class="btn-silence-call" id="silence-call-btn" data-action="silence-call-overlay">
-            <span>🔕</span> Silenciar Toque
+        <!-- Accept / Estou a caminho -->
+        <div class="phone-call-btn-wrapper">
+          <button type="button" class="phone-call-btn accept" data-action="call-on-my-way" data-child-id="${childId}" data-id="${pagingId}" aria-label="Atender e avisar que estou a caminho">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.21a.96.96 0 0 0 .25-1A11.36 11.36 0 0 1 8.5 3.97c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.59c0-.55-.45-1-.99-1z"/>
+            </svg>
           </button>
-          <button type="button" class="btn-dismiss-call" data-action="dismiss-call-overlay">
-            Abrir Aplicativo
-          </button>
+          <span class="phone-call-btn-text">Estou a caminho</span>
         </div>
       </div>
     </div>

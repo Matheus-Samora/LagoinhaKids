@@ -73,7 +73,7 @@ def migrate_safety_and_health(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if 'children' in tables:
         c_fields = {r[1] for r in conn.execute('PRAGMA table_info(children)')}
-        for col in ('allergies', 'medical_conditions', 'emergency_medication', 'special_needs', 'authorized_pickups'):
+        for col in ('allergies', 'medical_conditions', 'emergency_medication', 'special_needs', 'authorized_pickups', 'avatar_url'):
             if col not in c_fields:
                 conn.execute(f'ALTER TABLE children ADD COLUMN {col} TEXT NOT NULL DEFAULT ""')
     if 'users' in tables:
@@ -83,6 +83,8 @@ def migrate_safety_and_health(conn):
         u_fields = {r[1] for r in conn.execute('PRAGMA table_info(users)')}
         if 'phone' not in u_fields:
             conn.execute('ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ""')
+        if 'avatar_url' not in u_fields:
+            conn.execute('ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ""')
     if 'attendance' in tables:
         a_fields = {r[1] for r in conn.execute('PRAGMA table_info(attendance)')}
         if 'claim_code' not in a_fields:
