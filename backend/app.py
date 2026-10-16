@@ -13,7 +13,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Systems',version='2.0.0')
+app=FastAPI(title='Lagoinha Systems',version='2.1.0')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -757,7 +757,10 @@ from .web_push import router as web_push_router
 app.include_router(web_push_router)
 from .platform import router as platform_router
 app.include_router(platform_router)
-from .modules import routers as module_routers
+from .modules.finance.router import router as finance_router
+from .modules.members.router import router as members_router
+from .modules.ministries.router import router as ministries_router
+module_routers=(finance_router,members_router,ministries_router)
 for module_router in module_routers:app.include_router(module_router)
 from .calendar_export import router as calendar_router
 app.include_router(calendar_router)
@@ -774,7 +777,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.0.0',
+        'version': '2.1.0',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'timestamp': s.now()
@@ -797,6 +800,17 @@ def serve_kids():return frontend_file('index.html')
 
 @app.get('/systems')
 @app.get('/systems/')
+def serve_admin_systems(request:Request):
+    try:user=session(request)
+    except HTTPException as exc:
+        if exc.status_code==401:return frontend_file('systems.html')
+        raise
+    from .platform_access import platform_admin
+    with s.db() as c:
+        if not platform_admin(c,user['id']):fail('platform_admin','Lagoinha Systems é exclusivo da administração de TI.',403)
+    return frontend_file('systems.html')
+
+@app.get('/access')
 @app.get('/finance')
 @app.get('/finance/')
 @app.get('/members')

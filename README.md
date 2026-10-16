@@ -72,3 +72,6 @@ SQLite permanece para piloto de uma organização. Não afirmar multitenancy ent
 ## GitHub
 
 Branches codex/* para mudanças, testes e PRs para main. Versão de produto/API/Android: 1.2.0; código Android: 3. Publicar APK em GitHub Releases, não no histórico de arquivos. O documento de acessos antigo foi retirado do versionamento e suas quatro senhas válidas foram renovadas; o histórico anterior ainda contém o documento antigo com senhas revogadas.
+
+Cadastros básicos dos setores na versão 2.1.0: [guia de funcionamento](docs/BASIC-SECTORS-2.1.md).
+

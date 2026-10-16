@@ -8,9 +8,9 @@ Um único serviço e banco existentes no projeto exclusivo `lagoinha-kids-202610
 |---|---|---|
 | Portal central | /systems (também /) | Login e gerenciamento de permissões |
 | Lagoinha Kids | /kids | Fluxos existentes preservados |
-| Lagoinha Finance | /finance | Base de acesso; negócio em desenvolvimento |
-| Lagoinha Members | /members | Base de acesso; negócio em desenvolvimento |
-| Lagoinha Ministries | /ministries | Base de acesso; negócio em desenvolvimento |
+| Lagoinha Finance | /finance | Cadastros básicos disponíveis — ver BASIC-SECTORS-2.1.md |
+| Lagoinha Members | /members | Cadastros básicos disponíveis — ver BASIC-SECTORS-2.1.md |
+| Lagoinha Ministries | /ministries | Cadastros básicos disponíveis — ver BASIC-SECTORS-2.1.md |
 
 Os caminhos são áreas dentro do mesmo domínio, não subdomínios reais. O domínio run.app não permite criar subdomínios arbitrários sob a URL do serviço. Quando houver domínio próprio, configurar DNS/TLS e os hosts exatos em SYSTEMS_MODULE_HOSTS, por exemplo {"systems.exemplo.com":"systems","kids.exemplo.com":"kids","finance.exemplo.com":"finance","members.exemplo.com":"members","ministries.exemplo.com":"ministries"}. A configuração define a área inicial, os links e os hosts autorizados. Não habilita DNS ou certificados sozinha.
 
@@ -22,7 +22,7 @@ As sessões atuais usam cookies restritos ao host: no endereço único, o login 
 - `platform_admins`: administração central; separada do perfil administrativo do Kids.
 - `module_access`: acesso habilitado e perfil por usuário e módulo.
 - Kids mantém admin/teacher/parent e suas regras de turmas/famílias.
-- Novos módulos preveem admin/editor/viewer; as operações específicas e permissões detalhadas serão implementadas em suas etapas.
+- Novos módulos usam admin/editor/viewer: consulta, edição e administração com arquivamento. Ver BASIC-SECTORS-2.1.md.
 - Apenas administração central pode modificar contas, senhas de terceiros e permissões entre módulos. Administração de um módulo não concede administração central.
 - Permissões são verificadas na API; esconder menus não é a barreira de segurança. Revogação passa a valer na próxima requisição, inclusive em sessões abertas.
 - Usuários criados no portal começam sem módulos liberados; a administração escolhe os acessos. Cadastros de famílias feitos no Kids continuam recebendo somente o acesso Kids.
@@ -57,3 +57,4 @@ Avisos atuais continuam sendo do Kids. Links apontam para /kids#notifications; u
 Testes abrangem isolamento de módulos, acesso negado, revogação com sessão aberta, distinção entre administração central e Kids, CSRF, validação de perfis, migração idempotente e regressão dos fluxos existentes. Interface verificada com dados temporários, inclusive tamanho móvel. PostgreSQL e container são validados no CI.
 
 Limitações anteriores permanecem: Google/SMTP ainda dependem de configuração, push físico em Android/iOS e capacidade para 1.000–10.000 usuários não foram certificados por esta reestruturação.
+

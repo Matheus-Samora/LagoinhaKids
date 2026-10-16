@@ -17,14 +17,14 @@ def me(request:Request,user=Depends(session)):
         grants={r['module']:dict(r) for r in c.execute('SELECT module,role,enabled FROM module_access WHERE user_id=?',(user['id'],))}
         root=platform_admin(c,user['id'])
         from .platform_access import host_module,module_url
-        return {'active_module':host_module(request.url.hostname or ''),'user':public_user(user),'platform_admin':root,'modules':[{'id':key,'name':name,'url':module_url(key),'enabled':allowed(c,user,key),'role':('admin' if key!='kids' else user['role']) if root else (user['role'] if key=='kids' else grants.get(key,{}).get('role')),'status':'operational' if key=='kids' else 'planned'} for key,name in MODULES.items()]}
+        return {'active_module':host_module(request.url.hostname or ''),'user':public_user(user),'platform_admin':root,'modules':[{'id':key,'name':name,'url':module_url(key),'enabled':allowed(c,user,key),'role':('admin' if key!='kids' else user['role']) if root else (user['role'] if key=='kids' else grants.get(key,{}).get('role')),'status':'operational'} for key,name in MODULES.items()]}
 
 @router.get('/modules/{module}')
 def module_home(module:str,user=Depends(session)):
     if module not in MODULES:fail('module','Sistema não encontrado.',404)
     with s.db() as c:
         if not allowed(c,user,module):fail('module_access','Seu acesso a este sistema não foi autorizado.',403)
-    return {'id':module,'name':MODULES[module],'status':'operational' if module=='kids' else 'planned','message':'Base preparada. As funcionalidades deste sistema serão implementadas na próxima etapa.'}
+    return {'id':module,'name':MODULES[module],'status':'operational','message':'Cadastros básicos disponíveis.'}
 
 @router.get('/users')
 def users(user=Depends(central_admin)):
