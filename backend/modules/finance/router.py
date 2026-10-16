@@ -180,6 +180,7 @@ def persist(kind,data,user,rid=None):
             if not data.name.strip():fail('name','Informe o nome da conta.')
             values={'name':data.name.strip(),'bank':data.bank.strip(),'opening_cents':money(data.opening_value)}
         elif kind=='entries':
+            if rid and c.execute('SELECT 1 FROM finance_service_closings WHERE entry_id=? AND active=1',(rid,)).fetchone():fail('closing','Edite este lançamento pelo borderô vinculado.',409)
             current(c,'finance_accounts',data.account_id)
             if data.cost_center_id:current(c,'finance_cost_centers',data.cost_center_id)
             if data.payment_status=='paid':check_date(data.occurred_on)
@@ -278,7 +279,8 @@ def remove(kind:str,rid:str,version:int=Query(ge=1),user=Depends(admin)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         if t_suffix=='accounts' and c.execute('SELECT 1 FROM finance_entries WHERE account_id=? AND active=1',(rid,)).fetchone():fail('account','Esta conta possui lançamentos ativos e não pode ser arquivada.',409)
-        if t_suffix=='cost_centers':c.execute('UPDATE finance_entries SET cost_center_id=NULL WHERE cost_center_id=?',(rid,))
+        if t_suffix=='cost_centers' and c.execute('SELECT 1 FROM finance_entries WHERE cost_center_id=? AND active=1',(rid,)).fetchone():fail('cost_center','Este centro possui lançamentos ativos e não pode ser arquivado.',409)
+        if t_suffix=='entries' and c.execute('SELECT 1 FROM finance_service_closings WHERE entry_id=? AND active=1',(rid,)).fetchone():fail('closing','Arquive o borderô vinculado para cancelar este lançamento.',409)
         if t_suffix=='service_closings':
             sc=current(c,'finance_service_closings',rid)
             if sc.get('entry_id'):

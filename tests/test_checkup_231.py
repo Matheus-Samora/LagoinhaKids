@@ -95,3 +95,15 @@ def test_report_filters_and_csv_formula_protection():
     assert "'=HYPERLINK" in csv
     assert c.get('/api/finance/report?start_date=wrong').status_code==400
     assert c.get('/api/finance/report?start_date=2026-12-01&end_date=2026-01-01').status_code==400
+
+def test_archival_preserves_cost_center_and_closing_links():
+    c=client();aid=account(c)
+    cc=c.post('/api/finance/cost-centers',json={'name':'Centro isolado'}).json()['id']
+    entry=c.post('/api/finance/entries',json={'account_id':aid,'cost_center_id':cc,'direction':'expense','description':'Despesa isolada','amount':'10','occurred_on':s.today()}).json()['id']
+    assert c.delete('/api/finance/cost-centers/'+cc+'?version=1').status_code==409
+    with s.db() as db:assert db.execute('SELECT cost_center_id FROM finance_entries WHERE id=?',(entry,)).fetchone()[0]==cc
+    closing=c.post('/api/finance/closings',json={'service_name':'Culto isolado','service_date':s.today(),'account_id':aid,'tithes':'20','counted_by':'Pessoa A','verified_by':'Pessoa B'}).json()['id']
+    with s.db() as db:linked=db.execute('SELECT entry_id FROM finance_service_closings WHERE id=?',(closing,)).fetchone()[0]
+    assert c.delete('/api/finance/entries/'+linked+'?version=1').status_code==409
+    assert c.put('/api/finance/entries/'+linked,json={'version':1,'account_id':aid,'direction':'income','description':'Alteração isolada','amount':'30','occurred_on':s.today()}).status_code==409
+    assert c.delete('/api/finance/closings/'+closing+'?version=1').status_code==200
