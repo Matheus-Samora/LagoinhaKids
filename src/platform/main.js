@@ -3,6 +3,7 @@ import './style.css';
 import {subscribeWebPush} from '../web-push.js';
 import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
+import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS} from './i18n.js';
 
 const root=document.getElementById('systems');
 const names={kids:'Lagoinha Kids',finance:'Lagoinha Finance',members:'Lagoinha Members',ministries:'Lagoinha Ministries'};
@@ -10,7 +11,7 @@ const descriptions={kids:'Turmas, presença e comunicação com as famílias.',f
 const moduleTags={
  kids:['Carteirinha QR Code','TAG Térmica','Alerta de Telão'],
  members:['8 GCs Oficiais com Arte','Jornada & Discipulado','Dados Criptografados'],
- ministries:['17 Ministérios Oficiais','Escala de Louvor por Função','Candidaturas & Alertas'],
+ ministries:['16 Ministérios Oficiais','Escala de Louvor por Função','Candidaturas & Alertas'],
  finance:['Previsão 30/60/90d','Relatórios Excel & PDF','Borderô Dupla Conferência']
 };
 const brandMeta={
@@ -22,7 +23,7 @@ const brandMeta={
  ministries:{word:'ministries',tagline:'CADA DOM A SERVIÇO DO REINO'},
  finance:{word:'finance',tagline:'MOTOR FINANCEIRO, PREVISÕES & GESTÃO'}
 };
-const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA','Sonoplastia'];
+const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA'];
 const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Colaborador',viewer:'Consulta'};
 let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=null,notifDrawerOpen=false;
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -211,7 +212,63 @@ function memberCommunityPortal(){
   </div>
  </section>`:'';
 
+ const anns=communityData?.announcements||[];
+ const isLeader=Boolean(
+  identity?.platform_admin||
+  identity?.pastor||
+  identity?.modules?.some(m=>m.enabled&&['admin','pastor','editor'].includes(m.role))
+ );
+
+ const sectorLabels={all:'Todos os Setores',kids:'Lagoinha Kids',members:'Membros & GCs',ministries:'Ministérios & Louvor',finance:'Financeiro'};
+ const sectorColors={all:'#18181b',kids:'#b45309',members:'#0f766e',ministries:'#4338ca',finance:'#15803d'};
+
+ const announcementsHtml=`
+ <section id="announcements-section" style="margin-top:24px;">
+  <div class="section-title" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+   <div>
+    <span class="eyebrow" style="color:#b45309;">COMUNICAÇÃO INSTITUCIONAL &amp; DIRETRIZES DA LIDERANÇA</span>
+    <h2 style="margin:4px 0 0;">Mural de Comunicados &amp; Eventos Oficiais</h2>
+    <p class="subtle" style="margin:4px 0 0;">Avisos direcionados aos setores e a toda a igreja publicados pela liderança.</p>
+   </div>
+   ${isLeader?`<button type="button" class="btn primary" id="open-new-announcement-btn" style="min-height:38px;padding:6px 14px;font-size:12.5px;">📢 Publicar Comunicado / Evento</button>`:''}
+  </div>
+  ${anns.length?`
+   <div class="announcements-mural-grid">
+    ${anns.map(a=>{
+     const sCol=sectorColors[a.target_sector]||'#18181b';
+     const canDelete=identity?.platform_admin||identity?.pastor||a.author_id===identity?.user?.id;
+     return `
+      <article class="announcement-card">
+       <div>
+        <div class="announcement-badge-row">
+         <span class="announcement-badge-sector" style="background:${sCol};color:#ffffff;">
+          ${e(sectorLabels[a.target_sector]||a.target_sector)}
+         </span>
+         ${a.event_date?`<span class="badge" style="background:#fef3c7;color:#92400e;">📅 ${e(a.event_date)}</span>`:''}
+        </div>
+        <h3 style="margin:10px 0 6px;">${e(a.title)}</h3>
+        <p class="announcement-body">${e(a.message)}</p>
+        ${a.location?`<div class="announcement-meta-item" style="margin-top:8px;">📍 <span>${e(a.location)}</span></div>`:''}
+       </div>
+       <div class="announcement-footer">
+        <span>Por <strong>${e(a.author_name||'Liderança')}</strong> · ${e(new Date(a.created_at).toLocaleDateString('pt-BR'))}</span>
+        ${canDelete?`<button type="button" class="mini-button danger-button" data-del-ann="${e(a.id)}" title="Arquivar este comunicado" style="padding:3px 8px;font-size:11px;">✕ Arquivar</button>`:''}
+       </div>
+      </article>
+     `;
+    }).join('')}
+   </div>
+  `:`
+   <div class="panel" style="text-align:center;padding:20px 16px;background:var(--surface);border:1px dashed var(--line);border-radius:12px;">
+    <span style="font-size:22px;">📢</span>
+    <h4 style="margin:6px 0 2px;font-size:14px;">Nenhum comunicado recente no mural</h4>
+    <p class="subtle" style="margin:0;font-size:12.5px;">Novos avisos e eventos cadastrados pelos líderes responsáveis aparecerão aqui.</p>
+   </div>
+  `}
+ </section>`;
+
  return `${myAppsHtml}
+ ${announcementsHtml}
  <section id="gc-showcase-section" style="margin-top:34px;">
   <div class="section-title" style="margin-bottom:18px;">
    <div>
@@ -352,6 +409,81 @@ function openApplyModal(targetType,targetId,targetName,extra={}){
    b.disabled=false;
   }
  };
+  dialog.showModal();
+}
+
+function openPublishAnnouncementModal(){
+ const dialog=root.querySelector('#community-apply-dialog');
+ if(!dialog)return;
+ const isRoot=identity?.platform_admin||identity?.pastor;
+ const leaderModules=identity?.modules?.filter(m=>m.enabled&&['admin','pastor','editor'].includes(m.role))||[];
+
+ dialog.querySelector('.sector-modal').innerHTML=`
+  <div class="section-title">
+   <div>
+    <span class="pill" style="margin-bottom:6px;">📢 LIDERANÇA &amp; COORDENAÇÃO</span>
+    <h2 style="margin:0;">Publicar Novo Comunicado ou Evento</h2>
+   </div>
+   <button type="button" class="secondary" id="close-ann-modal">Fechar</button>
+  </div>
+  <p class="subtle" style="margin-top:0;">O aviso será exibido no Mural da Área de Membros e enviará uma notificação automática para os usuários do setor selecionado.</p>
+  <form id="publish-announcement-form" class="record-form">
+   <label>Título do Comunicado / Evento
+    <input name="title" required maxlength="120" placeholder="Ex.: Ensaio Geral do Louvor, Vigília, Culto Especial...">
+   </label>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Setor de Destino
+     <select name="target_sector" required>
+      ${isRoot?`<option value="all">🌐 Todos os Setores &amp; Membros (Geral)</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='kids'))?`<option value="kids">🧒 Lagoinha Kids (Famílias &amp; Equipe)</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='members'))?`<option value="members">🏠 Membros &amp; GCs (Células)</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='ministries'))?`<option value="ministries">🎵 Louvor &amp; Ministérios (Voluntários)</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='finance'))?`<option value="finance">💼 Financeiro (Equipe Financeira)</option>`:''}
+      ${(!isRoot&&!leaderModules.length)?`<option value="all">Todos os Setores</option>`:''}
+     </select>
+    </label>
+    <label>Data / Horário do Evento (opcional)
+     <input name="event_date" placeholder="Ex.: 20/11 às 19h30 ou Próximo Sábado" maxlength="40">
+    </label>
+   </div>
+   <label>Local / Endereço (opcional)
+    <input name="location" placeholder="Ex.: Templo Principal, Auditório Kids, Anexo..." maxlength="120">
+   </label>
+   <label>Mensagem Completa do Comunicado
+    <textarea name="message" rows="4" required maxlength="1000" placeholder="Escreva os detalhes, orientações para os membros ou instruções de chegada..." style="width:100%;padding:10px;border-radius:10px;font:inherit;"></textarea>
+   </label>
+   <p class="error" role="alert"></p>
+   <button type="submit">Publicar e Notificar Setor Agora</button>
+  </form>
+ `;
+
+ dialog.querySelector('#close-ann-modal').onclick=()=>dialog.close();
+ dialog.querySelector('#publish-announcement-form').onsubmit=async ev=>{
+  ev.preventDefault();
+  const f=ev.currentTarget,b=f.querySelector('button[type=submit]');
+  b.disabled=true;
+  try{
+   const fd=new FormData(f);
+   const res=await api('/platform/announcements',{
+    method:'POST',
+    body:{
+     title:fd.get('title'),
+     target_sector:fd.get('target_sector'),
+     event_date:fd.get('event_date')||null,
+     location:fd.get('location')||null,
+     message:fd.get('message')
+    }
+   });
+   dialog.close();
+   communityData=await api('/platform/community');
+   identity=await api('/platform/me');
+   render(res.message);
+  }catch(err){
+   f.querySelector('.error').textContent=err.message;
+  }finally{
+   b.disabled=false;
+  }
+ };
  dialog.showModal();
 }
 
@@ -376,6 +508,10 @@ function render(message=''){
    ${navLinks}
   </nav>
   <div class="topbar-user-area">
+   <button type="button" class="quiet" id="topbar-theme-btn" title="Alternar Modo Escuro / Claro" style="padding:6px 10px;min-height:38px;font-size:12.5px;">${getTheme()==='dark'?'☀️ Claro':'🌙 Escuro'}</button>
+   <select id="topbar-lang-select" class="topbar-lang-select" aria-label="Idioma">
+    ${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}
+   </select>
    <button type="button" class="quiet" id="topbar-qr-btn" title="Baixar Aplicativo via QR Code" style="padding:6px 12px;min-height:38px;font-size:12.5px;"> App QR</button>
    <button type="button" class="quiet" id="topbar-notif-btn" title="Notificações" style="padding:6px 12px;min-height:38px;font-size:12.5px;position:relative;">Avisos ${unreadCount?`<span class="badge" style="background:#dc2626;color:#fff;padding:2px 6px;font-size:10.5px;">${unreadCount}</span>`:''}</button>
    <div class="topbar-user-chip">
@@ -401,15 +537,30 @@ function render(message=''){
   `}
   ${identity.platform_admin&&!module&&!isMemberPortal?permissions()+auditSection():''}
  </main>
- <footer class="platform-footer">Lagoinha Systems · 2.3.1</footer>`;
+ <footer class="platform-footer">Lagoinha Systems · 2.4.0</footer>`;
 
  if(module?.enabled&&module.id!=='kids')void sectors.mount(module);
 
  root.querySelector('#enable-push').onclick=async(event)=>{const b=event.currentTarget;b.disabled=true;try{await subscribeWebPush(api);b.textContent='Avisos ativados';}catch(error){b.disabled=false;b.textContent='Ativar avisos';root.querySelector('.status').textContent=error.message;}};
  root.querySelector('#logout').onclick=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
+ root.querySelector('#topbar-theme-btn')?.addEventListener('click',()=>{toggleTheme();render(message);});
+ root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});
  root.querySelector('#topbar-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelectorAll('[data-open-qr]').forEach(b=>b.addEventListener('click',()=>openAppDownloadQrModal()));
  root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>{notifDrawerOpen=!notifDrawerOpen;render(message);});
+ root.querySelector('#open-new-announcement-btn')?.addEventListener('click',()=>openPublishAnnouncementModal());
+ root.querySelectorAll('[data-del-ann]').forEach(btn=>btn.addEventListener('click',async()=>{
+  if(!confirm('Deseja realmente arquivar este comunicado? Ele deixará de ser exibido no mural.'))return;
+  btn.disabled=true;
+  try{
+   await api('/platform/announcements/'+btn.dataset.delAnn,{method:'DELETE'});
+   communityData=await api('/platform/community');
+   render('Comunicado arquivado com sucesso.');
+  }catch(err){
+   root.querySelector('.status').textContent=err.message;
+   btn.disabled=false;
+  }
+ }));
 
  root.querySelectorAll('[data-read-notif]').forEach(btn=>btn.addEventListener('click',async()=>{
   const nid=btn.dataset.readNotif;

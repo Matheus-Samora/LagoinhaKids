@@ -50,6 +50,7 @@ def migrate(c):
         '''CREATE TABLE IF NOT EXISTS members_people(id TEXT PRIMARY KEY,name TEXT NOT NULL,family_id TEXT REFERENCES members_families(id),relationship TEXT NOT NULL DEFAULT '',birthday TEXT,joined_on TEXT,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_self_registrations(id TEXT PRIMARY KEY,name TEXT NOT NULL,family_name TEXT NOT NULL DEFAULT '',birthday TEXT,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',marital_status TEXT NOT NULL DEFAULT '',profession TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',integration_stage TEXT NOT NULL DEFAULT 'visitor',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS sector_applications(id TEXT PRIMARY KEY,user_id BIGINT,member_name TEXT NOT NULL,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',target_type TEXT NOT NULL,target_id TEXT NOT NULL DEFAULT '',target_name TEXT NOT NULL,role_desired TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',reviewed_by BIGINT,created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS platform_announcements(id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,target_sector TEXT NOT NULL DEFAULT 'all',author_id BIGINT REFERENCES users(id),author_name TEXT NOT NULL DEFAULT '',event_date TEXT,location TEXT,banner_url TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_assignments(id TEXT PRIMARY KEY,person_id TEXT NOT NULL REFERENCES members_people(id),ministry TEXT NOT NULL,position TEXT NOT NULL DEFAULT 'Integrante',started_on TEXT,active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_schedules(id TEXT PRIMARY KEY,title TEXT NOT NULL,ministry TEXT NOT NULL,person_id TEXT NOT NULL REFERENCES members_people(id),role_notes TEXT NOT NULL DEFAULT '',service_date TEXT NOT NULL,service_time TEXT NOT NULL DEFAULT '18:00',status TEXT NOT NULL DEFAULT 'confirmed',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_resources(id TEXT PRIMARY KEY,ministry TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'roteiro',notes TEXT NOT NULL DEFAULT '',resource_url TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
@@ -67,6 +68,7 @@ def migrate(c):
         'CREATE INDEX IF NOT EXISTS finance_account_active ON finance_entries(account_id,active)',
         'CREATE INDEX IF NOT EXISTS changes_record ON module_changes(module,record_id,created_at)',
         'CREATE INDEX IF NOT EXISTS sector_apps_status ON sector_applications(target_type,status,created_at)',
+        'CREATE INDEX IF NOT EXISTS announcements_sector_active ON platform_announcements(target_sector,active,created_at)',
         '''CREATE TABLE IF NOT EXISTS module_scopes(user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,module TEXT NOT NULL,scope TEXT NOT NULL DEFAULT '',PRIMARY KEY(user_id,module))'''
     ]
     for statement in statements:
@@ -92,11 +94,17 @@ def migrate(c):
     ensure_column(c, 'finance_entries', 'payment_method', "TEXT NOT NULL DEFAULT 'pix'")
     ensure_column(c, 'finance_entries', 'cost_center_id', 'TEXT')
 
-    # Migrate 'Link Future' to 'Link'
+    # Migrate 'Link Future' to 'Link' and 'Sonoplastia' to 'Future'
     c.execute("UPDATE ministries_assignments SET ministry='Link' WHERE ministry='Link Future'")
     c.execute("UPDATE ministries_schedules SET ministry='Link' WHERE ministry='Link Future'")
     c.execute("UPDATE ministries_resources SET ministry='Link' WHERE ministry='Link Future'")
     c.execute("UPDATE module_scopes SET scope='Link' WHERE module='ministries' AND scope='Link Future'")
+
+    c.execute("UPDATE ministries_assignments SET ministry='Future' WHERE ministry='Sonoplastia'")
+    c.execute("UPDATE ministries_schedules SET ministry='Future' WHERE ministry='Sonoplastia'")
+    c.execute("UPDATE ministries_resources SET ministry='Future' WHERE ministry='Sonoplastia'")
+    c.execute("UPDATE module_scopes SET scope='Future' WHERE module='ministries' AND scope='Sonoplastia'")
+    c.execute("UPDATE sector_applications SET target_name='Future', target_id='Future' WHERE target_type='ministry' AND target_name='Sonoplastia'")
 
     if not c.execute("SELECT 1 FROM platform_migrations WHERE name='official_gcs_v230'").fetchone():
         if c.execute('SELECT count(*) FROM members_cells').fetchone()[0]==0:

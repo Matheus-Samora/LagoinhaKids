@@ -51,11 +51,13 @@ def community_catalog(user=Depends(session)):
         for r in c.execute('SELECT * FROM sector_applications WHERE user_id=? OR (email!=? AND lower(email)=?) ORDER BY created_at DESC LIMIT 50',(user['id'],'',user['email'].lower())):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
+        announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 40')]
         return {
             'cells':cells,
             'ministries':[{'name':m,'total':counts.get(m,{}).get('total',0),'leaders':counts.get(m,{}).get('leaders',0)} for m in MINISTRY_CATALOG],
             'my_applications':my_apps,
-            'notifications':notifs
+            'notifications':notifs,
+            'announcements':announcements
         }
 
 class CommunityApplication(BaseModel):
@@ -118,6 +120,78 @@ def mark_notification_read(nid:int,user=Depends(session)):
     with s.db() as c:
         c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?',(s.now(),nid,user['id']))
     return {'ok':True}
+
+class PlatformAnnouncementCreate(BaseModel):
+    title:str=Field(min_length=2,max_length=140)
+    message:str=Field(min_length=2,max_length=1200)
+    target_sector:str=Field(default='all',max_length=40)
+    event_date:str|None=Field(default=None,max_length=40)
+    location:str|None=Field(default=None,max_length=140)
+    banner_url:str|None=Field(default=None,max_length=300)
+
+@router.get('/announcements')
+def list_announcements(user=Depends(session)):
+    with s.db() as c:
+        return [dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 50')]
+
+@router.post('/announcements')
+def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
+    t_sector=data.target_sector.strip()
+    valid_targets=('all','kids','members','ministries','finance')
+    if t_sector not in valid_targets:fail('target_sector','Setor de destino inválido.')
+    aid=secrets.token_hex(16)
+    now=s.now()
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        is_root=platform_admin(c,user['id'])
+        pastor=is_pastor(c,user['id'])
+        leader_grants={r['module']:r['role'] for r in c.execute("SELECT module,role FROM module_access WHERE user_id=? AND enabled=1 AND role IN ('admin','pastor','editor')",(user['id'],))}
+        is_leader=bool(is_root or pastor or leader_grants)
+        if not is_leader:
+            fail('forbidden','Apenas líderes responsáveis ou coordenadores de setores podem publicar comunicados e eventos.',403)
+        if not (is_root or pastor) and t_sector!='all' and t_sector not in leader_grants:
+            fail('forbidden',f'Seu usuário não possui coordenação autorizada para o setor {t_sector}.',403)
+
+        c.execute(
+            'INSERT INTO platform_announcements(id,title,message,target_sector,author_id,author_name,event_date,location,banner_url,active,created_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)',
+            (aid,data.title.strip(),data.message.strip(),t_sector,user['id'],user['name'],data.event_date.strip() if data.event_date else None,data.location.strip() if data.location else None,data.banner_url.strip() if data.banner_url else '',now)
+        )
+
+        recipients=set()
+        for r in c.execute('SELECT user_id FROM platform_admins'):recipients.add(r['user_id'])
+        for r in c.execute('SELECT user_id FROM pastoral_users'):recipients.add(r['user_id'])
+
+        if t_sector=='all':
+            for r in c.execute('SELECT id FROM users WHERE active=1'):recipients.add(r['id'])
+        elif t_sector=='kids':
+            for r in c.execute("SELECT id FROM users WHERE active=1 AND (role='parent' OR id IN (SELECT user_id FROM module_access WHERE module='kids' AND enabled=1))"):recipients.add(r['id'])
+        elif t_sector=='members':
+            for r in c.execute("SELECT u.id FROM users u WHERE u.active=1 AND (u.id IN (SELECT user_id FROM module_access WHERE module='members' AND enabled=1) OR lower(u.email) IN (SELECT lower(email) FROM members_people WHERE active=1))"):recipients.add(r['id'])
+        elif t_sector=='ministries':
+            for r in c.execute("SELECT u.id FROM users u WHERE u.active=1 AND (u.id IN (SELECT user_id FROM module_access WHERE module='ministries' AND enabled=1) OR lower(u.email) IN (SELECT lower(p.email) FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1))"):recipients.add(r['id'])
+        elif t_sector=='finance':
+            for r in c.execute("SELECT user_id FROM module_access WHERE module='finance' AND enabled=1"):recipients.add(r['user_id'])
+
+        n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
+        n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
+        for uid in recipients:
+            if uid==user['id']:continue
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now))
+
+        s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
+        return {'id':aid,'ok':True,'message':'Comunicado / Evento publicado com sucesso para os membros!'}
+
+@router.delete('/announcements/{aid}')
+def remove_announcement(aid:str,user=Depends(session)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row=c.execute('SELECT * FROM platform_announcements WHERE id=?',(aid,)).fetchone()
+        if not row:fail('announcement','Comunicado não encontrado.',404)
+        if not (platform_admin(c,user['id']) or is_pastor(c,user['id']) or row['author_id']==user['id']):
+            fail('forbidden','Apenas o autor do comunicado ou a liderança pastoral/TI pode removê-lo.',403)
+        c.execute('UPDATE platform_announcements SET active=0 WHERE id=?',(aid,))
+        s.audit(c,user['id'],f'platform_announcement_archived:{aid}')
+        return {'ok':True,'message':'Comunicado arquivado.'}
 
 @router.get('/modules/{module}')
 def module_home(module:str,user=Depends(session)):

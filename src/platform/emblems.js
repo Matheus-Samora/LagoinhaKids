@@ -58,9 +58,9 @@ export const MINISTRY_META = {
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-inter" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#78350f"/><stop offset="100%" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-inter)"/><path d="M24 11C28 17 32 21 32 27C32 31.5 28.4 35 24 35C19.6 35 16 31.5 16 27C16 21 20 17 24 11Z" fill="rgba(254,243,199,0.2)" stroke="#fef3c7" stroke-width="2.2"/><path d="M24 18C26 21.5 27.5 23.5 27.5 26.8C27.5 29 25.9 30.8 24 30.8C22.1 30.8 20.5 29 20.5 26.8C20.5 23.5 22 21.5 24 18Z" fill="#fbbf24"/></svg>`
   },
   'Hero': {
-    tagline: 'Segurança, Ordem & Prontidão',
-    description: 'Zela pela segurança patrimonial e física das famílias, estacionamento, controle de fluxo e brigada de emergência.',
-    roles: ['Agente Hero Interno', 'Equipe de Pátio / Estacionamento', 'Brigadista / Primeiros Socorros', 'Líder de Plantão'],
+    tagline: 'Ministério de Homens & Crescimento Espiritual',
+    description: 'Fortalecimento espiritual de homens, sacerdócio bíblico no lar, comunhão e mentoria cristã para o crescimento com Deus.',
+    roles: ['Integrante Hero', 'Líder de Homens', 'Mentoria Espiritual', 'Apoio aos Encontros'],
     accent: '#1e293b',
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-hero" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#334155"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-hero)"/><path d="M24 10L36 15V24C36 31.5 30.8 36.8 24 39C17.2 36.8 12 31.5 12 24V15L24 10Z" stroke="#38bdf8" stroke-width="2.3" fill="rgba(56,189,248,0.12)"/><path d="M24 17V31M18 23H30" stroke="#f8fafc" stroke-width="2.4" stroke-linecap="round"/></svg>`
   },
@@ -121,23 +121,23 @@ export const MINISTRY_META = {
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-follow" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#064e3b"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-follow)"/><circle cx="24" cy="24" r="11" stroke="#d1fae5" stroke-width="2.2"/><polygon points="28,19 25.5,25.5 19,28 21.5,21.5" fill="#fde047" stroke="#fef08a" stroke-width="1"/></svg>`
   },
   'Link': {
-    tagline: 'Conexão, Comunicação & Integração',
-    description: 'Conecta visitantes e membros à vida da igreja, células, redes sociais, fotografia, transmissão e lounges de conexão.',
-    roles: ['Conector(a) Lounge Link', 'Fotografia & Social Media', 'Produção de Conteúdo', 'Atendimento ao Visitante'],
+    tagline: 'Grupo de Adolescentes da Igreja',
+    description: 'Ministério dedicado aos adolescentes da igreja, promovendo discipulado, encontros, comunhão e crescimento espiritual.',
+    roles: ['Líder de Adolescentes', 'Conselheiro(a) Teen', 'Louvor & Dinâmicas', 'Acolhimento Teen'],
     accent: '#2563eb',
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-link" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-link)"/><path d="M21 27L27 21" stroke="#fde047" stroke-width="2.5" stroke-linecap="round"/><path d="M19 29L16.5 31.5C14.3 33.7 14.3 37.2 16.5 39.4" stroke="#dbeafe" stroke-width="2.2" stroke-linecap="round"/><rect x="13" y="22" width="11" height="11" rx="5" transform="rotate(-45 13 22)" stroke="#dbeafe" stroke-width="2.2"/><rect x="21" y="14" width="11" height="11" rx="5" transform="rotate(-45 21 14)" stroke="#93c5fd" stroke-width="2.2"/></svg>`
   },
   'Future': {
-    tagline: 'Inovação, Visão, Liderança & Projetos',
-    description: 'Desenvolve novos líderes, projetos de expansão, tecnologia criativa e iniciativas voltadas para o futuro da igreja.',
-    roles: ['Projetos & Inovação', 'Tecnologia & Criatividade', 'Desenvolvimento de Liderança', 'Expansão & Missões'],
+    tagline: 'Mesa de Som, Áudio & Iluminação',
+    description: 'Responsável pela mesa de som de P.A., áudio de palco, mixagem, iluminação cênica e suporte técnico dos cultos.',
+    roles: ['Operador(a) de Som (Mesa P.A.)', 'Técnico de Monitor / Palco', 'Iluminação Cênica', 'Mixagem de Áudio'],
     accent: '#0891b2',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-future" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#164e63"/><stop offset="100%" stop-color="#0891b2"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-future)"/><path d="M13 31H35M17 25L24 14L31 25" stroke="#cffafe" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="24" r="3" fill="#fde047"/><path d="M24 31V36" stroke="#fde047" stroke-width="2.4" stroke-linecap="round"/></svg>`
+    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-future" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#0891b2"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-future)"/><path d="M15 13V35M24 13V35M33 13V35" stroke="#a1a1aa" stroke-width="2.2" stroke-linecap="round"/><rect x="12" y="19" width="6" height="4" rx="1.5" fill="#38bdf8"/><rect x="21" y="26" width="6" height="4" rx="1.5" fill="#fbbf24"/><rect x="30" y="16" width="6" height="4" rx="1.5" fill="#4ade80"/></svg>`
   },
   'Gourmet': {
-    tagline: 'Gastronomia, Café & Comunhão à Mesa',
-    description: 'Promove comunhão através da culinária, cantina, café pós-culto e recepção gastronômica em eventos.',
-    roles: ['Chef / Cozinha', 'Barista & Café', 'Atendimento Gourmet', 'Organização de Eventos Gastronômicos'],
+    tagline: 'Cozinha da Igreja & Gastronomia',
+    description: 'Equipe dedicada ao trabalho na cozinha da igreja, refeições, cantina, café pós-culto e comunhão à mesa.',
+    roles: ['Cozinheiro(a)', 'Auxiliar de Cozinha', 'Café & Cantina', 'Organização de Cozinha'],
     accent: '#b91c1c',
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-gourmet" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#7f1d1d"/><stop offset="100%" stop-color="#dc2626"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-gourmet)"/><path d="M15 22H31V27C31 31.4 27.4 35 23 35C18.6 35 15 31.4 15 27V22Z" stroke="#fee2e2" stroke-width="2.2" fill="rgba(254,226,226,0.15)"/><path d="M31 24H33.5C35.2 24 36.5 25.3 36.5 27C36.5 28.7 35.2 30 33.5 30H31" stroke="#fecaca" stroke-width="2.2"/><path d="M19 17V14M23 17V13M27 17V14" stroke="#fde047" stroke-width="2" stroke-linecap="round"/></svg>`
   },
@@ -155,13 +155,6 @@ export const MINISTRY_META = {
     roles: ['Professor(a) Trilha DNA', 'Monitor(a) de Turma DNA', 'Equipe de Batismo', 'Secretaria DNA'],
     accent: '#9333ea',
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-dna" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#3b0764"/><stop offset="100%" stop-color="#9333ea"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-dna)"/><path d="M16 12C16 20 32 20 32 28C32 32 28 35 24 36M32 12C32 20 16 20 16 28C16 32 20 35 24 36" stroke="#f3e8ff" stroke-width="2.2" stroke-linecap="round"/><path d="M18 16H30M18 24H30M18 31H30" stroke="#facc15" stroke-width="2" stroke-linecap="round"/></svg>`
-  },
-  'Sonoplastia': {
-    tagline: 'Áudio, Broadcast, Luz & Projeção',
-    description: 'Opera o som de P.A., monitoração de palco, mixagem para transmissão ao vivo, iluminação cênica e projeção.',
-    roles: ['Operador(a) de Áudio (Mesa P.A.)', 'Técnico de Monitor / Palco', 'Áudio Broadcast / Live', 'Iluminação & Projeção (Telão)'],
-    accent: '#0f172a',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-sono" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#09090b"/><stop offset="100%" stop-color="#27272a"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-sono)"/><path d="M15 13V35M24 13V35M33 13V35" stroke="#a1a1aa" stroke-width="2.2" stroke-linecap="round"/><rect x="12" y="19" width="6" height="4" rx="1.5" fill="#38bdf8"/><rect x="21" y="26" width="6" height="4" rx="1.5" fill="#fbbf24"/><rect x="30" y="16" width="6" height="4" rx="1.5" fill="#4ade80"/></svg>`
   }
 };
 

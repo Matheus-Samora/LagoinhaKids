@@ -34,7 +34,7 @@ def test_ministries_reuses_members_minimal_directory_and_multiple_roles():
         r=leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':ministry,'position':'Líder'});assert r.status_code==200,r.text
     assert leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Music'}).status_code==409
     assert leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Unknown'}).status_code==400
-    assert len(leader.get('/api/ministries').json()['catalog'])==17
+    assert len(leader.get('/api/ministries').json()['catalog'])==16
     admin.delete('/api/members/people/'+pid+'?version=1')
     assert leader.get('/api/ministries').json()['assignments']==[]
 
@@ -107,9 +107,9 @@ def test_ministries_schedules_conflict_and_resources():
     c=client(1);pid=person(c)
     s1=c.post('/api/ministries/schedules',json={'title':'Culto Domingo','ministry':'Music','person_id':pid,'role_notes':'Vocal','service_date':'2026-12-20','service_time':'18:00','status':'confirmed'})
     assert s1.status_code==200,s1.text
-    s2=c.post('/api/ministries/schedules',json={'title':'Culto Domingo','ministry':'Sonoplastia','person_id':pid,'service_date':'2026-12-20','service_time':'18:00','status':'confirmed'})
+    s2=c.post('/api/ministries/schedules',json={'title':'Culto Domingo','ministry':'Future','person_id':pid,'service_date':'2026-12-20','service_time':'18:00','status':'confirmed'})
     assert s2.status_code==409
-    s3=c.post('/api/ministries/schedules',json={'title':'Culto Manhã','ministry':'Sonoplastia','person_id':pid,'service_date':'2026-12-20','service_time':'10:00','status':'confirmed'})
+    s3=c.post('/api/ministries/schedules',json={'title':'Culto Manhã','ministry':'Future','person_id':pid,'service_date':'2026-12-20','service_time':'10:00','status':'confirmed'})
     assert s3.status_code==200
     res=c.post('/api/ministries/resources',json={'ministry':'Music','title':'Repertório Domingo','category':'repertorio','notes':'Tom G'})
     assert res.status_code==200

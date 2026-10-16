@@ -102,7 +102,7 @@ def test_ti_user_lifecycle_scoped_ministries_audit_and_backup():
     p_res=admin.post('/api/members/people',json={'name':'Voluntário Escopado','joined_on':s.today()})
     pid=p_res.json()['id']
     assert teacher.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Music','position':'Vocal'}).status_code==200
-    assert teacher.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Sonoplastia','position':'Mesa'}).status_code==403
+    assert teacher.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Future','position':'Mesa'}).status_code==403
     assert admin.patch('/api/platform/users/2',json={'active':False}).status_code==200
     assert teacher.get('/api/platform/me').status_code==401
     assert admin.patch('/api/platform/users/2',json={'active':True}).status_code==200
@@ -110,4 +110,38 @@ def test_ti_user_lifecycle_scoped_ministries_audit_and_backup():
     assert audit_res.status_code==200 and 'security_logs' in audit_res.json()
     backup_res=admin.get('/api/platform/backup')
     assert backup_res.status_code==200 and 'counts' in backup_res.json()
+
+def test_platform_announcements_leader_restricted_and_notifications():
+    admin=client(1);parent=client(3)
+    # Non-leader user cannot post announcements
+    fail_res=parent.post('/api/platform/announcements',json={'title':'Fake Event','message':'Tentativa','target_sector':'all'})
+    assert fail_res.status_code==403
+
+    # Admin posts announcement for all
+    post_res=admin.post('/api/platform/announcements',json={
+        'title':'Conferência Avivamento 2026',
+        'message':'Toda a igreja convidada para 3 dias de poder e adoração.',
+        'target_sector':'all',
+        'event_date':'2026-11-20',
+        'location':'Templo Principal Lagoinha'
+    })
+    assert post_res.status_code==200, post_res.text
+    aid=post_res.json()['id']
+
+    # Listed in announcements and community catalog
+    ann_list=parent.get('/api/platform/announcements').json()
+    assert any(a['id']==aid and a['title']=='Conferência Avivamento 2026' for a in ann_list)
+    comm=parent.get('/api/platform/community').json()
+    assert any(a['id']==aid for a in comm.get('announcements',[]))
+
+    # Parent received notification
+    notifs=parent.get('/api/platform/me').json()['notifications']
+    assert any('Conferência Avivamento 2026' in n['title'] for n in notifs)
+
+    # Delete announcement
+    del_res=admin.delete(f'/api/platform/announcements/{aid}')
+    assert del_res.status_code==200
+    ann_list2=parent.get('/api/platform/announcements').json()
+    assert not any(a['id']==aid for a in ann_list2)
+
 

@@ -25,6 +25,53 @@
   --paper: #ffffff;
 }
 
+html[data-theme="dark"],
+[data-theme="dark"] {
+  --black: #ffffff;
+  --zinc-950: #f4f4f5;
+  --zinc-900: #e4e4e7;
+  --zinc-800: #d4d4d8;
+  --zinc-700: #a1a1aa;
+  --zinc-600: #71717a;
+  --zinc-500: #71717a;
+  --zinc-400: #52525b;
+  --zinc-300: #3f3f46;
+  --zinc-200: #27272a;
+  --zinc-100: #18181b;
+  --zinc-50: #09090b;
+  --white: #09090b;
+
+  --line: #27272a;
+  --line-strong: #3f3f46;
+  --paper: #18181b;
+  color: #f4f4f5;
+  background: #09090b;
+}
+
+[data-theme="dark"] body {
+  background: #09090b;
+  color: #f4f4f5;
+}
+
+[data-theme="dark"] .panel,
+[data-theme="dark"] .card,
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] dialog,
+[data-theme="dark"] .app-header {
+  background: #18181b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #09090b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+
 * {
   box-sizing: border-box;
 }

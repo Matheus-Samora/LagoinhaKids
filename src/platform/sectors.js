@@ -509,27 +509,72 @@ export function createSectors({api,e,identity,openQrModal}){
   const musicAssignments=(data.assignments||[]).filter(a=>a.ministry==='Music');
   const dialog=host.querySelector('dialog');
 
-  const slotSelect=(slotRole)=>{
+  const CORE_LINEUP=[
+   {role:'Ministrante',capacity:1,label:'Ministrante',hint:'1 pessoa',tag:'Voz Principal'},
+   {role:'Backing Vocal',capacity:3,label:'Backing Vocal',hint:'até 3 pessoas',tag:'Harmonia Vocal'},
+   {role:'Tecladista',capacity:2,label:'Tecladista',hint:'até 2 pessoas',tag:'Teclado / Synth'},
+   {role:'Guitarrista',capacity:2,label:'Guitarrista',hint:'até 2 pessoas',tag:'Guitarra'},
+   {role:'Baixista',capacity:1,label:'Baixista',hint:'1 pessoa',tag:'Contrabaixo'},
+   {role:'Baterista',capacity:1,label:'Baterista',hint:'1 pessoa',tag:'Bateria'}
+  ];
+
+  const buildPersonOptions=(slotRole)=>{
    const matching=musicAssignments.filter(a=>(a.position||'').toLowerCase().includes(slotRole.split(' ')[0].toLowerCase()));
    const others=musicAssignments.filter(a=>!matching.includes(a));
    const allPeople=directory.filter(p=>!musicAssignments.some(a=>a.person_id===p.id));
-   return `<label class="worship-slot-field">
-    <span> ${e(slotRole)}</span>
-    <select name="slot_${e(slotRole)}">
-     <option value="">— Não escalar neste culto —</option>
-     ${matching.length?`<optgroup label="Cadastrados como ${e(slotRole)}">${matching.map(m=>`<option value="${e(m.person_id)}"> ${e(m.person_name)} (${e(m.position)})</option>`).join('')}</optgroup>`:''}
-     ${others.length?`<optgroup label="Outros integrantes do Louvor">${others.map(m=>`<option value="${e(m.person_id)}">${e(m.person_name)} (${e(m.position)})</option>`).join('')}</optgroup>`:''}
-     ${allPeople.length?`<optgroup label="Membros Gerais (Cadastrará no Louvor automaticamente)">${allPeople.map(p=>`<option value="${e(p.id)}">${e(p.name)}</option>`).join('')}</optgroup>`:''}
-    </select>
-   </label>`;
+   return `
+    <option value="">— Vaga Livre (Não escalar) —</option>
+    ${matching.length?`<optgroup label="Cadastrados no Louvor como ${e(slotRole)}">${matching.map(m=>`<option value="${e(m.person_id)}"> ${e(m.person_name)} (${e(m.position)})</option>`).join('')}</optgroup>`:''}
+    ${others.length?`<optgroup label="Outros Integrantes do Louvor">${others.map(m=>`<option value="${e(m.person_id)}">${e(m.person_name)} (${e(m.position)})</option>`).join('')}</optgroup>`:''}
+    ${allPeople.length?`<optgroup label="Membros Cadastrados">${allPeople.map(p=>`<option value="${e(p.id)}">${e(p.name)}</option>`).join('')}</optgroup>`:''}
+   `;
+  };
+
+  const slotCard=(item)=>{
+   const slots=[];
+   for(let i=1;i<=item.capacity;i++){
+    const slotKey=`slot_${item.role.replace(/\s+/g,'_')}_${i}`;
+    slots.push(`
+     <div class="worship-slot-item">
+      <label>
+       <span style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+        <strong>${e(item.label)} #${i}</strong>
+        <small class="subtle">${i===1?'Titular':'Vaga '+i}</small>
+       </span>
+       <select name="${e(slotKey)}" class="worship-slot-select">
+        ${buildPersonOptions(item.role)}
+       </select>
+      </label>
+     </div>
+    `);
+   }
+   return `
+    <article class="worship-band-slot-card">
+     <div class="worship-slot-card-head">
+      <div>
+       <strong>${e(item.label)}</strong>
+       <small style="display:block;color:#71717a;">${e(item.hint)}</small>
+      </div>
+      <span class="badge">${e(item.tag)}</span>
+     </div>
+     <div class="worship-slot-inputs-grid">
+      ${slots.join('')}
+     </div>
+    </article>
+   `;
   };
 
   dialog.querySelector('.sector-modal').innerHTML=`
    <div class="section-title">
-    <h2> Montar Escala do Ministério de Louvor (Por Instrumento / Função)</h2>
+    <div>
+     <span class="pill" style="margin-bottom:6px;">🎵 ESCALA OFICIAL DO LOUVOR</span>
+     <h2 style="margin:0;">Montar Escala da Banda & Vocais do Culto</h2>
+    </div>
     ${button('close','Fechar','class="secondary"')}
    </div>
-   <p class="subtle" style="margin-top:0;">Selecione cada músico ou vocalista para sua respectiva função no culto. O sistema verifica conflitos de horário e já vincula cada membro à sua função musical.</p>
+   <p class="subtle" style="margin-top:0;">
+    Defina os integrantes por função respeitando as diretrizes: Ministrante (1), Backing Vocal (até 3), Tecladista (até 2), Guitarrista (até 2), Baixista (1), Baterista (1) e adicione quantos músicos extras forem necessários!
+   </p>
    <form class="record-form" id="worship-scale-form">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
      ${field('title','Culto / Celebração','Culto de Celebração','text',true)}
@@ -537,15 +582,64 @@ export function createSectors({api,e,identity,openQrModal}){
      ${field('service_time','Horário','18:00','text',true,[['09:00','09:00 (Manhã)'],['10:00','10:00 (Manhã)'],['17:00','17:00 (Tarde)'],['18:00','18:00 (Noite)'],['19:30','19:30 (Semana)'],['20:00','20:00 (Especial)']])}
     </div>
     ${field('repertoire_notes','Repertório / Músicas e Tons do Culto (opcional)','','text',false)}
-    <div style="border-top:1px solid #e4e4e7;padding-top:12px;">
-     <strong style="display:block;margin-bottom:10px;font-size:14px;"> Selecione os Integrantes por Função Musical:</strong>
-     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
-      ${WORSHIP_ROLES.map(slotSelect).join('')}
+
+    <div style="border-top:1px solid #e4e4e7;padding-top:14px;margin-top:14px;">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div>
+       <strong style="font-size:14.5px;display:block;"> Estrutura Base da Banda (Capacidades Definidas)</strong>
+       <small class="subtle">Vocal (1 Ministrante + até 3 Backings), Bateria (1), Guitarras (até 2), Teclados (até 2), Baixo (1)</small>
+      </div>
+     </div>
+     <div class="worship-structured-slots-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
+      ${CORE_LINEUP.map(slotCard).join('')}
      </div>
     </div>
+
+    <div style="border-top:1px solid #e4e4e7;padding-top:16px;margin-top:16px;">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div>
+       <strong style="font-size:14.5px;display:block;"> Músicos & Integrantes Extras (Ilimitado)</strong>
+       <small class="subtle">Adicione quantos músicos adicionais precisar (Violão, Cordas, Sopros, VS, Direção Musical, etc.)</small>
+      </div>
+      <button type="button" class="secondary" id="add-extra-musician-btn" style="min-height:36px;font-size:12.5px;">+ Adicionar Músico Extra</button>
+     </div>
+     <div id="extra-musicians-container" style="display:grid;gap:10px;"></div>
+    </div>
+
     <p class="error" role="alert"></p>
-    <button type="submit">Salvar Escala Completa do Louvor</button>
+    <button type="submit" style="width:100%;margin-top:12px;">Salvar Escala Completa do Louvor</button>
    </form>`;
+
+  const extraContainer=dialog.querySelector('#extra-musicians-container');
+  const addExtraBtn=dialog.querySelector('#add-extra-musician-btn');
+
+  let extraIndex=0;
+  function addExtraMusicianRow(){
+   extraIndex++;
+   const rowId=`extra-row-${extraIndex}`;
+   const row=document.createElement('div');
+   row.id=rowId;
+   row.className='extra-musician-row';
+   row.style.cssText='display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px;align-items:center;padding:10px;border:1px solid #e4e4e7;border-radius:10px;background:#fcfcfc;';
+   row.innerHTML=`
+    <div>
+     <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:2px;">Instrumento / Função</label>
+     <input name="extra_inst_${extraIndex}" placeholder="Ex.: Violonista, Sax, VS" value="Violonista" maxlength="60" style="padding:6px 10px;min-height:36px;font-size:12.5px;" required>
+    </div>
+    <div>
+     <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:2px;">Músico(a)</label>
+     <select name="extra_person_${extraIndex}" style="padding:6px 10px;min-height:36px;font-size:12.5px;" required>
+      <option value="">Selecione a pessoa...</option>
+      ${directory.map(p=>`<option value="${e(p.id)}">${e(p.name)}</option>`).join('')}
+     </select>
+    </div>
+    <button type="button" class="secondary danger-btn" style="min-height:36px;padding:6px 10px;font-size:12px;margin-top:16px;" title="Remover este integrante">✕</button>
+   `;
+   row.querySelector('.danger-btn').onclick=()=>row.remove();
+   extraContainer.appendChild(row);
+  }
+
+  addExtraBtn.onclick=()=>addExtraMusicianRow();
 
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
   dialog.querySelector('#worship-scale-form').onsubmit=async ev=>{
@@ -555,11 +649,35 @@ export function createSectors({api,e,identity,openQrModal}){
    try{
     const fd=new FormData(f);
     const members=[];
-    for(const rName of WORSHIP_ROLES){
-     const pid=fd.get('slot_'+rName);
-     if(pid)members.push({person_id:pid,instrument:rName});
+    const seenPids=new Set();
+
+    // 1. Collect core lineup
+    for(const item of CORE_LINEUP){
+     for(let i=1;i<=item.capacity;i++){
+      const slotKey=`slot_${item.role.replace(/\s+/g,'_')}_${i}`;
+      const pid=fd.get(slotKey);
+      if(pid&&!seenPids.has(pid)){
+       seenPids.add(pid);
+       members.push({person_id:pid,instrument:item.role});
+      }
+     }
     }
-    if(!members.length)throw new Error('Selecione pelo menos 1 integrante (Tecladista, Baterista, Vocal, etc.) para gerar a escala.');
+
+    // 2. Collect dynamic extra musicians
+    const extraRows=extraContainer.querySelectorAll('.extra-musician-row');
+    extraRows.forEach(row=>{
+     const instInp=row.querySelector('input');
+     const persSelect=row.querySelector('select');
+     const pid=persSelect?.value;
+     const inst=instInp?.value?.trim()||'Músico Extra';
+     if(pid&&!seenPids.has(pid)){
+      seenPids.add(pid);
+      members.push({person_id:pid,instrument:inst});
+     }
+    });
+
+    if(!members.length)throw new Error('Selecione pelo menos 1 integrante (Ministrante, Vocal, Tecladista, etc.) para montar a escala.');
+
     const res=await api('/ministries/worship-scale',{
      method:'POST',
      body:{

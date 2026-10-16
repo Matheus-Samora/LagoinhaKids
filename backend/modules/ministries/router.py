@@ -8,8 +8,8 @@ from ... import store as s
 from ...app import fail
 from ..common import Record,save,archive,current,check_date,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/ministries',tags=['Ministries'])
-CATALOG=('Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA','Sonoplastia')
-WORSHIP_ROLES=('Ministro de Louvor','Vocal / Backing Vocal','Tecladista','Baterista','Guitarrista','Violonista','Baixista','Cordas / Sopros','Diretor Musical','VS / Tracks')
+CATALOG=('Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA')
+WORSHIP_ROLES=('Ministrante','Backing Vocal','Tecladista','Guitarrista','Baixista','Baterista','Cordas / Sopros','Diretor Musical','VS / Tracks')
 TRAINING_STATUSES=('certified','in_training','pending')
 SCHEDULE_STATUSES=('confirmed','pending','declined')
 RESOURCE_CATEGORIES=('repertorio','roteiro','checklist','documento')
@@ -50,7 +50,7 @@ class WorshipScaleCreate(BaseModel):
     repertoire_title:str=Field(default='',max_length=140)
     repertoire_notes:str=Field(default='',max_length=400)
     repertoire_url:str=Field(default='',max_length=400)
-    members:list[WorshipBandSlot]=Field(min_length=1,max_length=25)
+    members:list[WorshipBandSlot]=Field(min_length=1,max_length=60)
 
 def check_ministry_scope(c,user,ministry):
     if platform_admin(c,user['id']) or is_pastor(c,user['id']):return

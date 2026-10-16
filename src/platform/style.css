@@ -21,6 +21,16 @@
   font-synthesis: none;
 }
 
+html[data-theme="dark"],
+[data-theme="dark"] {
+  --bg: #09090b;
+  --surface: #18181b;
+  --ink: #f4f4f5;
+  --muted: #a1a1aa;
+  --subtle: #71717a;
+  --line: #27272a;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -2093,3 +2103,221 @@ button,a.button{overflow-wrap:anywhere}img{max-width:100%}
  .worship-roles-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.worship-role-chip{min-width:0;padding:10px;overflow-wrap:break-word}
  .ministry-grid-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.ministry-card-top{flex-wrap:wrap}
 }
+
+/* ==========================================================================
+   Dark Mode Deep Overrides & Visual Polish
+   ========================================================================== */
+[data-theme="dark"] dialog,
+[data-theme="dark"] .sector-modal {
+  background: #18181b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #09090b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: #71717a;
+  outline-color: #f4f4f5;
+}
+
+[data-theme="dark"] .panel,
+[data-theme="dark"] .card,
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .saved-accounts-card,
+[data-theme="dark"] .gc-banner-card,
+[data-theme="dark"] .ministry-showcase-card,
+[data-theme="dark"] .worship-band-slot-card,
+[data-theme="dark"] .worship-role-chip,
+[data-theme="dark"] .worship-service-card,
+[data-theme="dark"] .announcement-card,
+[data-theme="dark"] .extra-musician-row {
+  background: #18181b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] .quiet,
+[data-theme="dark"] button.secondary,
+[data-theme="dark"] .button.secondary {
+  background: #27272a;
+  color: #f4f4f5;
+  border-color: #3f3f46;
+}
+
+[data-theme="dark"] .quiet:hover,
+[data-theme="dark"] button.secondary:hover,
+[data-theme="dark"] .button.secondary:hover {
+  background: #3f3f46;
+  border-color: #52525b;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .platform-topbar {
+  background: rgba(24, 24, 27, 0.85);
+  border-color: #27272a;
+}
+
+[data-theme="dark"] .topbar-sector-link {
+  color: #a1a1aa;
+}
+
+[data-theme="dark"] .topbar-sector-link.active {
+  background: #27272a;
+  color: #ffffff;
+}
+
+[data-theme="dark"] th {
+  background: #18181b;
+  color: #a1a1aa;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] td {
+  border-color: #27272a;
+  color: #f4f4f5;
+}
+
+[data-theme="dark"] tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .stats .stat {
+  background: #18181b;
+  border-color: #27272a;
+  color: #f4f4f5;
+}
+
+[data-theme="dark"] .pill {
+  background: #27272a;
+  color: #f4f4f5;
+  border-color: #3f3f46;
+}
+
+[data-theme="dark"] .badge {
+  background: #27272a;
+  color: #f4f4f5;
+}
+
+/* ==========================================================================
+   Worship Band Slots & Announcements Mural
+   ========================================================================== */
+.worship-band-slot-card {
+  padding: 14px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.worship-slot-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.worship-slot-inputs-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.worship-slot-item select {
+  width: 100%;
+}
+
+.announcements-mural-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.announcement-card {
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.announcement-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.announcement-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.announcement-badge-sector {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.announcement-card h3 {
+  margin: 6px 0;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.announcement-body {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0;
+  white-space: pre-line;
+}
+
+.announcement-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--subtle);
+  margin-top: 4px;
+}
+
+.announcement-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--subtle);
+}
+
+.topbar-lang-select {
+  padding: 4px 8px;
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
