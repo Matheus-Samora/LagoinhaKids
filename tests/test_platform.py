@@ -94,3 +94,20 @@ def test_central_identity_starts_without_any_module():
     assert admin.put(f"/api/platform/users/{r.json()['id']}/modules/finance",json={'role':'viewer','enabled':True}).status_code==200
     assert new.get('/api/finance').status_code==200
     assert new.get('/api/children').status_code==403
+
+def test_ti_user_lifecycle_scoped_ministries_audit_and_backup():
+    admin=client(1);teacher=client(2)
+    assert admin.patch('/api/platform/users/1',json={'active':False}).status_code==409
+    assert admin.put('/api/platform/users/2/modules/ministries',json={'role':'editor','enabled':True,'scope':'Music'}).status_code==200
+    p_res=admin.post('/api/members/people',json={'name':'Voluntário Escopado','joined_on':s.today()})
+    pid=p_res.json()['id']
+    assert teacher.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Music','position':'Vocal'}).status_code==200
+    assert teacher.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Sonoplastia','position':'Mesa'}).status_code==403
+    assert admin.patch('/api/platform/users/2',json={'active':False}).status_code==200
+    assert teacher.get('/api/platform/me').status_code==401
+    assert admin.patch('/api/platform/users/2',json={'active':True}).status_code==200
+    audit_res=admin.get('/api/platform/audit')
+    assert audit_res.status_code==200 and 'security_logs' in audit_res.json()
+    backup_res=admin.get('/api/platform/backup')
+    assert backup_res.status_code==200 and 'counts' in backup_res.json()
+

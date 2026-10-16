@@ -414,7 +414,15 @@ function renderInnerPage(){
  const p=S.user.role==='parent';
  if(S.page==='overview'){
   const present=S.children.filter(ch=>ch.status==='present').length,departed=S.children.filter(ch=>ch.status==='departed').length;
-   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div><div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div><button class="text-link" data-page="rooms">Gerenciar turmas ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
+  const ageTransitions=(S.user.role!=='parent')?S.children.map(ch=>{
+   const curRoom=S.rooms.find(r=>r.id===ch.room_id);
+   const cAge=age(ch.birthday);
+   if(!curRoom||(cAge>=curRoom.min_age&&cAge<=curRoom.max_age))return null;
+   const targetRoom=S.rooms.find(r=>r.id!==curRoom.id&&cAge>=r.min_age&&cAge<=r.max_age);
+   return {child:ch,curRoom,cAge,targetRoom};
+  }).filter(Boolean):[];
+  const transitionBanner=ageTransitions.length?`<section class="panel" style="margin-bottom:18px;border:1.5px solid #18181b;background:#fafafa;"><div class="panel-heading"><div><h2>🎂 Transição de Faixa Etária (${ageTransitions.length})</h2><p>Crianças que completaram idade para avançar de turma no Lagoinha Kids.</p></div><span class="tag">Gestão Pedagógica</span></div><div style="display:grid;gap:8px;">${ageTransitions.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid #e4e4e7;border-radius:10px;flex-wrap:wrap;"><div><strong>${escape(t.child.name)}</strong> <span class="tag">${t.cAge} anos</span><small style="display:block;color:#71717a;">Turma atual: ${escape(t.curRoom.name)} (${t.curRoom.min_age}-${t.curRoom.max_age} anos)${t.targetRoom?` → Recomendada: ${escape(t.targetRoom.name)} (${t.targetRoom.min_age}-${t.targetRoom.max_age} anos)`:''}</small></div>${t.targetRoom&&S.user.role==='admin'?`<button type="button" class="mini-button" data-action="transfer-child-room" data-id="${t.child.id}" data-room-id="${t.targetRoom.id}">Transferir p/ ${escape(t.targetRoom.name)} →</button>`:'<span class="tag">Verificar turma</span>'}</div>`).join('')}</div></section>`:'';
+   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button>${S.user.role!=='parent'?`<button class="btn secondary" data-action="totem-kiosk" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.28);">🖥️ Modo Totem Recepção</button>`:''}</div></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div>${transitionBanner}<div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div><button class="text-link" data-page="rooms">Gerenciar turmas ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
  }
  if(S.page==='events')return eventsPage();
  if(S.page==='team'&&S.user.role!=='parent')return teamPage();
@@ -663,9 +671,9 @@ document.addEventListener('keydown',e=>{if(e.target.classList.contains('face-dro
 function digitalIdModal(ch){
  const room=S.rooms.find(r=>r.id===ch.room_id)?.name||'Salinha';
  const code=ch.claim_code||`LK-${ch.id.toString().padStart(4,'0')}`;
- showModal('Carteirinha Digital',escape(ch.name),`<div class="digital-id-card">
+ showModal('Carteirinha & Etiqueta Pareada',escape(ch.name),`<div class="digital-id-card">
   <div class="id-header">
-   <span class="id-brand">LAGOINHA KIDS</span>
+   <span class="id-brand">LAGOINHA KIDS · VIA DA CRIANÇA</span>
    <span class="id-tag">${escape(room)}</span>
   </div>
   <div class="id-person">
@@ -684,7 +692,48 @@ function digitalIdModal(ch){
   ${ch.allergies?`<div class="id-alert-banner" style="margin-bottom:8px;">⚠️ <strong>ALERGIA:</strong> ${escape(ch.allergies)}</div>`:''}
   ${ch.special_needs?`<div class="id-alert-banner">♿ <strong>CUIDADO:</strong> ${escape(ch.special_needs)}</div>`:''}
  </div>
- <button type="button" class="btn secondary full" data-action="close" style="margin-top:14px;">Fechar carteirinha</button>`);
+ <div style="margin-top:12px;padding:14px;border:2px dashed #3f3f46;border-radius:12px;background:#09090b;color:#fff;text-align:center;">
+  <small style="display:block;font-size:10px;letter-spacing:1.2px;color:#a1a1aa;">✂️ VIA DO RESPONSÁVEL (CLAIM TAG PAREADA)</small>
+  <strong style="display:block;font-size:26px;letter-spacing:4px;margin:4px 0;">${escape(code)}</strong>
+  <small style="color:#d4d4d8;">Aluno: <strong>${escape(ch.name)}</strong> · ${escape(room)} · No Tag, No Child</small>
+ </div>
+ <div style="display:flex;gap:8px;margin-top:14px;">
+  <button type="button" class="btn primary full" data-action="print-thermal-tag">🖨️ Imprimir Etiquetas Pareadas</button>
+  <button type="button" class="btn secondary" data-action="close">Fechar</button>
+ </div>`);
+}
+
+function totemKioskModal(){
+ const renderTotemList=(q='')=>{
+  const term=q.trim().toLowerCase();
+  const list=S.children.filter(c=>!term||(c.name+' '+(c.parent_name||'')+' '+(c.room_name||'')).toLowerCase().includes(term)).slice(0,12);
+  return list.length?list.map(c=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #27272a;border-radius:12px;background:#18181b;color:#fff;gap:10px;flex-wrap:wrap;">
+   <div>
+    <strong style="font-size:15px;display:block;">${escape(c.name)} (${age(c.birthday)} anos)</strong>
+    <small style="color:#a1a1aa;">Turma: ${escape(c.room_name||'Salinha')} · Resp.: ${escape(c.parent_name||'Cadastrado')}</small>
+    ${c.claim_code?`<span class="claim-tag-badge" style="margin-left:6px;">TAG: ${escape(c.claim_code)}</span>`:''}
+   </div>
+   <div style="display:flex;gap:6px;">
+    <button type="button" class="mini-button" data-action="attendance" data-id="${c.id}">${c.status==='present'?'Saída':'Check-in Rápido'}</button>
+    <button type="button" class="mini-button secondary" data-action="digital-id" data-id="${c.id}">🖨️ Etiqueta</button>
+   </div>
+  </div>`).join(''):'<p class="soft-info" style="text-align:center;padding:16px 0;">Nenhuma criança encontrada para esta busca.</p>';
+ };
+ showModal('🖥️ Modo Totem — Recepção Rápida','Busque pelo nome da criança ou responsável para check-in e emissão de etiqueta.',`
+  <div style="display:grid;gap:12px;">
+   <input id="totem-search-input" placeholder="Digite o nome da criança ou da família..." autocomplete="off" style="font-size:16px;padding:12px 14px;"/>
+   <div id="totem-results-list" style="display:grid;gap:8px;max-height:360px;overflow-y:auto;">${renderTotemList('')}</div>
+   <div style="display:flex;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid #27272a;">
+    <button type="button" class="btn secondary" data-action="guest-checkin">+ Visitante de 1ª Vez</button>
+    <button type="button" class="btn secondary" data-action="close">Encerrar Modo Totem</button>
+   </div>
+  </div>`);
+ const inp=document.getElementById('totem-search-input');
+ inp?.focus();
+ inp?.addEventListener('input',ev=>{
+  const box=document.getElementById('totem-results-list');
+  if(box)box.innerHTML=renderTotemList(ev.currentTarget.value);
+ });
 }
 
 function childAvatarModal(ch){
@@ -1069,6 +1118,18 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(action==='digital-id'){if(ch)digitalIdModal(ch);return;}
+ if(action==='print-thermal-tag'){window.print();return;}
+ if(action==='totem-kiosk'){totemKioskModal();return;}
+ if(action==='transfer-child-room'){
+  if(!ch)return;
+  const targetRoomId=Number(el.dataset.roomId);
+  const targetRoom=S.rooms.find(r=>r.id===targetRoomId);
+  if(!targetRoom)return;
+  await api(`/children/${ch.id}`,{method:'PATCH',body:{name:ch.name,birthday:ch.birthday.slice(0,10),room_id:targetRoomId}});
+  await load();
+  toast(`${ch.name} transferido(a) para ${targetRoom.name} com sucesso! 🎂`);
+  return;
+ }
  if(action==='paging-call'){if(ch)pagingModal(ch);return;}
  if(action==='on-my-way'||action==='call-on-my-way'){
   emergencyRingtone.stop();
@@ -1311,7 +1372,7 @@ document.addEventListener('submit',async e=>{
    showModal('Check-in de Visitante Concluído! 🎉','Etiqueta de Segurança emitida',`<div class="pickup-receipt"><span>Código de Retirada do Visitante</span><strong>${escape(g.claim_code)}</strong><small>Entregue este código ao responsável ${escape(g.guardian_name)}.</small></div><button type="button" class="btn primary full" data-action="close" style="margin-top:14px;">Concluir</button>`);
    return;
   }
-  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
+  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token='';saveAccount(result.user);navHistory.length=0;S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await welcome();await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){

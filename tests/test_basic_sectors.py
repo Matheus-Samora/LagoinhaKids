@@ -84,3 +84,57 @@ def test_invoice_upload_only_finance_writers_and_csrf_required():
     assert viewer.post('/api/finance/files',files={'file':('a.pdf',b'%PDF-1.4\n%%EOF','application/pdf')}).status_code==403
     admin=client(1);admin.headers.pop('X-CSRF-Token')
     assert admin.post('/api/finance/accounts',json={'name':'CSRF protected'}).status_code==403
+
+def test_members_cells_and_self_registration_approval():
+    c=client(1)
+    cell_res=c.post('/api/members/cells',json={'name':'GC Savassi','leader_name':'Pr. Lucas','neighborhood':'Savassi','meeting_day':'Quarta 20h'})
+    assert cell_res.status_code==200,cell_res.text
+    cell_id=cell_res.json()['id']
+    reg=c.post('/api/members/self-register',json={'name':'Visitante Novo','family_name':'Família Novo','phone':'31999990000','integration_stage':'visitor'})
+    assert reg.status_code==200,reg.text
+    reg_id=reg.json()['id']
+    snap=c.get('/api/members').json()
+    assert len(snap['self_registrations'])==1
+    app_res=c.post(f'/api/members/self-registrations/{reg_id}/approve')
+    assert app_res.status_code==200,app_res.text
+    pid=app_res.json()['person_id']
+    assert c.put(f'/api/members/people/{pid}',json={'name':'Visitante Novo','cell_id':cell_id,'integration_stage':'baptized','version':1}).status_code==200
+    snap2=c.get('/api/members').json()
+    assert snap2['cells'][0]['member_count']==1
+    assert snap2['self_registrations']==[]
+
+def test_ministries_schedules_conflict_and_resources():
+    c=client(1);pid=person(c)
+    s1=c.post('/api/ministries/schedules',json={'title':'Culto Domingo','ministry':'Music','person_id':pid,'role_notes':'Vocal','service_date':'2026-12-20','service_time':'18:00','status':'confirmed'})
+    assert s1.status_code==200,s1.text
+    s2=c.post('/api/ministries/schedules',json={'title':'Culto Domingo','ministry':'Sonoplastia','person_id':pid,'service_date':'2026-12-20','service_time':'18:00','status':'confirmed'})
+    assert s2.status_code==409
+    s3=c.post('/api/ministries/schedules',json={'title':'Culto Manhã','ministry':'Sonoplastia','person_id':pid,'service_date':'2026-12-20','service_time':'10:00','status':'confirmed'})
+    assert s3.status_code==200
+    res=c.post('/api/ministries/resources',json={'ministry':'Music','title':'Repertório Domingo','category':'repertorio','notes':'Tom G'})
+    assert res.status_code==200
+    snap=c.get('/api/ministries').json()
+    assert len(snap['schedules'])==2 and len(snap['resources'])==1
+
+def test_finance_cost_centers_closings_settle_and_csv():
+    c=client(1);aid=account(c)
+    cc=c.post('/api/finance/cost-centers',json={'name':'Reforma Kids','ministry':'Kids','budget_value':'1000,00'})
+    assert cc.status_code==200
+    cc_id=cc.json()['id']
+    pend=c.post('/api/finance/entries',json={'account_id':aid,'cost_center_id':cc_id,'direction':'expense','description':'Pintura','occurred_on':s.today(),'due_date':'2026-12-31','amount':'250,00','payment_status':'pending'})
+    assert pend.status_code==200
+    pid=pend.json()['id']
+    snap=c.get('/api/finance').json()
+    assert snap['totals']['pending_expense_cents']==25000
+    assert snap['accounts'][0]['balance_cents']==10000
+    assert c.post(f'/api/finance/entries/{pid}/settle').status_code==200
+    snap2=c.get('/api/finance').json()
+    assert snap2['totals']['pending_expense_cents']==0
+    assert snap2['accounts'][0]['balance_cents']==-15000
+    sc=c.post('/api/finance/closings',json={'service_name':'Culto Domingo 18h','service_date':s.today(),'account_id':aid,'tithes':'500,00','offerings_pix':'150,00','counted_by':'Tesoureiro A','verified_by':'Diácono B'})
+    assert sc.status_code==200,sc.text
+    snap3=c.get('/api/finance').json()
+    assert snap3['accounts'][0]['balance_cents']==50000
+    csv_res=c.get('/api/finance/export.csv')
+    assert csv_res.status_code==200 and 'Borderô: Culto Domingo 18h' in csv_res.text
+

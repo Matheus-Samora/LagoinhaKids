@@ -777,7 +777,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.1.0',
+        'version': '2.2.0',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'timestamp': s.now()
