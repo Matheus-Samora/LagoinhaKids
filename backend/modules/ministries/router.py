@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date,time
+from urllib.parse import urlsplit
 from fastapi import APIRouter,Depends,Query
 from pydantic import BaseModel,Field
 from ...module_security import module_access
@@ -76,11 +77,16 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
         for r in c.execute("SELECT * FROM sector_applications WHERE target_type='ministry' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
             if scope and r['target_name']!=scope:continue
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));apps.append(d)
+        if scope:
+            rows=[r for r in rows if r['ministry']==scope]
+            schedules=[r for r in schedules if r['ministry']==scope]
+            resources=[r for r in resources if r['ministry']==scope]
+            counts=[r for r in counts if r['ministry']==scope]
         return {
             'assignments':rows,
             'schedules':schedules,
             'resources':resources,
-            'catalog':CATALOG,
+            'catalog':(scope,) if scope else CATALOG,
             'worship_roles':WORSHIP_ROLES,
             'counts':counts,
             'user_scope':scope,
@@ -95,6 +101,7 @@ def persist(data,user,rid=None):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         check_ministry_scope(c,user,data.ministry)
+        if rid:check_ministry_scope(c,user,current(c,'ministries_assignments',rid)['ministry'])
         current(c,'members_people',data.person_id)
         if c.execute('SELECT 1 FROM ministries_assignments WHERE person_id=? AND ministry=? AND active=1 AND id!=?',(data.person_id,data.ministry,rid or str(data.request_id or ''))).fetchone():fail('duplicate','Esta pessoa já possui um vínculo ativo neste ministério.',409)
         return save(c,'ministries_assignments','ministries',data,{'person_id':data.person_id,'ministry':data.ministry,'position':data.position.strip(),'started_on':str(data.started_on) if data.started_on else None,'is_leader':1 if data.is_leader else 0,'training_status':data.training_status},user,rid)
@@ -114,10 +121,13 @@ def remove(rid:str,version:int=Query(ge=1),user=Depends(admin)):
 def persist_schedule(data:Schedule,user,rid=None):
     if data.ministry not in CATALOG:fail('ministry','Selecione um ministério disponível.')
     if not data.title.strip():fail('title','Informe o culto ou evento da escala.')
+    try:time.fromisoformat(data.service_time)
+    except ValueError:fail('time','Informe um horário válido.')
     if data.status not in SCHEDULE_STATUSES:fail('status','Status de escala inválido.')
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         check_ministry_scope(c,user,data.ministry)
+        if rid:check_ministry_scope(c,user,current(c,'ministries_schedules',rid)['ministry'])
         current(c,'members_people',data.person_id)
         if data.status!='declined':
             conflict=c.execute(
@@ -148,6 +158,9 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
 @router.post('/worship-scale')
 def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):
     if not data.title.strip():fail('title','Informe a identificação do culto.')
+    try:time.fromisoformat(data.service_time)
+    except ValueError:fail('time','Informe um horário válido.')
+    if data.repertoire_url and urlsplit(data.repertoire_url).scheme not in ('https','http'):fail('url','Use um link HTTP ou HTTPS.')
     s_date=str(data.service_date)
     s_time=data.service_time.strip() or '18:00'
     created_ids=[]
@@ -224,6 +237,7 @@ def approve_ministry_application(rid:str,user=Depends(write)):
         c.execute("UPDATE sector_applications SET status='approved',reviewed_by=? WHERE id=?",(user['id'],rid))
         if app['user_id']:
             c.execute("INSERT INTO module_access(user_id,module,role,enabled) VALUES(?,'ministries','viewer',1) ON CONFLICT(user_id,module) DO UPDATE SET enabled=1",(app['user_id'],))
+            c.execute("INSERT INTO module_scopes(user_id,module,scope) VALUES(?,'ministries',?) ON CONFLICT(user_id,module) DO NOTHING",(app['user_id'],ministry))
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(
                 app['user_id'],None,'ministry_approved',
                 f'🙌 Candidatura Aprovada · Ministério {ministry}',
@@ -247,10 +261,12 @@ def reject_ministry_application(rid:str,user=Depends(write)):
 def persist_resource(data:Resource,user,rid=None):
     if data.ministry not in CATALOG:fail('ministry','Selecione um ministério disponível.')
     if not data.title.strip():fail('title','Informe o título do material ou repertório.')
+    if data.resource_url and urlsplit(data.resource_url).scheme not in ('https','http'):fail('url','Use um link HTTP ou HTTPS.')
     cat=data.category if data.category in RESOURCE_CATEGORIES else 'roteiro'
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         check_ministry_scope(c,user,data.ministry)
+        if rid:check_ministry_scope(c,user,current(c,'ministries_resources',rid)['ministry'])
         vals={
             'ministry':data.ministry,'title':data.title.strip(),'category':cat,
             'notes':data.notes.strip(),'resource_url':data.resource_url.strip()

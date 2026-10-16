@@ -42,7 +42,12 @@ def current(c,table,rid):
     if not row:fail('missing','Registro não encontrado.',404)
     return dict(row)
 
+def protect_snapshot(value):
+    if not value:return value
+    return {k:encrypt_text(v) if k in ('address','pastoral_notes','notes') and isinstance(v,str) else v for k,v in value.items()}
+
 def change(c,module,rid,action,user,before,after):
+    before=protect_snapshot(before);after=protect_snapshot(after)
     c.execute('INSERT INTO module_changes(id,module,record_id,action,actor,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?,?)',(secrets.token_hex(16),module,rid,action,user['id'],json.dumps(before,ensure_ascii=False) if before else None,json.dumps(after,ensure_ascii=False) if after else None,datetime.now(timezone.utc).isoformat(timespec='microseconds')))
     s.audit(c,user['id'],module+':'+action+':'+rid)
 
@@ -58,7 +63,7 @@ def save(c,table,module,data,values,user,rid=None):
         rid=str(data.request_id or UUID(bytes=secrets.token_bytes(16)))
         old=c.execute(f'SELECT * FROM {table} WHERE id=?',(rid,)).fetchone()
         if old:
-            if old['active'] and all(old[k]==v for k,v in values.items()):return {'id':rid,'ok':True}
+            if old['active'] and all(decrypt_text(old[k])==decrypt_text(v) if isinstance(v,str) else old[k]==v for k,v in values.items()):return {'id':rid,'ok':True}
             fail('duplicate','Esta solicitação já foi utilizada. Atualize a tela.',409)
         keys=['id',*values,'created_at']
         c.execute(f"INSERT INTO {table}("+','.join(keys)+') VALUES('+','.join('?' for _ in keys)+')',(rid,*values.values(),s.now()))

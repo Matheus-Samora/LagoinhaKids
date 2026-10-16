@@ -55,8 +55,8 @@ class SelfRegister(BaseModel):
 
 def values(data):
     out={k:(v.isoformat() if isinstance(v,date) else v.strip() if isinstance(v,str) else v) for k,v in data.model_dump(exclude={'version','request_id'}).items()}
-    if 'pastoral_notes' in out and out['pastoral_notes']:
-        out['pastoral_notes']=encrypt_text(out['pastoral_notes'])
+    for key in ('pastoral_notes','address'):
+        if out.get(key):out[key]=encrypt_text(out[key])
     return out
 
 def _decrypt_person(d:dict)->dict:

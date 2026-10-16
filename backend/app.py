@@ -87,7 +87,7 @@ def session(request:Request):
     if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/')) or request.url.path=='/api/me'
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/')) or request.url.path=='/api/me'
     if not shared:
         requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
         requested=requested if requested in PLATFORM_MODULES else 'kids'
@@ -95,7 +95,11 @@ def session(request:Request):
             if not allowed(c,dict(row),requested):fail('module_access','Seu acesso ao Lagoinha Kids não foi autorizado.',403)
         selected=host_module(request.url.hostname or '')
         if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
-    return dict(row)
+    result=dict(row)
+    from .platform_access import platform_admin,is_pastor
+    with s.db() as c:
+        if platform_admin(c,result['id']) or is_pastor(c,result['id']):result['role']='admin'
+    return result
 def _user_is_pastor(user):
     if (user.get('staff_role') or '').lower() in ('pastor','pastora'):return True
     from .platform_access import is_pastor
@@ -650,6 +654,7 @@ def enroll(cid:int,image:bytes=File(...),user=Depends(staff)):
         ch=child_allowed(c,user,cid)
         if not ch['face_allowed'] or not ch['parent_id']: fail('consent','O responsável vinculado precisa autorizar o cadastro facial.',403)
         consent_version=ch['consent_at'];guardian=ch['parent_id']
+    fail('face_retired','Reconhecimento facial descontinuado. Use a carteirinha digital.',410)
     result,feature=engine().analyze(engine().decode(image),True)
     encrypted=s.CIPHER.encrypt(np.asarray(feature,dtype=np.float32).tobytes())
     with s.db() as c:
@@ -659,6 +664,7 @@ def enroll(cid:int,image:bytes=File(...),user=Depends(staff)):
     return {'ok':True,'analysis':result,'liveness':False}
 @app.post('/api/children/{cid}/face/verify')
 def verify_face(cid:int,image:bytes=File(...),user=Depends(staff)):
+    fail('face_retired','Reconhecimento facial descontinuado. Use a carteirinha digital.',410)
     with s.db() as c:
         ch=child_allowed(c,user,cid)
         if not ch['face_allowed'] or not ch['face_template']: fail('face','Cadastro facial autorizado indisponível.',409)
@@ -789,7 +795,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.3.0',
+        'version': '2.3.1',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

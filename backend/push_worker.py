@@ -14,12 +14,13 @@ def deliver_batch(limit=50):
         credentials.refresh(Request());project=credentials.project_id
     sent=0
     with s.db() as c:
-        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY o.id LIMIT ?',(int(time.time()),limit)).fetchall()
+        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id,n.kind FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY o.id LIMIT ?',(int(time.time()),limit)).fetchall()
     for row in rows:
         try:
             from .platform_access import allowed
             with s.db() as c:
-                if not allowed(c,{'id':row['user_id']},'kids'):
+                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved')
+                if not sector_notice and not allowed(c,{'id':row['user_id']},'kids'):
                     c.execute('UPDATE outbox SET next_attempt=?,last_error=? WHERE id=?',(int(time.time())+3600,'Acesso ao módulo Kids suspenso.',row['id']))
                     continue
             with s.db() as c:tokens=[dict(r) for r in c.execute('SELECT d.token,d.platform FROM device_tokens d JOIN users u ON u.id=d.user_id WHERE d.user_id=? AND u.active=1',(row['user_id'],))]
@@ -42,7 +43,7 @@ def deliver_batch(limit=50):
             for device in tokens:
                 try:
                     token=device['token']
-                    response=send_apns(token,row['notification_id']) if device['platform']=='ios' else httpx.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',headers={'Authorization':'Bearer '+credentials.token},json={'message':{'token':token,'notification':{'title':'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'data':{'notification_id':str(row['notification_id'])}}},timeout=15)
+                    response=send_apns(token,row['notification_id']) if device['platform']=='ios' else httpx.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',headers={'Authorization':'Bearer '+credentials.token},json={'message':{'token':token,'notification':{'title':'Lagoinha Systems' if sector_notice else 'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'data':{'notification_id':str(row['notification_id'])}}},timeout=15)
                     if response.status_code==410 or (device['platform']=='android' and response.status_code==404):
                         with s.db() as c:c.execute('DELETE FROM device_tokens WHERE token=?',(token,))
                     else:

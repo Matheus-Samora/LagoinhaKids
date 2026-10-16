@@ -98,19 +98,27 @@ def migrate(c):
     c.execute("UPDATE ministries_resources SET ministry='Link' WHERE ministry='Link Future'")
     c.execute("UPDATE module_scopes SET scope='Link' WHERE module='ministries' AND scope='Link Future'")
 
-    ensure_official_gcs(c)
+    if not c.execute("SELECT 1 FROM platform_migrations WHERE name='official_gcs_v230'").fetchone():
+        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0]==0:
+            ensure_official_gcs(c)
+        c.execute("INSERT INTO platform_migrations VALUES('official_gcs_v230')")
 
-    # Clean fictional/demo data in production once
-
-    if os.getenv('K_SERVICE') or os.getenv('KIDS_DATABASE_URL'):
-        if not c.execute("SELECT 1 FROM platform_migrations WHERE name='clean_fictional_v230'").fetchone():
-            c.execute("DELETE FROM sector_applications WHERE lower(member_name) LIKE '%teste%'")
-            c.execute("DELETE FROM ministries_schedules WHERE person_id IN (SELECT id FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo'))")
-            c.execute("DELETE FROM ministries_assignments WHERE person_id IN (SELECT id FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo'))")
-            c.execute("DELETE FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo','editor allowed')")
-            c.execute("DELETE FROM members_families WHERE lower(name) IN ('família de teste','família novo')")
-            c.execute("DELETE FROM finance_invoices WHERE lower(supplier) LIKE '%fornecedor de teste%'")
-            c.execute("DELETE FROM finance_entries WHERE lower(description) IN ('lançamento de teste','corrigido','pintura')")
-            c.execute("DELETE FROM finance_accounts WHERE lower(name) IN ('conta de teste','csrf protected') AND NOT EXISTS(SELECT 1 FROM finance_entries e WHERE e.account_id=finance_accounts.id)")
-            c.execute("INSERT INTO platform_migrations VALUES('clean_fictional_v230')")
-
+    # Demo cleanup must use verified record identifiers outside startup migrations.
+    if not c.execute("SELECT 1 FROM platform_migrations WHERE name='sensitive_fields_v231'").fetchone():
+        from .. import store as s
+        import json
+        def encrypt(value):
+            return 'enc:v1:'+s.CIPHER.encrypt(value.encode('utf-8')).decode('ascii') if value and not value.startswith('enc:v1:') else value
+        for table,fields in [('members_people',('address','pastoral_notes')),('members_self_registrations',('address',)),('finance_service_closings',('notes',)),('sector_applications',('notes',))]:
+            for row in c.execute(f"SELECT id,{','.join(fields)} FROM {table}").fetchall():
+                for field in fields:
+                    if row[field] and not row[field].startswith('enc:v1:'):
+                        c.execute(f'UPDATE {table} SET {field}=? WHERE id=?',(encrypt(row[field]),row['id']))
+        for row in c.execute('SELECT id,before_json,after_json FROM module_changes').fetchall():
+            for field in ('before_json','after_json'):
+                if not row[field]:continue
+                snapshot=json.loads(row[field])
+                for key in ('address','pastoral_notes','notes'):
+                    if isinstance(snapshot.get(key),str):snapshot[key]=encrypt(snapshot[key])
+                c.execute(f'UPDATE module_changes SET {field}=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),row['id']))
+        c.execute("INSERT INTO platform_migrations VALUES('sensitive_fields_v231')")

@@ -139,7 +139,7 @@ def test_finance_cost_centers_closings_settle_and_csv():
     csv_res=c.get('/api/finance/export.csv')
     assert csv_res.status_code==200 and 'Borderô: Culto Domingo 18h' in csv_res.text
     xls_res=c.get('/api/finance/report?format=xls&report_type=complete')
-    assert xls_res.status_code==200 and 'LAGOINHA FINANCE' in xls_res.text
+    assert xls_res.status_code==200 and xls_res.content.startswith(b'PK')
 
 def test_v230_worship_scale_candidacies_pastor_and_encryption():
     admin=client(1);member=client(3)

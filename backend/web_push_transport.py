@@ -21,13 +21,14 @@ def send(subscription,notification_id):
         with s.db() as c:
             notice = c.execute('SELECT kind FROM notifications WHERE id=?',(notification_id,)).fetchone()
 
+        is_sector = bool(notice and notice['kind'] in ('sector_application','ministry_approved','gc_approved'))
         is_urgent = bool(notice and notice['kind'] == 'urgent_call')
         # Lock-screen payloads must never contain child names, health details or pickup codes.
         payload = {
-            'title': 'Lagoinha Kids — chamado da salinha' if is_urgent else 'Lagoinha Kids',
+            'title': 'Lagoinha Kids — chamado da salinha' if is_urgent else ('Lagoinha Systems' if is_sector else 'Lagoinha Kids'),
             'body': 'A equipe precisa falar com você. Abra o aplicativo.' if is_urgent else 'Você recebeu um novo aviso. Abra o aplicativo para conferir.',
             'tag': f'notice-{notification_id}',
-            'url': '/kids#notifications',
+            'url': '/membro' if is_sector else '/kids#notifications',
             'id': notification_id,
             'kind': 'urgent_call' if is_urgent else 'general',
             'urgent': is_urgent,

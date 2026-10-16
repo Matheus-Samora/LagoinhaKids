@@ -9,6 +9,12 @@ from ..common import Record,money,save,archive,current,check_date,change,encrypt
 router=APIRouter(prefix='/api/finance',tags=['Finance'])
 read=module_access('finance');write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
 
+class SafeCsvWriter:
+    def __init__(self,stream):self.writer=csv.writer(stream,delimiter=';')
+    def writerow(self,values):
+        # Exported user text must not become a spreadsheet formula.
+        self.writer.writerow(["'"+v if isinstance(v,str) and v.lstrip().startswith(('=','+','-','@')) else v for v in values])
+
 class CostCenter(Record):
     name:str=Field(min_length=2,max_length=120)
     ministry:str=Field(default='',max_length=60)
@@ -53,6 +59,8 @@ class Invoice(Record):
 
 def compute_financial_engine(c,accounts,cost_centers,entries,totals):
     today_str=s.today()
+    selected={a['id'] for a in accounts}
+    entries=[dict(r) for r in c.execute('SELECT * FROM finance_entries WHERE active=1') if r['account_id'] in selected]
     current_balance=sum(int(a.get('balance_cents') or 0) for a in accounts)
     income_paid=int(totals.get('income_cents') or 0)
     expense_paid=int(totals.get('expense_cents') or 0)
@@ -104,12 +112,15 @@ def compute_financial_engine(c,accounts,cost_centers,entries,totals):
     for bslot in bank_map.values():
         bslot['projected_balance_cents']=bslot['balance_cents']+bslot['pending_in_cents']-bslot['pending_out_cents']
 
-    # Pre-process recurring averages & 30/60/90d forecast
-    net_realized=income_paid-expense_paid
-    projected_30d=current_balance+pending_in-pending_out
-    monthly_velocity=net_realized if (income_paid or expense_paid) else 0
-    projected_60d=projected_30d+int(monthly_velocity*0.5)
-    projected_90d=projected_60d+int(monthly_velocity*0.5)
+    # Scheduled cash flow, using actual due dates, independent of search/list limits.
+    def projection(days):
+        end=(date.fromisoformat(today_str)+timedelta(days=days)).isoformat()
+        return current_balance+sum((1 if e['direction']=='income' else -1)*int(e['amount_cents']) for e in entries if e.get('payment_status')=='pending' and (e.get('due_date') or e['occurred_on'])<=end)
+    projected_30d,projected_60d,projected_90d=(projection(d) for d in (30,60,90))
+    since=(date.fromisoformat(today_str)-timedelta(days=89)).isoformat()
+    recent=[e for e in entries if (e.get('payment_status') or 'paid')=='paid' and since<=e['occurred_on']<=today_str]
+    income_paid=sum(int(e['amount_cents']) for e in recent if e['direction']=='income')//3
+    expense_paid=sum(int(e['amount_cents']) for e in recent if e['direction']=='expense')//3
 
     alerts=[]
     if overdue_count>0:
@@ -175,6 +186,13 @@ def persist(kind,data,user,rid=None):
                 'payment_method':data.payment_method.strip() or 'pix','cost_center_id':data.cost_center_id or None
             }
         elif kind=='service_closings':
+            if not rid and data.request_id:
+                existing=c.execute('SELECT id FROM finance_service_closings WHERE id=?',(str(data.request_id),)).fetchone()
+                if existing:
+                    rid=existing['id']
+                    old=current(c,'finance_service_closings',rid)
+                    if any(old[k]!=v for k,v in {'account_id':data.account_id,'service_name':data.service_name.strip(),'service_date':str(data.service_date),'tithes_cents':money(data.tithes),'offerings_cash_cents':money(data.offerings_cash),'offerings_pix_cents':money(data.offerings_pix),'offerings_card_cents':money(data.offerings_card),'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),'notes':data.notes.strip()}.items() if k!='notes') or decrypt_text(old['notes'])!=data.notes.strip():fail('duplicate','Solicitação já utilizada.',409)
+                    return {'ok':True,'id':rid}
             current(c,'finance_accounts',data.account_id)
             check_date(data.service_date)
             if not data.service_name.strip():fail('service_name','Informe o nome do culto/celebração.')
@@ -186,13 +204,15 @@ def persist(kind,data,user,rid=None):
             if any(v<0 for v in (t_cents,c_cents,p_cents,k_cents)):fail('amount','Valores não podem ser negativos.')
             tot_cents=t_cents+c_cents+p_cents+k_cents
             if tot_cents<=0:fail('amount','O total do borderô deve ser maior que zero.')
+            if data.counted_by.strip().casefold()==data.verified_by.strip().casefold():fail('conference','Informe dois responsáveis diferentes.')
             entry_desc=f"Borderô: {data.service_name.strip()} ({data.service_date})"
             existing_entry_id=None
             if rid:
                 old_sc=current(c,'finance_service_closings',rid)
                 existing_entry_id=old_sc.get('entry_id')
             if existing_entry_id and c.execute('SELECT 1 FROM finance_entries WHERE id=? AND active=1',(existing_entry_id,)).fetchone():
-                c.execute('UPDATE finance_entries SET account_id=?,description=?,occurred_on=?,amount_cents=?,version=version+1 WHERE id=?',(data.account_id,entry_desc,str(data.service_date),tot_cents,existing_entry_id))
+                linked=current(c,'finance_entries',existing_entry_id)
+                save(c,'finance_entries','finance',Record(version=linked['version']),{'account_id':data.account_id,'description':entry_desc,'occurred_on':str(data.service_date),'amount_cents':tot_cents},user,existing_entry_id)
                 entry_id=existing_entry_id
             else:
                 entry_res=save(c,'finance_entries','finance',Record(),{
@@ -232,6 +252,7 @@ def settle_entry(rid:str,user=Depends(write)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         old=current(c,'finance_entries',rid)
+        if old['payment_status']=='paid':return {'ok':True,'id':rid}
         c.execute("UPDATE finance_entries SET payment_status='paid',occurred_on=?,version=version+1 WHERE id=?",(s.today(),rid))
         change(c,'finance',rid,'settled',user,old,current(c,'finance_entries',rid))
         return {'ok':True,'id':rid}
@@ -267,7 +288,7 @@ def export_csv(user=Depends(read)):
 
 @router.get('/report')
 def generate_custom_report(
-    format:str=Query(default='xls',pattern='^(xls|csv|json|html)$'),
+    format:str=Query(default='xlsx',pattern='^(xlsx|xls|csv|json|html)$'),
     report_type:str=Query(default='complete',pattern='^(complete|entries|banks|cost_centers|closings|forecast)$'),
     start_date:str=Query(default='',max_length=20),
     end_date:str=Query(default='',max_length=20),
@@ -278,11 +299,21 @@ def generate_custom_report(
     payment_status:str=Query(default='all',pattern='^(all|paid|pending)$'),
     user=Depends(read)
 ):
+    for value in (start_date,end_date):
+        if value:
+            try:date.fromisoformat(value)
+            except ValueError:fail('date','Informe uma data válida.')
+    if start_date and end_date and start_date>end_date:fail('date','A data inicial deve vir antes da final.')
     with s.db() as c:
         accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name")]
         cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name")]
         closings=[dict(r) for r in c.execute('SELECT sc.*,a.name account_name,coalesce(a.bank,\'\') account_bank FROM finance_service_closings sc JOIN finance_accounts a ON a.id=sc.account_id WHERE sc.active=1 ORDER BY sc.service_date DESC')]
         for sc in closings:sc['notes']=decrypt_text(sc.get('notes',''))
+        if account_id:accounts=[a for a in accounts if a['id']==account_id]
+        if bank:accounts=[a for a in accounts if a['bank'].lower()==bank.lower()]
+        chosen={a['id'] for a in accounts}
+        closings=[sc for sc in closings if sc['account_id'] in chosen and (not start_date or sc['service_date']>=start_date) and (not end_date or sc['service_date']<=end_date)]
+        if cost_center_id:cost_centers=[cc for cc in cost_centers if cc['id']==cost_center_id]
         sql="SELECT e.*,a.name account_name,coalesce(a.bank,'') account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1"
         params=[]
         if start_date.strip():
@@ -309,7 +340,7 @@ def generate_custom_report(
         return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.json"'})
 
     if format=='csv':
-        buf=io.StringIO();buf.write('\ufeff');writer=csv.writer(buf,delimiter=';')
+        buf=io.StringIO();buf.write('\ufeff');writer=SafeCsvWriter(buf)
         if report_type=='banks':
             writer.writerow(['Banco / Instituicao','Conta','Saldo Inicial (R$)','Saldo Atual Liquidado (R$)'])
             for a in accounts:
@@ -387,6 +418,9 @@ def generate_custom_report(
         </tbody></table>"""
 
     doc+="</body></html>"
+    if format in ('xlsx','xls'):
+        from .workbook import from_html
+        return Response(from_html(doc),media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.xlsx"'})
     if format=='xls':
         return Response(('\ufeff'+doc).encode('utf-8'),media_type='application/vnd.ms-excel; charset=utf-8',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.xls"'})
     return Response(doc.encode('utf-8'),media_type='text/html; charset=utf-8')

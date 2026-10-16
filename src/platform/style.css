@@ -2050,7 +2050,7 @@ footer.platform-footer {
 }
 
 /* Universal Responsive & Mobile Vertical Orientation Enforcement */
-@media screen and (max-width: 900px) and (orientation: landscape) {
+@media screen and (max-width: 900px) and (orientation: landscape) and (pointer: coarse) {
   body::before {
     content: "📱 Gire o celular para a posição vertical (retrato) para a melhor visualização do sistema.";
     position: fixed;
@@ -2065,4 +2065,31 @@ footer.platform-footer {
     font-size: 12px;
     font-weight: 700;
   }
+}
+
+/* Compact sector layout; long content scrolls inside its own container. */
+.sector-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 22px}
+.portal-heading{margin-bottom:24px}.portal-heading h1{font-size:28px}
+.intro{margin-bottom:12px}.intro h1{font-size:28px;margin:0}
+.custom-emblem{display:block;width:48px;height:48px;flex-shrink:0}
+.ministry-emblem svg{display:block;width:100%;height:100%}
+.gc-banner-media{height:auto;aspect-ratio:4/3;background:#f4f4f5}
+.gc-banner-media img{width:100%;height:100%;object-fit:contain;transform:none!important}
+.champions-hero-banner{height:auto;aspect-ratio:16/9;background:#09090b}
+.champions-hero-banner img{width:100%;height:100%;object-fit:contain;transform:none!important}
+.stats .stat-icon:empty{display:none}.stats .stat small:empty{display:none}
+.section-title>div{min-width:0}.insight-item>div{min-width:0;overflow-wrap:anywhere}
+.sector-modal{max-height:85dvh;overflow:auto}.sector-modal form{min-width:0}
+button,a.button{overflow-wrap:anywhere}img{max-width:100%}
+@media(max-width:600px){.sector-actions>*{flex:1 1 145px}.section-title{flex-wrap:wrap;gap:10px}.insight-item{flex-wrap:wrap}.worship-services-grid{grid-template-columns:minmax(0,1fr)}.sector-search{flex-wrap:wrap}.sector-search label{min-width:0;flex:1 1 100%}.card{min-width:0}.platform-topbar{flex-wrap:wrap}.brand-text small{display:none}}
+
+.ministry-svg-emblem{display:block;width:48px;height:48px;flex-shrink:0}.ministry-svg-emblem img{width:100%;height:100%;object-fit:contain;display:block}.gc-showcase-grid,.ministry-showcase-grid{min-width:0}@media(max-width:600px){.gc-showcase-grid,.ministry-showcase-grid{grid-template-columns:minmax(0,1fr)}}
+
+.platform-topbar{flex-wrap:wrap;gap:16px}.topbar-user-area{flex-shrink:0;flex-wrap:wrap}.topbar-user-area button{white-space:nowrap;word-break:normal;overflow-wrap:normal;min-width:max-content}.topbar-user-chip{white-space:nowrap;flex-shrink:0}.topbar-nav-pills{flex:1 1 360px}.stats .stat small{display:none}.ministry-grid-cards>button{min-height:112px}
+@media(max-width:600px){
+ .topbar-user-area{width:100%;max-width:100%;min-width:0;flex-shrink:1;gap:8px;flex-wrap:wrap}
+ .topbar-nav-pills{min-width:0;max-width:100%;flex-basis:100%}.topbar-sector-link{white-space:nowrap;flex-shrink:0}
+ .stats.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stats .stat{padding:16px;min-width:0}.stats .stat strong{font-size:25px}.stats .stat span{font-size:10px}
+ .worship-roles-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.worship-role-chip{min-width:0;padding:10px;overflow-wrap:break-word}
+ .ministry-grid-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.ministry-card-top{flex-wrap:wrap}
 }

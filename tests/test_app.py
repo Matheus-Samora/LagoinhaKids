@@ -123,21 +123,15 @@ def test_consent_revocation_and_guardian_change_erase_template():
     assert parent.get('/api/children').json()==[]
     assert client(4).get('/api/children').json()[0]['face_allowed']==0
 
-def test_real_face_template_encrypted_and_does_not_change_attendance():
-    file=Path(__file__).parent/'fixtures/lena.jpg'
-    if not file.exists():pytest.skip('Download the technical fixture with tests/download_fixtures.py')
-    data=file.read_bytes();parent=client(3);teacher=client(2)
+def test_retired_face_does_not_create_biometrics():
+    parent=client(3);teacher=client(2)
     parent.post('/api/children/1/consent',json={'allowed':True})
-    response=teacher.post('/api/children/1/face/enroll',files={'image':('fixture.jpg',data)})
-    assert response.status_code==200,response.text
-    with s.db() as c:encrypted=c.execute('SELECT face_template FROM children WHERE id=1').fetchone()[0]
-    assert encrypted.startswith(b'gAAAA') and data not in encrypted
-    response=teacher.post('/api/children/1/face/verify',files={'image':('fixture.jpg',data)})
-    assert response.status_code==200,response.text
-    result=response.json();assert result['similarity']>.99 and not result['automatic_release'] and not result['liveness']
+    for action in ('enroll','verify'):
+        response=teacher.post('/api/children/1/face/'+action,files={'image':('fixture.jpg',b'not-a-face')})
+        assert response.status_code==410
+    with s.db() as c:assert c.execute('SELECT face_template FROM children WHERE id=1').fetchone()[0] is None
     assert teacher.get('/api/children').json()[0]['status']=='absent'
-    assert teacher.post('/api/children/1/face/verify',files={'image':('bad.jpg',b'bad')}).status_code==422
-    assert parent.delete('/api/children/1/face').status_code==200
+
 
 def test_password_change_and_session_revocation():
     p=client(3);other=client(3)
