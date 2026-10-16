@@ -1,3 +1,4 @@
+import {t, translateDOM} from './i18n.js';
 // Branched Menu Micro-Interaction Component
 // Inspired by React Bits by David Haz (https://reactbits.dev/micro/branched-menu)
 // Collapsible menu that branches each section from a central trunk and traces an animated SVG line to the active pick.
@@ -346,4 +347,5 @@ export function openBranchedNavigationDrawer(options = {}) {
   dlg.querySelector('#close-branched-drawer').onclick = () => dlg.close();
   dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
   dlg.showModal();
+  translateDOM(dlg);
 }

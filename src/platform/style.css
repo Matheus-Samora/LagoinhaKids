@@ -200,7 +200,6 @@ textarea:focus {
   letter-spacing: -0.6px;
   font-weight: 800;
   color: #09090b;
-  text-transform: lowercase;
 }
 
 .welcome-text small {

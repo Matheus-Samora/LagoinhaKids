@@ -3,7 +3,7 @@ import './style.css';
 import {subscribeWebPush} from '../web-push.js';
 import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
-import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS} from './i18n.js';
+import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS,translateDOM} from './i18n.js';
 import {openBranchedNavigationDrawer} from './branched-menu.js';
 import {attachRubberSegments} from './rubber-segment.js';
 
@@ -17,13 +17,13 @@ const moduleTags={
  finance:['Previsão 30/60/90d','Relatórios Excel & PDF','Borderô Dupla Conferência']
 };
 const brandMeta={
- systems:{word:'systems',tagline:'GOVERNANÇA, SEGURANÇA & TI'},
- access:{word:'membro',tagline:'ÁREA DE MEMBROS · ACESSOS, GCs & MINISTÉRIOS'},
- membro:{word:'membro',tagline:'ÁREA DE MEMBROS · ACESSOS, GCs & MINISTÉRIOS'},
- kids:{word:'kids',tagline:'CUIDADO QUE CONECTA'},
- members:{word:'members',tagline:'MEMBRESIA & COMUNHÃO EM GCs'},
- ministries:{word:'ministries',tagline:'CADA DOM A SERVIÇO DO REINO'},
- finance:{word:'finance',tagline:'MOTOR FINANCEIRO, PREVISÕES & GESTÃO'}
+ systems:{word:'Systems',tagline:'GOVERNANÇA, SEGURANÇA & TI'},
+ access:{word:'Membro',tagline:'ÁREA DE MEMBROS · ACESSOS, GCs & MINISTÉRIOS'},
+ membro:{word:'Membro',tagline:'ÁREA DE MEMBROS · ACESSOS, GCs & MINISTÉRIOS'},
+ kids:{word:'Kids',tagline:'CUIDADO QUE CONECTA'},
+ members:{word:'Members',tagline:'MEMBRESIA & COMUNHÃO EM GCs'},
+ ministries:{word:'Ministries',tagline:'CADA DOM A SERVIÇO DO REINO'},
+ finance:{word:'Finance',tagline:'MOTOR FINANCEIRO, PREVISÕES & GESTÃO'}
 };
 const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA'];
 const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Colaborador',viewer:'Consulta'};
@@ -56,7 +56,8 @@ function removeSavedAccount(email){
 
 function welcome(areaKey=currentAreaKey()){
  const meta=brandMeta[areaKey]||brandMeta.systems;
- root.innerHTML=`<div class="welcome-screen" aria-label="Lagoinha ${e(meta.word)}"><div class="welcome-logo-wrap"><img src="/logo.png" alt="Logo Lagoinha"/></div><div class="welcome-text"><strong>lagoinha ${e(meta.word)}</strong><small>${e(meta.tagline)}</small></div></div>`;
+ root.innerHTML=`<div class="welcome-screen" aria-label="Lagoinha ${e(meta.word)}"><div class="welcome-logo-wrap"><img src="/logo.png" alt="Logo Lagoinha"/></div><div class="welcome-text"><strong>Lagoinha ${e(meta.word)}</strong><small>${t('brand.'+areaKey+'_tagline', meta.tagline)}</small></div></div>`;
+ translateDOM(root);
  return new Promise(resolve=>setTimeout(resolve,matchMedia('(prefers-reduced-motion: reduce)').matches?0:550));
 }
 
@@ -69,12 +70,12 @@ const sectors=createSectors({api,e,identity:()=>identity,openQrModal:()=>openApp
 
 const brand=(areaKey=currentAreaKey())=>{
  const meta=brandMeta[areaKey]||brandMeta.systems;
- return `<a class="brand" href="${identity&&!identity.platform_admin?'/access':'/systems'}"><img src="/logo.png" alt=""><div class="brand-text"><span>lagoinha <strong>${e(meta.word)}</strong></span><small>${e(meta.tagline)}</small></div></a>`;
+ return `<a class="brand" href="${identity&&!identity.platform_admin?'/access':'/systems'}"><img src="/logo.png" alt=""><div class="brand-text"><span>Lagoinha <strong>${e(meta.word)}</strong></span><small>${t('brand.'+areaKey+'_tagline', meta.tagline)}</small></div></a>`;
 };
 
 function authBrand(areaKey=currentAreaKey()){
  const meta=brandMeta[areaKey]||brandMeta.systems;
- return `<div class="auth-brand"><div class="auth-logo-badge"><img src="/logo.png" alt="Lagoinha" class="auth-logo-img"/></div><div class="auth-brand-text"><span class="auth-brand-name">lagoinha <strong>${e(meta.word)}</strong></span><span class="auth-brand-tagline">${e(meta.tagline)}</span></div></div>`;
+ return `<div class="auth-brand"><div class="auth-logo-badge"><img src="/logo.png" alt="Lagoinha" class="auth-logo-img"/></div><div class="auth-brand-text"><span class="auth-brand-name">Lagoinha <strong>${e(meta.word)}</strong></span><span class="auth-brand-tagline">${t('brand.'+areaKey+'_tagline', meta.tagline)}</span></div></div>`;
 }
 
 function login(message='',prefillEmail=''){
@@ -82,7 +83,8 @@ function login(message='',prefillEmail=''){
  const saved=getSavedAccounts();
  const savedHtml=saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos neste dispositivo</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-saved-email="${e(a.email)}"><span class="avatar mini">${e(initials(a.name||a.email))}</span><div class="saved-account-text"><strong>${e(a.name||a.email)}</strong><small>${e(a.email)}</small></div></button><button type="button" class="saved-account-del" data-remove-email="${e(a.email)}" title="Remover conta deste aparelho" aria-label="Remover"></button></div>`).join('')}</div></div>`:'';
 
- root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>Bem-vindo</h1><p class="auth-subtitle">Entre na sua conta.</p>${savedHtml}<form id="login"><label>E-mail<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>Senha<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">Ver</button></div></label><label>Código do autenticador <small>Se você ativou a verificação em duas etapas</small><input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">Entrar no Sistema</button></form><div style="display:flex;justify-content:center;margin-top:10px;"><button type="button" class="secondary" id="auth-qr-btn" style="font-size:12px;min-height:36px;padding:6px 14px;"> Instalar app</button></div><footer class="auth-footer"><a class="subtle" href="/kids">Cadastro de Membros e Famílias (Lagoinha Kids) →</a></footer></section></main>`;
+ root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código do autenticador <small>Se você ativou a verificação em duas etapas</small><input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar no Sistema')}</button></form><div style="display:flex;justify-content:center;margin-top:10px;"><button type="button" class="secondary" id="auth-qr-btn" style="font-size:12px;min-height:36px;padding:6px 14px;"> ${t('auth.install_app', 'Instalar app')}</button></div><footer class="auth-footer"><a class="subtle" href="/kids">Cadastro de Membros e Famílias (Lagoinha Kids) →</a></footer></section></main>`;
+ translateDOM(root);
 
  root.querySelector('#auth-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelector('#toggle-pwd')?.addEventListener('click',ev=>{
@@ -506,26 +508,26 @@ function render(message=''){
   <div style="display:flex;align-items:center;gap:10px;">
    ${brand(areaKey)}
    <button type="button" class="topbar-action-pill secondary" id="open-branched-nav-btn" title="Navegador em Árvore (Branched Menu)" style="font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-    <span>🌿 Menu</span>
+    <span>🌿 ${t("nav.menu", "Menu")}</span>
    </button>
   </div>
   <nav class="topbar-nav-pills" aria-label="Atalhos dos setores">
-   ${identity.platform_admin?`<a class="topbar-sector-link ${!module&&!isMemberPortal?'active':''}" href="/systems"> Painel TI</a>`:''}
-   <a class="topbar-sector-link ${isMemberPortal?'active':''}" href="/membro"> Área do Membro</a>
+   ${identity.platform_admin?`<a class="topbar-sector-link ${!module&&!isMemberPortal?'active':''}" href="/systems"> ${t("nav.systems", "Painel TI")}</a>`:''}
+   <a class="topbar-sector-link ${isMemberPortal?'active':''}" href="/membro"> ${t("nav.member", "Área do Membro")}</a>
    ${navLinks}
   </nav>
   <div class="topbar-user-area">
-   <button type="button" class="quiet" id="topbar-theme-btn" title="Alternar Modo Escuro / Claro" style="padding:6px 10px;min-height:38px;font-size:12.5px;">${getTheme()==='dark'?'☀️ Claro':'🌙 Escuro'}</button>
+   <button type="button" class="quiet" id="topbar-theme-btn" title="Alternar Modo Escuro / Claro" style="padding:6px 10px;min-height:38px;font-size:12.5px;">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button>
    <select id="topbar-lang-select" class="topbar-lang-select" aria-label="Idioma">
     ${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}
    </select>
-   <button type="button" class="quiet" id="topbar-qr-btn" title="Baixar Aplicativo via QR Code" style="padding:6px 12px;min-height:38px;font-size:12.5px;"> App QR</button>
-   <button type="button" class="quiet" id="topbar-notif-btn" title="Notificações" style="padding:6px 12px;min-height:38px;font-size:12.5px;position:relative;">Avisos ${unreadCount?`<span class="badge" style="background:#dc2626;color:#fff;padding:2px 6px;font-size:10.5px;">${unreadCount}</span>`:''}</button>
+   <button type="button" class="quiet" id="topbar-qr-btn" title="Baixar Aplicativo via QR Code" style="padding:6px 12px;min-height:38px;font-size:12.5px;"> ${t("nav.app_qr", "App QR")}</button>
+   <button type="button" class="quiet" id="topbar-notif-btn" title="Notificações" style="padding:6px 12px;min-height:38px;font-size:12.5px;position:relative;">${t("nav.notices", "Avisos")} ${unreadCount?`<span class="badge" style="background:#dc2626;color:#fff;padding:2px 6px;font-size:10.5px;">${unreadCount}</span>`:''}</button>
    <div class="topbar-user-chip">
     <span class="avatar mini">${e(initials(identity.user.name))}</span>
     <span>${e(identity.user.name)}${identity.pastor?' <small style="color:#b45309;font-weight:800;">(Pastor/a)</small>':''}</span>
    </div>
-   <button class="quiet" id="enable-push">Ativar avisos</button><button class="quiet" id="logout">Sair</button>
+   <button class="quiet" id="enable-push">${t("nav.enable_notices", "Ativar avisos")}</button><button class="quiet" id="logout">${t("nav.sign_out", "Sair")}</button>
   </div>
  </header>
  <main class="workspace page-enter">
@@ -554,6 +556,7 @@ function render(message=''){
  root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});
  root.querySelector('#open-branched-nav-btn')?.addEventListener('click',()=>openBranchedNavigationDrawer());
  attachRubberSegments(root);
+  translateDOM(root);
  root.querySelector('#topbar-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelectorAll('[data-open-qr]').forEach(b=>b.addEventListener('click',()=>openAppDownloadQrModal()));
  root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>{notifDrawerOpen=!notifDrawerOpen;render(message);});

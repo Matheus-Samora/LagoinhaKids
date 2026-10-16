@@ -1,5 +1,6 @@
 import {ministryEmblem,MINISTRY_META} from './emblems.js';
 import {attachRubberSegments} from './rubber-segment.js';
+import {t, translateDOM} from './i18n.js';
 
 export function createSectors({api,e,identity,openQrModal}){
  let key='',data={},directory=[],query='',ministryFilter='',generation=0,host,activeTab='all';
@@ -492,6 +493,7 @@ export function createSectors({api,e,identity,openQrModal}){
   host.querySelectorAll('[data-sector-tab]').forEach(b=>{b.onclick=()=>{activeTab=b.dataset.sectorTab;paint();};});
   host.querySelectorAll('[data-sector-action]').forEach(b=>b.onclick=()=>void action(b));
   attachRubberSegments(host);
+  translateDOM(host);
  }
 
  async function refresh(message=''){
