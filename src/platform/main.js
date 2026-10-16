@@ -4,8 +4,6 @@ import {subscribeWebPush} from '../web-push.js';
 import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
 import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS,translateDOM} from './i18n.js';
-import {openBranchedNavigationDrawer} from './branched-menu.js';
-import {attachRubberSegments} from './rubber-segment.js';
 
 const root=document.getElementById('systems');
 const names={kids:'Lagoinha Kids',finance:'Lagoinha Finance',members:'Lagoinha Members',ministries:'Lagoinha Ministries'};
@@ -505,12 +503,7 @@ function render(message=''){
   :identity.modules.filter(m=>m.enabled);
 
  root.innerHTML=`<header class="platform-topbar">
-  <div style="display:flex;align-items:center;gap:10px;">
-   ${brand(areaKey)}
-   <button type="button" class="topbar-action-pill secondary" id="open-branched-nav-btn" title="Navegador em Árvore (Branched Menu)" style="font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-    <span>🌿 ${t("nav.menu", "Menu")}</span>
-   </button>
-  </div>
+  ${brand(areaKey)}
   <nav class="topbar-nav-pills" aria-label="Atalhos dos setores">
    ${identity.platform_admin?`<a class="topbar-sector-link ${!module&&!isMemberPortal?'active':''}" href="/systems"> ${t("nav.systems", "Painel TI")}</a>`:''}
    <a class="topbar-sector-link ${isMemberPortal?'active':''}" href="/membro"> ${t("nav.member", "Área do Membro")}</a>
@@ -554,9 +547,7 @@ function render(message=''){
  root.querySelector('#logout').onclick=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#topbar-theme-btn')?.addEventListener('click',()=>{toggleTheme();render(message);});
  root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});
- root.querySelector('#open-branched-nav-btn')?.addEventListener('click',()=>openBranchedNavigationDrawer());
- attachRubberSegments(root);
-  translateDOM(root);
+ translateDOM(root);
  root.querySelector('#topbar-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelectorAll('[data-open-qr]').forEach(b=>b.addEventListener('click',()=>openAppDownloadQrModal()));
  root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>{notifDrawerOpen=!notifDrawerOpen;render(message);});
