@@ -76,3 +76,21 @@ def test_revoked_kids_access_stops_pending_push(monkeypatch):
     monkeypatch.setattr(push_worker.web_push,'send',lambda *args:delivered.append(True) or True)
     assert push_worker.deliver_batch()['sent']==0
     assert delivered==[]
+
+def test_central_identity_starts_without_any_module():
+    admin=client(1);parent=client(3)
+    body={'name':'Finance identity','email':'finance.identity@example.test','password':PASSWORD}
+    assert parent.post('/api/platform/users',json=body).status_code==403
+    r=admin.post('/api/platform/users',json=body)
+    assert r.status_code==200
+    from fastapi.testclient import TestClient
+    from backend.app import app
+    new=TestClient(app)
+    signed=new.post('/api/auth/login',json={'email':body['email'],'password':PASSWORD})
+    assert signed.status_code==200
+    new.headers['X-CSRF-Token']=signed.json()['csrf']
+    assert not any(m['enabled'] for m in new.get('/api/platform/me').json()['modules'])
+    assert new.get('/api/children').status_code==403
+    assert admin.put(f"/api/platform/users/{r.json()['id']}/modules/finance",json={'role':'viewer','enabled':True}).status_code==200
+    assert new.get('/api/finance').status_code==200
+    assert new.get('/api/children').status_code==403

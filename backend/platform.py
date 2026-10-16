@@ -1,7 +1,8 @@
 from fastapi import APIRouter,Depends,Request
 from pydantic import BaseModel,Field
 from . import store as s
-from .app import session,fail,public_user
+from .app import session,fail,public_user,validate_password,email
+import sqlite3
 from .platform_access import MODULES,ROLES,allowed,platform_admin
 router=APIRouter(prefix='/api/platform')
 
@@ -29,6 +30,22 @@ def module_home(module:str,user=Depends(session)):
 def users(user=Depends(central_admin)):
     with s.db() as c:
         return [{'id':r['id'],'name':r['name'],'email':r['email'],'active':bool(r['active']),'platform_admin':platform_admin(c,r['id']),'grants':[dict(g)|({'role':r['role']} if g['module']=='kids' else {}) for g in c.execute('SELECT module,role,enabled FROM module_access WHERE user_id=?',(r['id'],))]} for r in c.execute('SELECT id,name,email,active,role FROM users ORDER BY name')]
+
+class PlatformUser(BaseModel):
+    name:str=Field(min_length=2,max_length=100)
+    email:str=Field(max_length=200)
+    password:str=Field(min_length=12,max_length=128)
+
+@router.post('/users')
+def create_identity(data:PlatformUser,user=Depends(central_admin)):
+    validate_password(data.password)
+    if not data.name.strip():fail('name','Informe o nome do usuário.')
+    with s.db() as c:
+        try:
+            uid=c.execute('INSERT INTO users(name,email,password,role,created_at) VALUES(?,?,?,?,?)',(data.name.strip(),email(data.email),s.password_hash(data.password),'parent',s.now())).lastrowid
+        except sqlite3.IntegrityError:fail('email','Este e-mail já está cadastrado.',409)
+        s.audit(c,user['id'],'platform_user_created:'+str(uid))
+    return {'id':uid,'ok':True,'message':'Usuário criado. Defina os sistemas e perfis de acesso.'}
 
 class Grant(BaseModel):
     role:str=Field(max_length=20)

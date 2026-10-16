@@ -25,6 +25,7 @@ As sessões atuais usam cookies restritos ao host: no endereço único, o login 
 - Novos módulos preveem admin/editor/viewer; as operações específicas e permissões detalhadas serão implementadas em suas etapas.
 - Apenas administração central pode modificar contas, senhas de terceiros e permissões entre módulos. Administração de um módulo não concede administração central.
 - Permissões são verificadas na API; esconder menus não é a barreira de segurança. Revogação passa a valer na próxima requisição, inclusive em sessões abertas.
+- Usuários criados no portal começam sem módulos liberados; a administração escolhe os acessos. Cadastros de famílias feitos no Kids continuam recebendo somente o acesso Kids.
 - Alterações são registradas na auditoria existente.
 - Administração central atual é preservada. Criar usuário admin no Kids não cria um administrador central.
 
