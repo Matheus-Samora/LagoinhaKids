@@ -308,18 +308,18 @@ function memberCommunityPortal(){
  <section id="ministry-showcase-section" style="margin-top:42px;">
   <div class="section-title" style="margin-bottom:18px;">
    <div>
-    <span class="eyebrow" style="color:#4338ca;">CADA DOM A SERVIÇO DO REINO · 17 MINISTÉRIOS OFICIAIS</span>
+    <span class="eyebrow" style="color:#4338ca;">CADA DOM A SERVIÇO DO REINO · 16 MINISTÉRIOS OFICIAIS</span>
     <h2> Candidate-se para Servir nos Ministérios da Lagoinha</h2>
-    <p style="margin:4px 0 0;color:#52525b;">Cada card possui identidade única. Ao se candidatar, o líder responsável pelo ministério recebe uma notificação imediata para entrar em contato, preparar e aprovar você!</p>
+    <p style="margin:4px 0 0;color:#52525b;">Cada card possui identidade única com arte oficial. Ao se candidatar, o líder responsável pelo ministério recebe uma notificação imediata para entrar em contato, preparar e aprovar você!</p>
    </div>
   </div>
   <div class="ministry-showcase-grid">
    ${mins.map(m=>{
-    const meta=MINISTRY_META[m.name]||{tagline:'Ministério Oficial',desc:'Sirva com excelência na casa de Deus.',roles:['Voluntário','Equipe']};
+    const meta=MINISTRY_META[m.name]||{tagline:'Ministério Oficial',description:'Sirva com excelência na casa de Deus.',roles:['Voluntário','Equipe']};
     const alreadyPending=myApps.some(a=>a.target_type==='ministry'&&a.target_name.toLowerCase()===m.name.toLowerCase()&&a.status==='pending');
-    const isChampions=m.name==='Champions';
-    return `<article class="ministry-showcase-card ${isChampions?'champions-featured':''}">
-     ${isChampions?`<div class="champions-hero-banner"><img src="/ministries/champions.webp" alt="Ministério Champions" loading="lazy"/><span class="champions-pill"> ARTE OFICIAL · CHAMPIONS</span></div>`:''}
+    const banner=meta.bannerUrl;
+    return `<article class="ministry-showcase-card ${banner?'has-banner':''}">
+     ${banner?`<div class="ministry-card-banner"><img src="${e(banner)}" alt="Arte do Ministério ${e(m.name)}" loading="lazy"/><span class="ministry-banner-pill"> ARTE OFICIAL</span></div>`:''}
      <div class="ministry-showcase-top">
       ${ministryEmblem(m.name)}
       <div class="ministry-showcase-counts">
@@ -329,12 +329,12 @@ function memberCommunityPortal(){
      <div class="ministry-showcase-content">
       <small class="ministry-tagline">${e(meta.tagline)}</small>
       <h3>Ministério ${e(m.name)}</h3>
-      <p>${e(meta.desc)}</p>
+      <p>${e(meta.description||meta.desc)}</p>
       <div class="ministry-role-pills">
        ${(meta.roles||[]).slice(0,4).map(r=>`<span class="card-tag">${e(r)}</span>`).join('')}
       </div>
      </div>
-     <button type="button" class="${alreadyPending?'secondary':''}" data-apply-ministry="${e(m.name)}">
+     <button type="button" class="${alreadyPending?'secondary':''}" data-apply-ministry="${e(m.name)}" data-ministry-banner="${e(banner||'')}">
       ${alreadyPending?'⏳ Candidatura Enviada':' Candidatar-se ao Ministério →'}
      </button>
     </article>`;
@@ -349,14 +349,14 @@ function openApplyModal(targetType,targetId,targetName,extra={}){
  if(!dialog)return;
  const meta=targetType==='ministry'?(MINISTRY_META[targetName]||{roles:['Voluntário','Integrante','Liderança']}):{roles:['Participante do GC','Anfitrião de Casa','Auxiliar de GC']};
  const roles=meta.roles||['Participante'];
+ const bannerImg=extra.banner||meta.bannerUrl;
 
  dialog.querySelector('.sector-modal').innerHTML=`
   <div class="section-title">
    <h2>${targetType==='gc'?` Participar do ${e(targetName)}`:` Candidatar-se · Ministério ${e(targetName)}`}</h2>
    <button type="button" class="secondary" id="close-apply-modal">Fechar</button>
   </div>
-  ${extra.banner?`<div style="border-radius:14px;overflow:hidden;max-height:220px;margin-bottom:14px;border:1px solid #e4e4e7;"><img src="${e(extra.banner)}" alt="${e(targetName)}" style="width:100%;height:200px;object-fit:cover;display:block;"/></div>`:''}
-  ${targetName==='Champions'?`<div style="border-radius:14px;overflow:hidden;max-height:200px;margin-bottom:14px;border:1px solid #e4e4e7;"><img src="/ministries/champions.webp" alt="Champions" style="width:100%;height:190px;object-fit:cover;display:block;"/></div>`:''}
+  ${bannerImg?`<div style="border-radius:14px;overflow:hidden;max-height:220px;margin-bottom:14px;border:1px solid var(--border);"><img src="${e(bannerImg)}" alt="${e(targetName)}" style="width:100%;height:200px;object-fit:cover;display:block;"/></div>`:''}
   <p class="subtle" style="margin-top:0;">
    ${targetType==='gc'
     ?`Endereço do GC: <strong>${e(extra.address||'Consulte com o líder')}</strong>. Sua solicitação será enviada diretamente para a liderança de GCs entrar em contato e receber você!`
@@ -581,7 +581,7 @@ function render(message=''){
  }));
 
  root.querySelectorAll('[data-apply-ministry]').forEach(btn=>btn.addEventListener('click',()=>{
-  openApplyModal('ministry',btn.dataset.applyMinistry,btn.dataset.applyMinistry);
+  openApplyModal('ministry',btn.dataset.applyMinistry,btn.dataset.applyMinistry,{banner:btn.dataset.ministryBanner});
  }));
 
  root.querySelector('#user-filter-input')?.addEventListener('input',ev=>{

@@ -1901,42 +1901,69 @@ footer.platform-footer {
   transform: scale(1.1) rotate(-4deg);
 }
 
-.ministry-showcase-card.champions-featured {
-  border-color: #f59e0b;
-  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 55%);
+.ministry-showcase-card.has-banner {
+  border-color: var(--line);
 }
 
+.ministry-card-banner,
 .champions-hero-banner {
-  margin: -22px -22px 8px -22px;
-  height: 155px;
+  margin: -22px -22px 10px -22px;
+  height: 160px;
   position: relative;
   overflow: hidden;
   background: #09090b;
+  border-bottom: 1px solid var(--border);
 }
 
+.ministry-card-banner img,
 .champions-hero-banner img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.45s ease;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.ministry-showcase-card.champions-featured:hover .champions-hero-banner img {
+.ministry-showcase-card:hover .ministry-card-banner img,
+.ministry-showcase-card:hover .champions-hero-banner img {
   transform: scale(1.06);
 }
 
+.ministry-banner-pill,
 .champions-pill {
   position: absolute;
-  bottom: 10px;
-  left: 12px;
-  background: rgba(9, 9, 11, 0.85);
-  color: #fef3c7;
+  bottom: 8px;
+  left: 10px;
+  background: rgba(9, 9, 11, 0.88);
+  color: #fef08a;
   font-size: 10.5px;
   font-weight: 800;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
   letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+.ministry-art-emblem {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #09090b;
+  flex-shrink: 0;
+}
+
+.ministry-art-emblem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .ministry-showcase-top {
@@ -2085,8 +2112,8 @@ footer.platform-footer {
 .ministry-emblem svg{display:block;width:100%;height:100%}
 .gc-banner-media{height:auto;aspect-ratio:4/3;background:#f4f4f5}
 .gc-banner-media img{width:100%;height:100%;object-fit:contain;transform:none!important}
-.champions-hero-banner{height:auto;aspect-ratio:16/9;background:#09090b}
-.champions-hero-banner img{width:100%;height:100%;object-fit:contain;transform:none!important}
+.ministry-card-banner, .champions-hero-banner{height:auto;aspect-ratio:16/10;background:#09090b}
+.ministry-card-banner img, .champions-hero-banner img{width:100%;height:100%;object-fit:cover;}
 .stats .stat-icon:empty{display:none}.stats .stat small:empty{display:none}
 .section-title>div{min-width:0}.insight-item>div{min-width:0;overflow-wrap:anywhere}
 .sector-modal{max-height:85dvh;overflow:auto}.sector-modal form{min-width:0}

@@ -48,7 +48,8 @@ export const MINISTRY_META = {
     description: 'Conduz a igreja em adoração através da música, banda, vocais e direção musical nos cultos e conferências.',
     roles: ['Ministro de Louvor', 'Vocal / Backing Vocal', 'Tecladista', 'Baterista', 'Guitarrista', 'Violonista', 'Baixista', 'Cordas / Sopros', 'Diretor Musical', 'VS / Tracks'],
     accent: '#7c3aed',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-music" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#4c1d95"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-music)"/><path d="M19 32V15L34 12V29" stroke="#f5f3ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="15.5" cy="32.5" r="3.5" fill="#fbbf24"/><circle cx="30.5" cy="29.5" r="3.5" fill="#fbbf24"/><path d="M19 20L34 17" stroke="#c4b5fd" stroke-width="2"/></svg>`
+    bannerUrl: '/ministries/music.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/music.webp" alt="Ministério Music" loading="lazy"/></div>`
   },
   'Intercessão': {
     tagline: 'Clamor, Vigília & Cobertura Espiritual',
@@ -62,14 +63,16 @@ export const MINISTRY_META = {
     description: 'Fortalecimento espiritual de homens, sacerdócio bíblico no lar, comunhão e mentoria cristã para o crescimento com Deus.',
     roles: ['Integrante Hero', 'Líder de Homens', 'Mentoria Espiritual', 'Apoio aos Encontros'],
     accent: '#1e293b',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-hero" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#334155"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-hero)"/><path d="M24 10L36 15V24C36 31.5 30.8 36.8 24 39C17.2 36.8 12 31.5 12 24V15L24 10Z" stroke="#38bdf8" stroke-width="2.3" fill="rgba(56,189,248,0.12)"/><path d="M24 17V31M18 23H30" stroke="#f8fafc" stroke-width="2.4" stroke-linecap="round"/></svg>`
+    bannerUrl: '/ministries/hero.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/hero.webp" alt="Ministério Hero" loading="lazy"/></div>`
   },
   'Shine': {
-    tagline: 'Ministério de Mulheres',
-    description: 'Comunhão, discipulado, conferências e cuidado pastoral voltado ao fortalecimento e propósito das mulheres.',
-    roles: ['Voluntária Shine', 'Recepção & Acolhimento', 'Líder de Mesa / Discipulado', 'Produção de Eventos'],
+    tagline: 'Grupo de Mulheres & Crescimento Espiritual',
+    description: 'Grupo de mulheres para crescimento espiritual e comunhão entre as mulheres.',
+    roles: ['Voluntária Shine', 'Comunhão & Discipulado', 'Recepção Feminina', 'Organização de Encontros'],
     accent: '#be185d',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-shine" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#831843"/><stop offset="100%" stop-color="#db2777"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-shine)"/><polygon points="24,11 35,21 24,37 13,21" stroke="#fce7f3" stroke-width="2.2" fill="rgba(252,231,243,0.18)"/><path d="M13 21H35M24 11L19 21L24 37L29 21L24 11Z" stroke="#fbcfe8" stroke-width="1.6"/></svg>`
+    bannerUrl: '/ministries/shine.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/shine.webp" alt="Ministério Shine" loading="lazy"/></div>`
   },
   'Bem Casados': {
     tagline: 'Família, Casais & Aliança',
@@ -83,21 +86,24 @@ export const MINISTRY_META = {
     description: 'Desperta uma geração de adolescentes apaixonados por Jesus com cultos vibrantes, GCs, acampamentos e discipulado.',
     roles: ['Líder / Conselheiro Rocket', 'Louvor Rocket', 'Mídia & Criativo Rocket', 'Recreação & Eventos'],
     accent: '#ea580c',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-rocket" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#7c2d12"/><stop offset="100%" stop-color="#ea580c"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-rocket)"/><path d="M24 11C29 15 31 21 31 28H17C17 21 19 15 24 11Z" stroke="#ffedd5" stroke-width="2.2" fill="rgba(255,237,213,0.16)"/><path d="M17 25L12 30V33H17M31 25L36 30V33H31" stroke="#fed7aa" stroke-width="2" stroke-linecap="round"/><circle cx="24" cy="21" r="2.8" fill="#fde047"/><path d="M21 32L24 38L27 32" fill="#fde047"/></svg>`
+    bannerUrl: '/ministries/rocket.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/rocket.webp" alt="Ministério Rocket" loading="lazy"/></div>`
   },
   'Legacy': {
     tagline: 'Ministério de Jovens',
     description: 'Movimento de jovens vocacionados a viver o Evangelho com intensidade nas universidades, trabalho e sociedade.',
     roles: ['Voluntário Legacy', 'Conector de Jovens', 'Produção & Louvor Legacy', 'Líder de GC Jovem'],
     accent: '#4338ca',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-legacy" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="100%" stop-color="#4338ca"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-legacy)"/><path d="M16 35H32M19 35V20M29 35V20M15 20H33L24 12L15 20Z" stroke="#e0e7ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="27" r="3" fill="#38bdf8"/></svg>`
+    bannerUrl: '/ministries/legacy.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/legacy.webp" alt="Ministério Legacy" loading="lazy"/></div>`
   },
   'Kids': {
     tagline: 'Ministério Infantil Lagoinha Kids',
     description: 'Ensina a Palavra de Deus às crianças com amor, excelência pedagógica e segurança total para as famílias.',
     roles: ['Professor(a) Kids', 'Monitor(a) de Turma', 'Check-in & Recepção Kids', 'Louvor & Teatro Infantil'],
     accent: '#16a34a',
-    emblem: `<div class="ministry-svg-emblem kids-emblem-tile"><span>🧒</span></div>`
+    bannerUrl: '/ministries/kids.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/kids.webp" alt="Ministério Kids" loading="lazy"/></div>`
   },
   'Manutenção': {
     tagline: 'Infraestrutura, Zeladoria & Engenharia',
@@ -111,21 +117,24 @@ export const MINISTRY_META = {
     description: 'O primeiro sorriso da igreja: acolhe membros e visitantes nas portas, auditório, corredores e ações sociais.',
     roles: ['Recepção de Porta', 'Organização de Auditório', 'Boas-Vindas', 'Apoio Geral nos Cultos'],
     accent: '#0284c7',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-vol" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0c4a6e"/><stop offset="100%" stop-color="#0284c7"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-vol)"/><path d="M24 34C24 34 13 27.2 13 19.5C13 15.8 15.9 13 19.3 13C21.5 13 23.2 14.2 24 15.8C24.8 14.2 26.5 13 28.7 13C32.1 13 35 15.8 35 19.5C35 27.2 24 34 24 34Z" stroke="#e0f2fe" stroke-width="2.2" fill="rgba(224,242,254,0.2)"/></svg>`
+    bannerUrl: '/ministries/voluntario.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/voluntario.webp" alt="Ministério Voluntário" loading="lazy"/></div>`
   },
   'Follow': {
-    tagline: 'Consolidação & Acompanhamento Inicial',
-    description: 'Caminha lado a lado com quem acabou de entregar a vida a Jesus, garantindo acolhimento e primeiros passos na fé.',
-    roles: ['Consolidador(a) de Altar', 'Contato Pós-Culto (WhatsApp)', 'Mentor de Novos Começos'],
+    tagline: 'Mídia, Fotografia & Gravações',
+    description: 'Ministério de mídia da igreja, responsável pelas postagens, fotos e gravações.',
+    roles: ['Fotógrafo(a)', 'Filmagem / Gravação', 'Social Media / Postagens', 'Design & Criativo', 'Transmissão Ao Vivo'],
     accent: '#059669',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-follow" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#064e3b"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-follow)"/><circle cx="24" cy="24" r="11" stroke="#d1fae5" stroke-width="2.2"/><polygon points="28,19 25.5,25.5 19,28 21.5,21.5" fill="#fde047" stroke="#fef08a" stroke-width="1"/></svg>`
+    bannerUrl: '/ministries/follow.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/follow.webp" alt="Ministério Follow" loading="lazy"/></div>`
   },
   'Link': {
     tagline: 'Grupo de Adolescentes da Igreja',
     description: 'Ministério dedicado aos adolescentes da igreja, promovendo discipulado, encontros, comunhão e crescimento espiritual.',
     roles: ['Líder de Adolescentes', 'Conselheiro(a) Teen', 'Louvor & Dinâmicas', 'Acolhimento Teen'],
     accent: '#2563eb',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-link" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-link)"/><path d="M21 27L27 21" stroke="#fde047" stroke-width="2.5" stroke-linecap="round"/><path d="M19 29L16.5 31.5C14.3 33.7 14.3 37.2 16.5 39.4" stroke="#dbeafe" stroke-width="2.2" stroke-linecap="round"/><rect x="13" y="22" width="11" height="11" rx="5" transform="rotate(-45 13 22)" stroke="#dbeafe" stroke-width="2.2"/><rect x="21" y="14" width="11" height="11" rx="5" transform="rotate(-45 21 14)" stroke="#93c5fd" stroke-width="2.2"/></svg>`
+    bannerUrl: '/ministries/link.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/link.webp" alt="Ministério Link" loading="lazy"/></div>`
   },
   'Future': {
     tagline: 'Mesa de Som, Áudio & Iluminação',
@@ -142,12 +151,12 @@ export const MINISTRY_META = {
     emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-gourmet" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#7f1d1d"/><stop offset="100%" stop-color="#dc2626"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-gourmet)"/><path d="M15 22H31V27C31 31.4 27.4 35 23 35C18.6 35 15 31.4 15 27V22Z" stroke="#fee2e2" stroke-width="2.2" fill="rgba(254,226,226,0.15)"/><path d="M31 24H33.5C35.2 24 36.5 25.3 36.5 27C36.5 28.7 35.2 30 33.5 30H31" stroke="#fecaca" stroke-width="2.2"/><path d="M19 17V14M23 17V13M27 17V14" stroke="#fde047" stroke-width="2" stroke-linecap="round"/></svg>`
   },
   'Champions': {
-    tagline: 'Ministério de Homens & Esportes',
-    description: 'Forja homens segundo o coração de Deus, sacerdotes do lar, líderes íntegros e campeões na fé e comunhão.',
-    roles: ['Integrante Champions', 'Líder de Grupo de Homens', 'Organização de Cultos & Eventos Champions', 'Esportes & Comunhão'],
+    tagline: 'Saúde, Esportes, Lazer & Comunhão',
+    description: 'Ministério voltado para saúde e lazer da igreja, com esportes, atividades físicas e comunhão.',
+    roles: ['Líder Esportivo / Treinos', 'Organização de Atividades Físicas', 'Eventos de Lazer & Torneios', 'Comunhão & Acolhimento'],
     accent: '#ca8a04',
     bannerUrl: '/ministries/champions.webp',
-    emblem: `<div class="ministry-svg-emblem champions-emblem-wrap"><img src="/ministries/champions.webp" alt="Ministério Champions" loading="lazy"/></div>`
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/champions.webp" alt="Ministério Champions" loading="lazy"/></div>`
   },
   'DNA': {
     tagline: 'Escola de Discipulado & Integração',
