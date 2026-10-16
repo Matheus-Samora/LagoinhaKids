@@ -5,7 +5,7 @@ from pydantic import BaseModel,Field
 from ...module_security import module_access
 from ... import store as s
 from ...app import fail
-from ..common import Record,save,archive,current,check_date,change
+from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/members',tags=['Members'])
 read=module_access('members');write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
 STAGES=('visitor','new_convert','baptized','in_training','active_member','leader')
@@ -15,6 +15,8 @@ class Cell(Record):
     leader_name:str=Field(default='',max_length=120)
     neighborhood:str=Field(default='',max_length=120)
     meeting_day:str=Field(default='',max_length=80)
+    address:str=Field(default='',max_length=240)
+    banner_url:str=Field(default='',max_length=500)
 
 class Family(Record):
     name:str=Field(min_length=2,max_length=120)
@@ -49,21 +51,38 @@ class SelfRegister(BaseModel):
     profession:str=Field(default='',max_length=100)
     address:str=Field(default='',max_length=240)
     integration_stage:str=Field(default='visitor',max_length=40)
+    cell_id:str|None=Field(default=None,max_length=60)
 
-def values(data):return {k:(v.isoformat() if isinstance(v,date) else v.strip() if isinstance(v,str) else v) for k,v in data.model_dump(exclude={'version','request_id'}).items()}
+def values(data):
+    out={k:(v.isoformat() if isinstance(v,date) else v.strip() if isinstance(v,str) else v) for k,v in data.model_dump(exclude={'version','request_id'}).items()}
+    if 'pastoral_notes' in out and out['pastoral_notes']:
+        out['pastoral_notes']=encrypt_text(out['pastoral_notes'])
+    return out
+
+def _decrypt_person(d:dict)->dict:
+    if d.get('pastoral_notes'):d['pastoral_notes']=decrypt_text(d['pastoral_notes'])
+    if d.get('address'):d['address']=decrypt_text(d['address'])
+    return d
 
 @router.get('')
 def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
+    from ..schema import ensure_official_gcs
     with s.db() as c:
+        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
+            ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')]
-        families=[dict(r) for r in c.execute("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE p.family_id=f.id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")]
-        people=[dict(r) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name LIMIT 200",('%'+q.lower()+'%',))]
-        self_regs=[dict(r) for r in c.execute("SELECT * FROM members_self_registrations WHERE status='pending' ORDER BY created_at DESC LIMIT 100")]
+        families=[dict(r) for r in c.execute("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE f.id=p.family_id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")]
+        people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name LIMIT 200",('%'+q.lower()+'%',))]
+        self_regs=[_decrypt_person(dict(r)) for r in c.execute("SELECT * FROM members_self_registrations WHERE status='pending' ORDER BY created_at DESC LIMIT 100")]
+        gc_apps=[]
+        for r in c.execute("SELECT * FROM sector_applications WHERE target_type='gc' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
+            d=dict(r);d['notes']=decrypt_text(d.get('notes',''));gc_apps.append(d)
         return {
             'cells':cells,
             'families':families,
             'people':people,
             'self_registrations':self_regs,
+            'gc_applications':gc_apps,
             'total_people':c.execute('SELECT count(*) FROM members_people WHERE active=1').fetchone()[0],
             'total_families':c.execute('SELECT count(*) FROM members_families WHERE active=1').fetchone()[0],
             'total_cells':c.execute('SELECT count(*) FROM members_cells WHERE active=1').fetchone()[0]
@@ -115,8 +134,15 @@ def submit_self_registration(data:SelfRegister):
         c.execute('BEGIN IMMEDIATE')
         c.execute(
             'INSERT INTO members_self_registrations(id,name,family_name,birthday,phone,email,marital_status,profession,address,integration_stage,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-            (rid,data.name.strip(),data.family_name.strip(),data.birthday.isoformat() if data.birthday else None,data.phone.strip(),data.email.strip(),data.marital_status.strip(),data.profession.strip(),data.address.strip(),stage,'pending',s.now())
+            (rid,data.name.strip(),data.family_name.strip(),data.birthday.isoformat() if data.birthday else None,data.phone.strip(),data.email.strip(),data.marital_status.strip(),data.profession.strip(),encrypt_text(data.address.strip()),stage,'pending',s.now())
         )
+        if data.cell_id:
+            cell=c.execute('SELECT id,name FROM members_cells WHERE id=? AND active=1',(data.cell_id.strip(),)).fetchone()
+            if cell:
+                c.execute(
+                    'INSERT INTO sector_applications(id,user_id,member_name,phone,email,target_type,target_id,target_name,role_desired,notes,status,reviewed_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (secrets.token_hex(16),None,data.name.strip(),data.phone.strip(),data.email.strip(),'gc',cell['id'],cell['name'],'Participante de GC',encrypt_text('Solicitado via ficha de auto-cadastro'),'pending',None,s.now())
+                )
     return {'id':rid,'ok':True,'message':'Cadastro enviado para a secretaria com sucesso!'}
 
 @router.post('/self-registrations/{rid}/approve')
@@ -138,7 +164,7 @@ def approve_self_registration(rid:str,user=Depends(write)):
             'relationship':'Titular','birthday':reg['birthday'],'phone':reg['phone'] or '',
             'email':reg['email'] or '','integration_stage':reg['integration_stage'] or 'visitor',
             'baptism_date':None,'origin_church':'','marital_status':reg['marital_status'] or '',
-            'profession':reg['profession'] or '','address':reg['address'] or '','pastoral_notes':'Auto-cadastro aprovado'
+            'profession':reg['profession'] or '','address':decrypt_text(reg['address'] or ''),'pastoral_notes':encrypt_text('Auto-cadastro aprovado')
         }
         p_res=save(c,'members_people','members',Person(name=reg['name']),person_vals,user)
         c.execute("UPDATE members_self_registrations SET status='approved' WHERE id=?",(rid,))
@@ -151,6 +177,46 @@ def reject_self_registration(rid:str,user=Depends(write)):
         c.execute('BEGIN IMMEDIATE')
         c.execute("UPDATE members_self_registrations SET status='rejected' WHERE id=?",(rid,))
         s.audit(c,user['id'],'members:self_reg_rejected:'+rid)
+        return {'ok':True}
+
+@router.post('/gc-applications/{rid}/approve')
+def approve_gc_application(rid:str,user=Depends(write)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='gc' AND status='pending'",(rid,)).fetchone()
+        if not app:fail('missing','Solicitação de GC pendente não encontrada.',404)
+        cell=c.execute('SELECT id,name FROM members_cells WHERE (id=? OR lower(name)=?) AND active=1',(app['target_id'],app['target_name'].lower())).fetchone()
+        cell_id=cell['id'] if cell else None
+        person=None
+        if app['email']:
+            person=c.execute('SELECT * FROM members_people WHERE lower(email)=? AND active=1',(app['email'].lower(),)).fetchone()
+        if not person:
+            person=c.execute('SELECT * FROM members_people WHERE lower(name)=? AND active=1',(app['member_name'].lower(),)).fetchone()
+        if person:
+            c.execute('UPDATE members_people SET cell_id=?,phone=coalesce(nullif(?, \'\'),phone),version=version+1 WHERE id=?',(cell_id,app['phone'] or '',person['id']))
+            pid=person['id']
+        else:
+            person_vals={
+                'name':app['member_name'],'joined_on':s.today(),'family_id':None,'cell_id':cell_id,
+                'relationship':'Titular','birthday':None,'phone':app['phone'] or '',
+                'email':app['email'] or '','integration_stage':'active_member',
+                'baptism_date':None,'origin_church':'','marital_status':'',
+                'profession':'','address':'','pastoral_notes':encrypt_text(f"Integrado ao {app['target_name']} via inscrição por banner")
+            }
+            p_res=save(c,'members_people','members',Person(name=app['member_name']),person_vals,user)
+            pid=p_res['id']
+        c.execute("UPDATE sector_applications SET status='approved',reviewed_by=? WHERE id=?",(user['id'],rid))
+        if app['user_id']:
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(app['user_id'],None,'gc_approved',f"🎉 Bem-vindo(a) ao {app['target_name']}!",f"Sua inscrição para participar do {app['target_name']} foi aprovada pela liderança! Esperamos você no próximo encontro.",user['id'],s.now()))
+        s.audit(c,user['id'],'members:gc_app_approved:'+rid)
+        return {'ok':True,'person_id':pid,'cell_id':cell_id}
+
+@router.delete('/gc-applications/{rid}')
+def reject_gc_application(rid:str,user=Depends(write)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        c.execute("UPDATE sector_applications SET status='rejected',reviewed_by=? WHERE id=? AND target_type='gc'",(user['id'],rid))
+        s.audit(c,user['id'],'members:gc_app_rejected:'+rid)
         return {'ok':True}
 
 @router.delete('/families/{rid}')
@@ -167,4 +233,5 @@ def delete_person(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         for row in c.execute('SELECT * FROM ministries_assignments WHERE person_id=? AND active=1',(rid,)).fetchall():
             archive(c,'ministries_assignments','ministries',row['id'],row['version'],user)
         return result
+
 

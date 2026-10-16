@@ -387,7 +387,7 @@ function eventsPage(){
 
 function roster(children,compact=false){return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th><th>${compact?'Entrada':'Responsável'}</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{
   const parentPhone=ch.parent_phone||'';
-  return `<tr><td><div class="person">${kidAvatar(ch)}<div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos ${ch.face_enrolled?'· Facial ativo':''}</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Conferência facial auxiliar" aria-label="Conferência facial de ${escape(ch.name)}" data-action="face" data-id="${ch.id}">${icon('face',18)}</button><button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
+  return `<tr><td><div class="person">${kidAvatar(ch)}<div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital (QR Code)" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
 }).join('')}</tbody></table></div>`:empty('Nenhum aluno por aqui','Ajuste a busca ou cadastre o primeiro aluno da turma.');}
 function empty(title,sub){return `<div class="empty">${icon('heart',30)}<h3>${title}</h3><p>${sub}</p></div>`;}
 function unreadBanner(){
@@ -474,7 +474,37 @@ async function privacyModal(){
  }
 }
 function installModal(){
- showModal('Baixar ou Instalar o App','Tenha o Lagoinha Kids no seu celular com acesso rápido e notificações.',`<div class="install-guide"><div class="install-option-card"><div class="install-option-head"><h3>Android (Chrome & APK)</h3><span class="install-badge">Android</span></div><p>Instale direto pelo navegador ou baixe o arquivo de instalação nativo:</p><div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"><button type="button" class="btn primary full" data-action="pwa-prompt" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 18)} Instalar aplicativo no celular</button><a href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk" class="btn secondary full" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;border:1px solid #27272a;">${icon('download', 16)} Baixar instalador APK direto</a></div></div><div class="install-option-card"><div class="install-option-head"><h3>iPhone & iPad (Safari)</h3><span class="install-badge">iOS</span></div><p>Abra este site no <strong>Safari</strong> e adicione à tela inicial:</p><ol class="install-steps"><li>Toque no ícone de <strong>Compartilhar</strong> (quadrado com seta para cima).</li><li>Role a lista e escolha <strong>“Adicionar à Tela de Início”</strong>.</li><li>Confirme tocando em <strong>Adicionar</strong> no canto superior direito.</li><li>Abra pelo ícone do Lagoinha Kids na sua tela de início!</li></ol></div><p class="soft-info">Após instalar, abra pelo ícone no celular para poder ativar as notificações em tempo real na tela de bloqueio.</p></div>`);
+ const appUrl=location.origin;
+ showModal('Baixar ou Instalar o App','Tenha o aplicativo no seu celular com acesso rápido e notificações.',`<div class="install-guide">
+  <div class="install-option-card" style="text-align:center;background:#09090b;color:#ffffff;border:1px solid #27272a;">
+   <div class="install-option-head" style="justify-content:center;"><h3 style="color:#ffffff;">📱 Aponte a Câmera do Celular</h3></div>
+   <p style="color:#d4d4d8;font-size:13px;margin:4px 0 12px;">Escaneie o QR Code abaixo com a câmera do seu celular para abrir e instalar o aplicativo:</p>
+   <div style="background:#ffffff;padding:14px;border-radius:16px;display:inline-block;box-shadow:0 8px 24px rgba(0,0,0,0.4);margin-bottom:8px;">
+    <svg viewBox="0 0 100 100" style="width:160px;height:160px;display:block;" shape-rendering="crispEdges">
+     <rect width="100" height="100" fill="#ffffff"/>
+     <path fill="#09090b" d="M10 10h24v24h-24zM14 14h16v16h-16zM18 18h8v8h-8zM66 10h24v24h-24zM70 14h16v16h-16zM74 18h8v8h-8zM10 66h24v24h-24zM14 70h16v16h-16zM18 74h8v8h-8zM42 10h6v6h-6zM52 10h6v12h-6zM38 18h6v12h-6zM46 22h6v6h-6zM56 22h6v6h-6zM42 32h16v6h-16zM10 42h6v6h-6zM22 42h6v6h-6zM32 42h12v6h-12zM50 42h12v6h-12zM68 42h6v6h-6zM80 42h10v6h-10zM14 50h12v6h-12zM32 50h6v6h-6zM44 50h6v6h-6zM56 50h12v6h-12zM74 50h6v6h-6zM84 50h6v6h-6zM10 58h8v6h-8zM24 58h12v6h-12zM42 58h6v6h-6zM54 58h6v6h-6zM66 58h8v6h-8zM80 58h10v6h-10zM42 66h6v12h-6zM52 66h8v6h-8zM66 66h6v6h-6zM78 66h12v6h-12zM48 76h12v6h-12zM66 74h6v12h-6zM78 76h6v6h-6zM88 76h4v6h-4zM38 84h8v6h-8zM50 84h12v6h-12zM74 84h8v6h-8zM86 84h6v6h-6zM42 90h16v4h-16zM66 90h8v4h-8zM82 90h10v4h-10z"/>
+    </svg>
+   </div>
+   <div style="font-size:12px;color:#a1a1aa;margin-top:4px;">Link direto: <strong style="color:#ffffff;">${escape(appUrl)}</strong></div>
+  </div>
+  <div class="install-option-card">
+   <div class="install-option-head"><h3>Android (Instalação Rápida ou APK)</h3><span class="install-badge">Android</span></div>
+   <p>Instale direto pelo navegador ou baixe o instalador APK:</p>
+   <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+    <button type="button" class="btn primary full" data-action="pwa-prompt" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 18)} Instalar aplicativo no celular</button>
+    <a href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk" class="btn secondary full" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;border:1px solid #27272a;">${icon('download', 16)} Baixar instalador APK direto</a>
+   </div>
+  </div>
+  <div class="install-option-card">
+   <div class="install-option-head"><h3>iPhone &amp; iPad (Safari)</h3><span class="install-badge">iOS</span></div>
+   <p>Abra no <strong>Safari</strong> e adicione à tela inicial:</p>
+   <ol class="install-steps">
+    <li>Toque no ícone de <strong>Compartilhar</strong> (quadrado com seta).</li>
+    <li>Role e escolha <strong>“Adicionar à Tela de Início”</strong>.</li>
+    <li>Confirme tocando em <strong>Adicionar</strong>.</li>
+   </ol>
+  </div>
+ </div>`);
 }
 
 const optionsParents=()=>'<option value="">Vincular depois</option>'+S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}">${escape(u.name)} · ${escape(u.email)}</option>`).join('');
@@ -1211,10 +1241,10 @@ document.addEventListener('click',async e=>{
  if(action==='close'&&allowDiscard())modal.close();
  if(action==='attendance')await attendanceModal(ch);
  if(action==='notify')notifyModal(ch,el.dataset.kind);
- if(action==='consent')consentModal(ch);
- if(action==='face')faceModal(ch);
- if(action==='face-mode'){stopCamera();faceModal(ch,el.dataset.mode);}
- if(action==='request-consent'){modal.close();notifyModal(ch,'consent_request');}
+ if(action==='consent'||action==='face'||action==='face-mode'||action==='request-consent'){
+  toast('O reconhecimento facial foi descontinuado. O check-in é realizado via Carteirinha Digital (QR Code).');
+  return;
+ }
  if(action==='filter-room'){S.room=String(el.dataset.id);navigateTo('attendance',false,true);return;}
  if(action==='new-user')userModal();
  if(action==='edit-user')userModal(S.users.find(u=>u.id===Number(el.dataset.id)));

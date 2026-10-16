@@ -6,6 +6,21 @@ from pydantic import BaseModel,Field
 from .. import store as s
 from ..app import fail
 
+ENC_PREFIX='enc:v1:'
+def encrypt_text(value:str|None)->str:
+    raw=(value or '').strip()
+    if not raw:return ''
+    if raw.startswith(ENC_PREFIX):return raw
+    return ENC_PREFIX+s.CIPHER.encrypt(raw.encode('utf-8')).decode('ascii')
+
+def decrypt_text(value:str|None)->str:
+    raw=value or ''
+    if not raw or not isinstance(raw,str) or not raw.startswith(ENC_PREFIX):return raw
+    try:
+        return s.CIPHER.decrypt(raw[len(ENC_PREFIX):].encode('ascii')).decode('utf-8')
+    except Exception:
+        return raw
+
 class Record(BaseModel):
     version:int|None=Field(default=None,ge=1)
     request_id:UUID|None=None
@@ -20,6 +35,7 @@ def money(value,positive=False):
 
 def check_date(value):
     if value and str(value)>s.today():fail('date','A data não pode estar no futuro.')
+
 
 def current(c,table,rid):
     row=c.execute(f'SELECT * FROM {table} WHERE id=? AND active=1',(rid,)).fetchone()

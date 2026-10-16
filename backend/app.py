@@ -31,10 +31,15 @@ def public_user(row):
         staff_r = 'teacher'
     elif not staff_r and row['role'] == 'admin':
         staff_r = 'admin'
-    from .platform_access import platform_admin
-    with s.db() as c:central=platform_admin(c,row['id'])
+    from .platform_access import platform_admin,is_pastor
+    with s.db() as c:
+        central=platform_admin(c,row['id'])
+        pastor=is_pastor(c,row['id'])
+    if pastor and not staff_r:
+        staff_r = 'pastor'
     return {k:row[k] for k in ('id','name','email','role','active')} | {
         'platform_admin':central,
+        'pastor':pastor,
         'staff_role': staff_r,
         'email_verified':bool(row['email_verified']) if 'email_verified' in keys else False,
         'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in keys else False,
@@ -91,8 +96,12 @@ def session(request:Request):
         selected=host_module(request.url.hostname or '')
         if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
     return dict(row)
+def _user_is_pastor(user):
+    if (user.get('staff_role') or '').lower() in ('pastor','pastora'):return True
+    from .platform_access import is_pastor
+    with s.db() as c:return is_pastor(c,user['id'])
 def admin(user=Depends(session)):
-    if user['role']!='admin': fail('forbidden','Acesso exclusivo da administração.',403)
+    if user['role']!='admin' and not _user_is_pastor(user): fail('forbidden','Acesso exclusivo da administração.',403)
     return user
 def identity_admin(user=Depends(admin)):
     from .platform_access import platform_admin
@@ -101,21 +110,24 @@ def identity_admin(user=Depends(admin)):
     return user
 
 def staff(user=Depends(session)):
-    if user['role'] not in ('admin','teacher'): fail('forbidden','Acesso exclusivo da equipe.',403)
+    if user['role'] not in ('admin','teacher') and not _user_is_pastor(user): fail('forbidden','Acesso exclusivo da equipe.',403)
     return user
 def room_allowed(c,user,room):
-    if user['role']=='admin':return True
+    from .platform_access import is_pastor
+    if user['role']=='admin' or is_pastor(c,user['id']):return True
     if user['role']!='teacher' or room is None:return False
     record=c.execute('SELECT created_by FROM rooms WHERE id=?',(room,)).fetchone()
     if not record:return False
     if record['created_by']==user['id']:return True
     return c.execute('SELECT 1 FROM teacher_rooms WHERE user_id=? AND room_id=?',(user['id'],room)).fetchone() is not None
 def child_visible(c,user,row):
-    allowed=user['role']=='admin' or (user['role']=='parent' and (row['parent_id']==user['id'] or c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',(row['id'],user['id'])).fetchone()))
-    if user['role']=='teacher':
+    from .platform_access import is_pastor
+    allowed=user['role']=='admin' or is_pastor(c,user['id']) or (user['role']=='parent' and (row['parent_id']==user['id'] or c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',(row['id'],user['id'])).fetchone()))
+    if user['role']=='teacher' and not allowed:
         linked_rooms=[r[0] for r in c.execute('SELECT DISTINCT l.room_id FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1',(row['id'],))]
         allowed=room_allowed(c,user,row['room_id']) or any(room_allowed(c,user,rid) for rid in linked_rooms)
     return allowed
+
 def child_allowed(c,user,child):
     row=c.execute('SELECT * FROM children WHERE id=? AND archived=0',(child,)).fetchone()
     if not row:fail('missing','Aluno não encontrado.',404)
@@ -777,9 +789,10 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.2.0',
+        'version': '2.3.0',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
+        'encryption': 'AES-128-Fernet-HMAC-SHA256',
         'timestamp': s.now()
     }
 
@@ -811,6 +824,9 @@ def serve_admin_systems(request:Request):
     return frontend_file('systems.html')
 
 @app.get('/access')
+@app.get('/access/')
+@app.get('/membro')
+@app.get('/membro/')
 @app.get('/finance')
 @app.get('/finance/')
 @app.get('/members')
@@ -818,6 +834,7 @@ def serve_admin_systems(request:Request):
 @app.get('/ministries')
 @app.get('/ministries/')
 def serve_systems():return frontend_file('systems.html')
+
 
 if WEB_DIR.is_dir(): app.mount('/',StaticFiles(directory=WEB_DIR,html=True),name='frontend')
 

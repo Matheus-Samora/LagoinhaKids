@@ -1,11 +1,11 @@
-from datetime import date
-import csv,io,secrets,json
+from datetime import date,timedelta
+import csv,io,secrets,json,html as html_lib
 from fastapi import APIRouter,Depends,Query,UploadFile,File,Response
 from pydantic import Field
 from ...module_security import module_access
 from ... import store as s
 from ...app import fail
-from ..common import Record,money,save,archive,current,check_date,change
+from ..common import Record,money,save,archive,current,check_date,change,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/finance',tags=['Finance'])
 read=module_access('finance');write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
 
@@ -51,16 +51,108 @@ class Invoice(Record):
     entry_id:str|None=Field(default=None,max_length=40)
     file_id:str|None=Field(default=None,max_length=40)
 
+def compute_financial_engine(c,accounts,cost_centers,entries,totals):
+    today_str=s.today()
+    current_balance=sum(int(a.get('balance_cents') or 0) for a in accounts)
+    income_paid=int(totals.get('income_cents') or 0)
+    expense_paid=int(totals.get('expense_cents') or 0)
+    pending_in=int(totals.get('pending_income_cents') or 0)
+    pending_out=int(totals.get('pending_expense_cents') or 0)
+
+    # Pre-process by Bank
+    bank_map={}
+    for a in accounts:
+        bname=(a.get('bank') or 'Caixa Interno / Tesouraria').strip()
+        slot=bank_map.setdefault(bname,{'bank':bname,'accounts_count':0,'opening_cents':0,'balance_cents':0,'income_cents':0,'expense_cents':0,'pending_in_cents':0,'pending_out_cents':0})
+        slot['accounts_count']+=1
+        slot['opening_cents']+=int(a.get('opening_cents') or 0)
+        slot['balance_cents']+=int(a.get('balance_cents') or 0)
+
+    acc_to_bank={a['id']:(a.get('bank') or 'Caixa Interno / Tesouraria').strip() for a in accounts}
+    cat_map={}
+    method_map={}
+    overdue_count=0
+    overdue_cents=0
+
+    for e in entries:
+        amt=int(e.get('amount_cents') or 0)
+        st=e.get('payment_status') or 'paid'
+        direction=e.get('direction') or 'income'
+        bname=acc_to_bank.get(e.get('account_id'),'Caixa Interno / Tesouraria')
+        bslot=bank_map.setdefault(bname,{'bank':bname,'accounts_count':0,'opening_cents':0,'balance_cents':0,'income_cents':0,'expense_cents':0,'pending_in_cents':0,'pending_out_cents':0})
+        if st=='paid':
+            if direction=='income':bslot['income_cents']+=amt
+            else:bslot['expense_cents']+=amt
+        else:
+            if direction=='income':bslot['pending_in_cents']+=amt
+            else:bslot['pending_out_cents']+=amt
+            if e.get('due_date') and str(e['due_date'])<today_str:
+                overdue_count+=1
+                overdue_cents+=amt
+
+        cat=(e.get('category') or 'Geral').strip()
+        cslot=cat_map.setdefault(cat,{'category':cat,'income_cents':0,'expense_cents':0,'count':0})
+        cslot['count']+=1
+        if direction=='income':cslot['income_cents']+=amt
+        else:cslot['expense_cents']+=amt
+
+        m=(e.get('payment_method') or 'pix').strip()
+        mslot=method_map.setdefault(m,{'method':m,'total_cents':0,'count':0})
+        mslot['total_cents']+=amt
+        mslot['count']+=1
+
+    for bslot in bank_map.values():
+        bslot['projected_balance_cents']=bslot['balance_cents']+bslot['pending_in_cents']-bslot['pending_out_cents']
+
+    # Pre-process recurring averages & 30/60/90d forecast
+    net_realized=income_paid-expense_paid
+    projected_30d=current_balance+pending_in-pending_out
+    monthly_velocity=net_realized if (income_paid or expense_paid) else 0
+    projected_60d=projected_30d+int(monthly_velocity*0.5)
+    projected_90d=projected_60d+int(monthly_velocity*0.5)
+
+    alerts=[]
+    if overdue_count>0:
+        alerts.append({'level':'warning','title':f'{overdue_count} título(s) vencido(s)','detail':f'Total pendente em atraso: R$ {overdue_cents/100:,.2f}'})
+    for cc in cost_centers:
+        b_cents=int(cc.get('budget_cents') or 0)
+        s_cents=int(cc.get('spent_cents') or 0)
+        if b_cents>0 and s_cents>=int(b_cents*0.8):
+            pct=round((s_cents/b_cents)*100)
+            alerts.append({'level':'danger' if pct>=100 else 'warning','title':f"Orçamento {cc['name']}: {pct}% consumido",'detail':f"Executado R$ {s_cents/100:,.2f} de R$ {b_cents/100:,.2f}"})
+    if projected_30d<0:
+        alerts.append({'level':'danger','title':'Projeção de caixa negativa em 30 dias','detail':'As obrigações pendentes superam o saldo disponível atual.'})
+    if not alerts:
+        alerts.append({'level':'ok','title':'Fluxo financeiro equilibrado','detail':'Nenhuma pendência em atraso ou estouro de centro de custo detectado.'})
+
+    return {
+        'current_balance_cents':current_balance,
+        'projected_30d_cents':projected_30d,
+        'projected_60d_cents':projected_60d,
+        'projected_90d_cents':projected_90d,
+        'monthly_avg_income_cents':income_paid,
+        'monthly_avg_expense_cents':expense_paid,
+        'overdue_count':overdue_count,
+        'overdue_cents':overdue_cents,
+        'by_bank':list(bank_map.values()),
+        'by_category':sorted(cat_map.values(),key=lambda x:x['income_cents']+x['expense_cents'],reverse=True)[:10],
+        'by_method':list(method_map.values()),
+        'alerts':alerts
+    }
+
 @router.get('')
 def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
     with s.db() as c:
         cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name LIMIT 200")]
         accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name LIMIT 500")]
-        entries=[dict(r) for r in c.execute("SELECT e.*,a.name account_name,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1 AND lower(e.description) LIKE ? ORDER BY e.occurred_on DESC,e.created_at DESC LIMIT 200",('%'+q.lower()+'%',))]
-        closings=[dict(r) for r in c.execute('SELECT sc.*,a.name account_name FROM finance_service_closings sc JOIN finance_accounts a ON a.id=sc.account_id WHERE sc.active=1 ORDER BY sc.service_date DESC,sc.created_at DESC LIMIT 100')]
+        entries=[dict(r) for r in c.execute("SELECT e.*,a.name account_name,coalesce(a.bank,'') account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1 AND lower(e.description) LIKE ? ORDER BY e.occurred_on DESC,e.created_at DESC LIMIT 200",('%'+q.lower()+'%',))]
+        closings=[]
+        for r in c.execute('SELECT sc.*,a.name account_name FROM finance_service_closings sc JOIN finance_accounts a ON a.id=sc.account_id WHERE sc.active=1 ORDER BY sc.service_date DESC,sc.created_at DESC LIMIT 100'):
+            d=dict(r);d['notes']=decrypt_text(d.get('notes',''));closings.append(d)
         invoices=[dict(r) for r in c.execute('SELECT * FROM finance_invoices WHERE active=1 AND (lower(supplier) LIKE ? OR lower(number) LIKE ?) ORDER BY issued_on DESC LIMIT 200',('%'+q.lower()+'%','%'+q.lower()+'%'))]
-        totals=c.execute("SELECT coalesce(sum(CASE WHEN direction='income' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) income_cents,coalesce(sum(CASE WHEN direction='expense' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) expense_cents,coalesce(sum(CASE WHEN direction='income' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_income_cents,coalesce(sum(CASE WHEN direction='expense' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_expense_cents FROM finance_entries WHERE active=1").fetchone()
-        return {'cost_centers':cost_centers,'accounts':accounts,'entries':entries,'closings':closings,'invoices':invoices,'totals':dict(totals),'mode':'manual'}
+        totals=dict(c.execute("SELECT coalesce(sum(CASE WHEN direction='income' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) income_cents,coalesce(sum(CASE WHEN direction='expense' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) expense_cents,coalesce(sum(CASE WHEN direction='income' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_income_cents,coalesce(sum(CASE WHEN direction='expense' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_expense_cents FROM finance_entries WHERE active=1").fetchone())
+        engine=compute_financial_engine(c,accounts,cost_centers,entries,totals)
+        return {'cost_centers':cost_centers,'accounts':accounts,'entries':entries,'closings':closings,'invoices':invoices,'totals':totals,'engine':engine,'mode':'predictive_engine'}
 
 def persist(kind,data,user,rid=None):
     with s.db() as c:
@@ -113,7 +205,7 @@ def persist(kind,data,user,rid=None):
                 'service_name':data.service_name.strip(),'service_date':str(data.service_date),'account_id':data.account_id,
                 'tithes_cents':t_cents,'offerings_cash_cents':c_cents,'offerings_pix_cents':p_cents,'offerings_card_cents':k_cents,
                 'total_cents':tot_cents,'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),
-                'notes':data.notes.strip(),'entry_id':entry_id
+                'notes':encrypt_text(data.notes.strip()),'entry_id':entry_id
             }
         else:
             check_date(data.issued_on)
@@ -170,22 +262,134 @@ def remove(kind:str,rid:str,version:int=Query(ge=1),user=Depends(admin)):
 
 @router.get('/export.csv')
 def export_csv(user=Depends(read)):
+    return generate_custom_report(format='csv',report_type='entries',start_date='',end_date='',account_id='',bank='',cost_center_id='',direction='all',payment_status='all',user=user)
+
+
+@router.get('/report')
+def generate_custom_report(
+    format:str=Query(default='xls',pattern='^(xls|csv|json|html)$'),
+    report_type:str=Query(default='complete',pattern='^(complete|entries|banks|cost_centers|closings|forecast)$'),
+    start_date:str=Query(default='',max_length=20),
+    end_date:str=Query(default='',max_length=20),
+    account_id:str=Query(default='',max_length=60),
+    bank:str=Query(default='',max_length=100),
+    cost_center_id:str=Query(default='',max_length=60),
+    direction:str=Query(default='all',pattern='^(all|income|expense)$'),
+    payment_status:str=Query(default='all',pattern='^(all|paid|pending)$'),
+    user=Depends(read)
+):
     with s.db() as c:
-        rows=c.execute("SELECT e.*,a.name account_name,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1 ORDER BY e.occurred_on DESC,e.created_at DESC").fetchall()
-    buf=io.StringIO()
-    buf.write('\ufeff')
-    writer=csv.writer(buf,delimiter=';')
-    writer.writerow(['Data','Vencimento','Tipo','Status','Conta','Centro de Custo','Categoria','Metodo','Descricao','Valor (R$)'])
-    for r in rows:
-        val=f"{r['amount_cents']/100:.2f}".replace('.',',')
-        writer.writerow([
-            r['occurred_on'],r['due_date'] or '',
-            'Entrada' if r['direction']=='income' else 'Saida',
-            'Liquidado' if (r['payment_status'] or 'paid')=='paid' else 'Pendente',
-            r['account_name'],r['cost_center_name'] or '',r['category'] or '',
-            r['payment_method'] or 'pix',r['description'],val
-        ])
-    return Response(buf.getvalue().encode('utf-8'),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':'attachment; filename="lagoinha-finance-relatorio.csv"'})
+        accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name")]
+        cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name")]
+        closings=[dict(r) for r in c.execute('SELECT sc.*,a.name account_name,coalesce(a.bank,\'\') account_bank FROM finance_service_closings sc JOIN finance_accounts a ON a.id=sc.account_id WHERE sc.active=1 ORDER BY sc.service_date DESC')]
+        for sc in closings:sc['notes']=decrypt_text(sc.get('notes',''))
+        sql="SELECT e.*,a.name account_name,coalesce(a.bank,'') account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1"
+        params=[]
+        if start_date.strip():
+            sql+=" AND e.occurred_on>=?";params.append(start_date.strip()[:10])
+        if end_date.strip():
+            sql+=" AND e.occurred_on<=?";params.append(end_date.strip()[:10])
+        if account_id.strip():
+            sql+=" AND e.account_id=?";params.append(account_id.strip())
+        if bank.strip():
+            sql+=" AND lower(a.bank)=?";params.append(bank.strip().lower())
+        if cost_center_id.strip():
+            sql+=" AND e.cost_center_id=?";params.append(cost_center_id.strip())
+        if direction in ('income','expense'):
+            sql+=" AND e.direction=?";params.append(direction)
+        if payment_status in ('paid','pending'):
+            sql+=" AND coalesce(e.payment_status,'paid')=?";params.append(payment_status)
+        sql+=" ORDER BY e.occurred_on DESC,e.created_at DESC"
+        entries=[dict(r) for r in c.execute(sql,params).fetchall()]
+        totals=dict(c.execute("SELECT coalesce(sum(CASE WHEN direction='income' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) income_cents,coalesce(sum(CASE WHEN direction='expense' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) expense_cents,coalesce(sum(CASE WHEN direction='income' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_income_cents,coalesce(sum(CASE WHEN direction='expense' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_expense_cents FROM finance_entries WHERE active=1").fetchone())
+        engine=compute_financial_engine(c,accounts,cost_centers,entries,totals)
+
+    if format=='json':
+        payload={'generated_at':s.now(),'report_type':report_type,'filters':{'start_date':start_date,'end_date':end_date,'account_id':account_id,'bank':bank,'cost_center_id':cost_center_id,'direction':direction,'payment_status':payment_status},'engine':engine,'accounts':accounts,'cost_centers':cost_centers,'entries':entries,'closings':closings}
+        return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.json"'})
+
+    if format=='csv':
+        buf=io.StringIO();buf.write('\ufeff');writer=csv.writer(buf,delimiter=';')
+        if report_type=='banks':
+            writer.writerow(['Banco / Instituicao','Conta','Saldo Inicial (R$)','Saldo Atual Liquidado (R$)'])
+            for a in accounts:
+                writer.writerow([a['bank'] or 'Caixa Interno',a['name'],f"{a['opening_cents']/100:.2f}".replace('.',','),f"{a['balance_cents']/100:.2f}".replace('.',',')])
+        elif report_type=='cost_centers':
+            writer.writerow(['Centro de Custo','Ministerio','Orcamento (R$)','Saidas (R$)','Entradas (R$)'])
+            for cc in cost_centers:
+                writer.writerow([cc['name'],cc['ministry'] or 'Geral',f"{cc['budget_cents']/100:.2f}".replace('.',','),f"{cc['spent_cents']/100:.2f}".replace('.',','),f"{cc['income_cents']/100:.2f}".replace('.',',')])
+        elif report_type=='closings':
+            writer.writerow(['Data','Culto','Conta','Banco','Dizimos (R$)','Espécie (R$)','PIX (R$)','Cartao (R$)','Total (R$)','1o Conferente','2o Conferente'])
+            for sc in closings:
+                writer.writerow([sc['service_date'],sc['service_name'],sc['account_name'],sc['account_bank'] or '',f"{sc['tithes_cents']/100:.2f}".replace('.',','),f"{sc['offerings_cash_cents']/100:.2f}".replace('.',','),f"{sc['offerings_pix_cents']/100:.2f}".replace('.',','),f"{sc['offerings_card_cents']/100:.2f}".replace('.',','),f"{sc['total_cents']/100:.2f}".replace('.',','),sc['counted_by'],sc['verified_by']])
+        else:
+            writer.writerow(['Data','Vencimento','Tipo','Status','Banco','Conta','Centro de Custo','Categoria','Metodo','Descricao','Valor (R$)'])
+            for r in entries:
+                val=f"{r['amount_cents']/100:.2f}".replace('.',',')
+                writer.writerow([
+                    r['occurred_on'],r['due_date'] or '',
+                    'Entrada' if r['direction']=='income' else 'Saida',
+                    'Liquidado' if (r['payment_status'] or 'paid')=='paid' else 'Pendente',
+                    r.get('account_bank') or 'Caixa',r['account_name'],r['cost_center_name'] or '',r['category'] or '',
+                    r['payment_method'] or 'pix',r['description'],val
+                ])
+        fname='lagoinha-finance-relatorio.csv' if report_type=='entries' else f'lagoinha-finance-{report_type}.csv'
+        return Response(buf.getvalue().encode('utf-8'),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':f'attachment; filename="{fname}"'})
+
+    esc=lambda v:html_lib.escape(str(v or ''))
+    fmt_brl=lambda cents:f"R$ {int(cents or 0)/100:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+
+    # Build rich HTML table document compatible with both Excel (.xls) and Executive Printable View (html)
+    doc=f"""<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" lang="pt-BR"><head><meta charset="utf-8"><title>Relatório Financeiro · Lagoinha Finance</title>
+    <style>
+     body{{font-family:'Segoe UI',Arial,sans-serif;color:#09090b;margin:24px;}}
+     h1{{font-size:20px;margin:0 0 4px;}} h2{{font-size:15px;margin:22px 0 8px;border-bottom:2px solid #18181b;padding-bottom:4px;}}
+     .meta{{color:#52525b;font-size:12px;margin-bottom:16px;}}
+     table{{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px;}}
+     th{{background:#18181b;color:#ffffff;text-align:left;padding:8px;border:1px solid #27272a;}}
+     td{{padding:7px 8px;border:1px solid #d4d4d8;}}
+     .num{{text-align:right;font-weight:700;}} .inc{{color:#166534;}} .exp{{color:#991b1b;}}
+     @media print{{.no-print{{display:none;}}}}
+    </style></head><body>
+    <div class="no-print" style="margin-bottom:16px;"><button onclick="window.print()" style="padding:8px 16px;background:#09090b;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:700;">🖨️ Imprimir / Salvar como PDF</button></div>
+    <h1>IGREJA BATISTA DA LAGOINHA · LAGOINHA FINANCE</h1>
+    <div class="meta">Relatório Financeiro &amp; Previsão de Caixa ({esc(report_type.upper())}) · Emitido em {esc(s.now()[:19].replace('T',' '))}</div>
+    <h2>1. Motor de Previsão Financeira &amp; Consolidação</h2>
+    <table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>
+     <tr><td>Saldo Consolidado Atual (Contas &amp; Bancos)</td><td class="num">{fmt_brl(engine['current_balance_cents'])}</td></tr>
+     <tr><td>Previsão de Caixa — 30 Dias</td><td class="num">{fmt_brl(engine['projected_30d_cents'])}</td></tr>
+     <tr><td>Previsão de Caixa — 60 Dias</td><td class="num">{fmt_brl(engine['projected_60d_cents'])}</td></tr>
+     <tr><td>Previsão de Caixa — 90 Dias</td><td class="num">{fmt_brl(engine['projected_90d_cents'])}</td></tr>
+    </tbody></table>"""
+
+    if report_type in ('complete','banks','forecast'):
+        doc+=f"""<h2>2. Posição Consolidada por Bancos e Contas Vinculadas</h2>
+        <table><thead><tr><th>Banco / Instituição</th><th>Contas</th><th>Saldo Abertura</th><th>Entradas Pagas</th><th>Saídas Pagas</th><th>Saldo Atual</th><th>Projeção Líquida</th></tr></thead><tbody>
+        {''.join(f"<tr><td>{esc(b['bank'])}</td><td>{b['accounts_count']}</td><td class='num'>{fmt_brl(b['opening_cents'])}</td><td class='num inc'>{fmt_brl(b['income_cents'])}</td><td class='num exp'>{fmt_brl(b['expense_cents'])}</td><td class='num'>{fmt_brl(b['balance_cents'])}</td><td class='num'>{fmt_brl(b['projected_balance_cents'])}</td></tr>" for b in engine['by_bank'])}
+        </tbody></table>"""
+
+    if report_type in ('complete','cost_centers'):
+        doc+=f"""<h2>3. Execução Orçamentária por Centro de Custo</h2>
+        <table><thead><tr><th>Centro de Custo</th><th>Ministério</th><th>Orçamento</th><th>Saídas Realizadas</th><th>Entradas Vinculadas</th></tr></thead><tbody>
+        {''.join(f"<tr><td>{esc(cc['name'])}</td><td>{esc(cc['ministry'] or 'Geral')}</td><td class='num'>{fmt_brl(cc['budget_cents'])}</td><td class='num exp'>{fmt_brl(cc['spent_cents'])}</td><td class='num inc'>{fmt_brl(cc['income_cents'])}</td></tr>" for cc in cost_centers)}
+        </tbody></table>"""
+
+    if report_type in ('complete','entries'):
+        doc+=f"""<h2>4. Extrato Detalhado de Lançamentos ({len(entries)} registros)</h2>
+        <table><thead><tr><th>Data</th><th>Vencimento</th><th>Tipo</th><th>Status</th><th>Banco</th><th>Conta</th><th>Centro de Custo</th><th>Categoria</th><th>Método</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>
+        {''.join(f"<tr><td>{esc(r['occurred_on'])}</td><td>{esc(r['due_date'] or '—')}</td><td>{'Entrada' if r['direction']=='income' else 'Saída'}</td><td>{'Liquidado' if (r['payment_status'] or 'paid')=='paid' else 'Pendente'}</td><td>{esc(r.get('account_bank') or 'Caixa')}</td><td>{esc(r['account_name'])}</td><td>{esc(r['cost_center_name'] or '—')}</td><td>{esc(r['category'] or '—')}</td><td>{esc(r['payment_method'] or 'pix')}</td><td>{esc(r['description'])}</td><td class='num {'inc' if r['direction']=='income' else 'exp'}'>{fmt_brl(r['amount_cents'])}</td></tr>" for r in entries)}
+        </tbody></table>"""
+
+    if report_type in ('complete','closings') and closings:
+        doc+=f"""<h2>5. Borderôs de Culto (Dupla Conferência)</h2>
+        <table><thead><tr><th>Data</th><th>Culto</th><th>Conta / Banco</th><th>Dízimos</th><th>Espécie</th><th>PIX</th><th>Cartão</th><th>Total</th><th>Conferentes</th></tr></thead><tbody>
+        {''.join(f"<tr><td>{esc(sc['service_date'])}</td><td>{esc(sc['service_name'])}</td><td>{esc(sc['account_name'])} ({esc(sc.get('account_bank') or 'Caixa')})</td><td class='num'>{fmt_brl(sc['tithes_cents'])}</td><td class='num'>{fmt_brl(sc['offerings_cash_cents'])}</td><td class='num'>{fmt_brl(sc['offerings_pix_cents'])}</td><td class='num'>{fmt_brl(sc['offerings_card_cents'])}</td><td class='num inc'>{fmt_brl(sc['total_cents'])}</td><td>{esc(sc['counted_by'])} &amp; {esc(sc['verified_by'])}</td></tr>" for sc in closings)}
+        </tbody></table>"""
+
+    doc+="</body></html>"
+    if format=='xls':
+        return Response(('\ufeff'+doc).encode('utf-8'),media_type='application/vnd.ms-excel; charset=utf-8',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.xls"'})
+    return Response(doc.encode('utf-8'),media_type='text/html; charset=utf-8')
 
 @router.get('/history/{rid}')
 def history(rid:str,user=Depends(admin)):
@@ -215,3 +419,4 @@ def download(fid:str,user=Depends(read)):
     with s.db() as c:row=c.execute('SELECT * FROM finance_files WHERE id=?',(fid,)).fetchone()
     if not row:fail('file','Arquivo não encontrado.',404)
     return Response(bytes(row['data']),media_type=row['content_type'],headers={'Cache-Control':'private, no-store','Content-Disposition':'inline; filename="'+row['filename']+'"','X-Content-Type-Options':'nosniff'})
+

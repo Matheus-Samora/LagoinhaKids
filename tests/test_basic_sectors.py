@@ -34,7 +34,7 @@ def test_ministries_reuses_members_minimal_directory_and_multiple_roles():
         r=leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':ministry,'position':'Líder'});assert r.status_code==200,r.text
     assert leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Music'}).status_code==409
     assert leader.post('/api/ministries/assignments',json={'person_id':pid,'ministry':'Unknown'}).status_code==400
-    assert len(leader.get('/api/ministries').json()['catalog'])==16
+    assert len(leader.get('/api/ministries').json()['catalog'])==17
     admin.delete('/api/members/people/'+pid+'?version=1')
     assert leader.get('/api/ministries').json()['assignments']==[]
 
@@ -100,7 +100,7 @@ def test_members_cells_and_self_registration_approval():
     pid=app_res.json()['person_id']
     assert c.put(f'/api/members/people/{pid}',json={'name':'Visitante Novo','cell_id':cell_id,'integration_stage':'baptized','version':1}).status_code==200
     snap2=c.get('/api/members').json()
-    assert snap2['cells'][0]['member_count']==1
+    assert next(x for x in snap2['cells'] if x['id']==cell_id)['member_count']==1
     assert snap2['self_registrations']==[]
 
 def test_ministries_schedules_conflict_and_resources():
@@ -127,6 +127,7 @@ def test_finance_cost_centers_closings_settle_and_csv():
     snap=c.get('/api/finance').json()
     assert snap['totals']['pending_expense_cents']==25000
     assert snap['accounts'][0]['balance_cents']==10000
+    assert 'engine' in snap and 'projected_30d_cents' in snap['engine']
     assert c.post(f'/api/finance/entries/{pid}/settle').status_code==200
     snap2=c.get('/api/finance').json()
     assert snap2['totals']['pending_expense_cents']==0
@@ -137,4 +138,49 @@ def test_finance_cost_centers_closings_settle_and_csv():
     assert snap3['accounts'][0]['balance_cents']==50000
     csv_res=c.get('/api/finance/export.csv')
     assert csv_res.status_code==200 and 'Borderô: Culto Domingo 18h' in csv_res.text
+    xls_res=c.get('/api/finance/report?format=xls&report_type=complete')
+    assert xls_res.status_code==200 and 'LAGOINHA FINANCE' in xls_res.text
+
+def test_v230_worship_scale_candidacies_pastor_and_encryption():
+    admin=client(1);member=client(3)
+    # 1. Verify official GCs are seeded with banners & Link and Future are separate
+    comm=member.get('/api/platform/community').json()
+    gc_names={g['name'] for g in comm['cells']}
+    assert {'GC Ide','GC Emanuel','GC Fé','GC Betel','GC Rocket','GC Legacy','GC Propósito','GC Aviva'}.issubset(gc_names)
+    min_names={m['name'] for m in comm['ministries']}
+    assert 'Link' in min_names and 'Future' in min_names and 'Champions' in min_names and 'Link Future' not in min_names
+
+    # 2. Member applies to Music ministry as Tecladista -> Leader gets notified and approves
+    app_res=member.post('/api/platform/apply',json={'target_type':'ministry','target_name':'Music','role_desired':'Tecladista','phone':'33999991111','notes':'Toco teclado há 5 anos'})
+    assert app_res.status_code==200
+    app_id=app_res.json()['id']
+    min_snap=admin.get('/api/ministries').json()
+    assert any(a['id']==app_id for a in min_snap['applications'])
+    approve_res=admin.post(f'/api/ministries/applications/{app_id}/approve')
+    assert approve_res.status_code==200
+    pid=approve_res.json()['person_id']
+
+    # 3. Worship Scale Builder creates multi-instrument scale
+    p2=person(admin)
+    ws_res=admin.post('/api/ministries/worship-scale',json={
+        'title':'Culto de Celebração Domingo',
+        'service_date':'2026-12-27',
+        'service_time':'18:00',
+        'repertoire_title':'Setlist Domingo Noite',
+        'repertoire_notes':'1. Bondade de Deus (G)',
+        'members':[{'person_id':pid,'instrument':'Tecladista'},{'person_id':p2,'instrument':'Baterista'}]
+    })
+    assert ws_res.status_code==200 and ws_res.json()['created']==2
+
+    # 4. Pastor role has access to all sectors without being Central IT Admin
+    assert admin.patch('/api/platform/users/2',json={'pastor':True}).status_code==200
+    pastor=client(2)
+    me_pastor=pastor.get('/api/platform/me').json()
+    assert me_pastor['pastor'] is True and me_pastor['platform_admin'] is False
+    assert all(m['enabled'] for m in me_pastor['modules'])
+    assert pastor.get('/api/finance').status_code==200
+    assert pastor.get('/api/members').status_code==200
+    assert pastor.get('/api/ministries').status_code==200
+    assert pastor.get('/api/platform/users').status_code==403
+
 

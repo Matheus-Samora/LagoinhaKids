@@ -1,5 +1,17 @@
 """Additive business tables and columns. Preserves all existing records."""
 import os
+from datetime import datetime, timezone
+
+OFFICIAL_GCS = [
+    ('gc-ide', 'GC Ide', 'Vila Isa', 'Avenida Ibituruna, 826 - Vila Isa', 'Terça-feira | 19h30', '/gc/gc-ide.webp'),
+    ('gc-emanuel', 'GC Emanuel', 'Vale do Sol 2', 'Rua Quinze, 113 - Vale do Sol 2', 'Terça-feira | 19h30', '/gc/gc-emanuel.webp'),
+    ('gc-fe', 'GC Fé', 'Elvamar', 'Rua M, 143 - Elvamar', 'Terça-feira | 19h30', '/gc/gc-fe.webp'),
+    ('gc-betel', 'GC Betel', 'Vera Cruz', 'Rua Esmeralda, 3104 - Vera Cruz', 'Terça-feira | 19h30', '/gc/gc-betel.webp'),
+    ('gc-rocket', 'GC Rocket', 'Vila Isa', 'Rua José Otávio da Fonseca, 228 - Bairro Vila Isa', 'Terça-feira | 19h30', '/gc/gc-rocket.webp'),
+    ('gc-legacy', 'GC Legacy', 'Vila Isa', 'Rua José Otávio da Fonseca, 150 - Vila Isa', 'Terça-feira | 19h30', '/gc/gc-legacy.webp'),
+    ('gc-proposito', 'GC Propósito', 'Asteca', 'Avenida 105, Nº 60 - Asteca', 'Sexta-feira | 19h30', '/gc/gc-proposito.webp'),
+    ('gc-aviva', 'GC Aviva', 'Vila Rainha - Engenheiro Caldas', 'Av. Padre João Pina de Amaral 554, Vila Rainha - Engenheiro Caldas (Ao lado padaria Araújo)', 'Terça-feira | 19h30', '/gc/gc-aviva.webp'),
+]
 
 def ensure_column(c, table, column, definition):
     if os.getenv('KIDS_DATABASE_URL'):
@@ -9,12 +21,35 @@ def ensure_column(c, table, column, definition):
         if column not in cols:
             c.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
 
+def ensure_official_gcs(c):
+    # Remove deprecated GC Union if present
+    c.execute("UPDATE members_people SET cell_id=NULL WHERE cell_id IN (SELECT id FROM members_cells WHERE lower(name) LIKE '%union%')")
+    c.execute("UPDATE members_families SET cell_id=NULL WHERE cell_id IN (SELECT id FROM members_cells WHERE lower(name) LIKE '%union%')")
+    c.execute("DELETE FROM members_cells WHERE lower(name) LIKE '%union%'")
+    now_iso = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    for gc_id, gc_name, neigh, addr, m_day, banner in OFFICIAL_GCS:
+        existing = c.execute(
+            "SELECT id FROM members_cells WHERE id=? OR lower(name)=? OR lower(name)=?",
+            (gc_id, gc_name.lower(), gc_name.lower().replace('gc ', ''))
+        ).fetchone()
+        if existing:
+            c.execute(
+                "UPDATE members_cells SET name=?, neighborhood=?, address=?, meeting_day=?, banner_url=?, active=1 WHERE id=?",
+                (gc_name, neigh, addr, m_day, banner, existing[0])
+            )
+        else:
+            c.execute(
+                "INSERT INTO members_cells(id,name,leader_name,neighborhood,meeting_day,banner_url,address,active,version,created_at) VALUES(?,?,?,?,?,?,?,1,1,?)",
+                (gc_id, gc_name, 'Liderança GC', neigh, m_day, banner, addr, now_iso)
+            )
+
 def migrate(c):
     statements = [
-        '''CREATE TABLE IF NOT EXISTS members_cells(id TEXT PRIMARY KEY,name TEXT NOT NULL,leader_name TEXT NOT NULL DEFAULT '',neighborhood TEXT NOT NULL DEFAULT '',meeting_day TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS members_cells(id TEXT PRIMARY KEY,name TEXT NOT NULL,leader_name TEXT NOT NULL DEFAULT '',neighborhood TEXT NOT NULL DEFAULT '',meeting_day TEXT NOT NULL DEFAULT '',banner_url TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_families(id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_on TEXT,active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_people(id TEXT PRIMARY KEY,name TEXT NOT NULL,family_id TEXT REFERENCES members_families(id),relationship TEXT NOT NULL DEFAULT '',birthday TEXT,joined_on TEXT,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_self_registrations(id TEXT PRIMARY KEY,name TEXT NOT NULL,family_name TEXT NOT NULL DEFAULT '',birthday TEXT,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',marital_status TEXT NOT NULL DEFAULT '',profession TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',integration_stage TEXT NOT NULL DEFAULT 'visitor',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS sector_applications(id TEXT PRIMARY KEY,user_id BIGINT,member_name TEXT NOT NULL,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',target_type TEXT NOT NULL,target_id TEXT NOT NULL DEFAULT '',target_name TEXT NOT NULL,role_desired TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',reviewed_by BIGINT,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_assignments(id TEXT PRIMARY KEY,person_id TEXT NOT NULL REFERENCES members_people(id),ministry TEXT NOT NULL,position TEXT NOT NULL DEFAULT 'Integrante',started_on TEXT,active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_schedules(id TEXT PRIMARY KEY,title TEXT NOT NULL,ministry TEXT NOT NULL,person_id TEXT NOT NULL REFERENCES members_people(id),role_notes TEXT NOT NULL DEFAULT '',service_date TEXT NOT NULL,service_time TEXT NOT NULL DEFAULT '18:00',status TEXT NOT NULL DEFAULT 'confirmed',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS ministries_resources(id TEXT PRIMARY KEY,ministry TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'roteiro',notes TEXT NOT NULL DEFAULT '',resource_url TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
@@ -31,12 +66,15 @@ def migrate(c):
         'CREATE INDEX IF NOT EXISTS ministries_schedule_date ON ministries_schedules(service_date,service_time,active)',
         'CREATE INDEX IF NOT EXISTS finance_account_active ON finance_entries(account_id,active)',
         'CREATE INDEX IF NOT EXISTS changes_record ON module_changes(module,record_id,created_at)',
+        'CREATE INDEX IF NOT EXISTS sector_apps_status ON sector_applications(target_type,status,created_at)',
         '''CREATE TABLE IF NOT EXISTS module_scopes(user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,module TEXT NOT NULL,scope TEXT NOT NULL DEFAULT '',PRIMARY KEY(user_id,module))'''
     ]
     for statement in statements:
         c.execute(statement)
 
     # Additive columns for existing tables
+    ensure_column(c, 'members_cells', 'banner_url', "TEXT NOT NULL DEFAULT ''")
+    ensure_column(c, 'members_cells', 'address', "TEXT NOT NULL DEFAULT ''")
     ensure_column(c, 'members_families', 'cell_id', 'TEXT')
     ensure_column(c, 'members_families', 'neighborhood', "TEXT NOT NULL DEFAULT ''")
     ensure_column(c, 'members_people', 'cell_id', 'TEXT')
@@ -53,3 +91,26 @@ def migrate(c):
     ensure_column(c, 'finance_entries', 'due_date', 'TEXT')
     ensure_column(c, 'finance_entries', 'payment_method', "TEXT NOT NULL DEFAULT 'pix'")
     ensure_column(c, 'finance_entries', 'cost_center_id', 'TEXT')
+
+    # Migrate 'Link Future' to 'Link'
+    c.execute("UPDATE ministries_assignments SET ministry='Link' WHERE ministry='Link Future'")
+    c.execute("UPDATE ministries_schedules SET ministry='Link' WHERE ministry='Link Future'")
+    c.execute("UPDATE ministries_resources SET ministry='Link' WHERE ministry='Link Future'")
+    c.execute("UPDATE module_scopes SET scope='Link' WHERE module='ministries' AND scope='Link Future'")
+
+    ensure_official_gcs(c)
+
+    # Clean fictional/demo data in production once
+
+    if os.getenv('K_SERVICE') or os.getenv('KIDS_DATABASE_URL'):
+        if not c.execute("SELECT 1 FROM platform_migrations WHERE name='clean_fictional_v230'").fetchone():
+            c.execute("DELETE FROM sector_applications WHERE lower(member_name) LIKE '%teste%'")
+            c.execute("DELETE FROM ministries_schedules WHERE person_id IN (SELECT id FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo'))")
+            c.execute("DELETE FROM ministries_assignments WHERE person_id IN (SELECT id FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo'))")
+            c.execute("DELETE FROM members_people WHERE lower(name) IN ('membro de teste','visitante novo','editor allowed')")
+            c.execute("DELETE FROM members_families WHERE lower(name) IN ('família de teste','família novo')")
+            c.execute("DELETE FROM finance_invoices WHERE lower(supplier) LIKE '%fornecedor de teste%'")
+            c.execute("DELETE FROM finance_entries WHERE lower(description) IN ('lançamento de teste','corrigido','pintura')")
+            c.execute("DELETE FROM finance_accounts WHERE lower(name) IN ('conta de teste','csrf protected') AND NOT EXISTS(SELECT 1 FROM finance_entries e WHERE e.account_id=finance_accounts.id)")
+            c.execute("INSERT INTO platform_migrations VALUES('clean_fictional_v230')")
+

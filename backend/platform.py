@@ -1,10 +1,12 @@
-import json
+import json,secrets
 from fastapi import APIRouter,Depends,Request,Response
 from pydantic import BaseModel,Field
 from . import store as s
 from .app import session,fail,public_user,validate_password,email
 import sqlite3
-from .platform_access import MODULES,ROLES,allowed,platform_admin
+from .platform_access import MODULES,ROLES,allowed,platform_admin,is_pastor
+from .modules.common import encrypt_text,decrypt_text
+from .modules.ministries.router import CATALOG as MINISTRY_CATALOG
 router=APIRouter(prefix='/api/platform')
 
 def central_admin(user=Depends(session)):
@@ -18,8 +20,104 @@ def me(request:Request,user=Depends(session)):
         grants={r['module']:dict(r) for r in c.execute('SELECT module,role,enabled FROM module_access WHERE user_id=?',(user['id'],))}
         scopes={r['module']:r['scope'] for r in c.execute('SELECT module,scope FROM module_scopes WHERE user_id=?',(user['id'],))}
         root=platform_admin(c,user['id'])
+        pastor=is_pastor(c,user['id'])
         from .platform_access import host_module,module_url
-        return {'active_module':host_module(request.url.hostname or ''),'user':public_user(user),'platform_admin':root,'modules':[{'id':key,'name':name,'url':module_url(key),'enabled':allowed(c,user,key),'role':('admin' if key!='kids' else user['role']) if root else (user['role'] if key=='kids' else grants.get(key,{}).get('role')),'scope':'' if root else scopes.get(key,''),'status':'operational'} for key,name in MODULES.items()]}
+        notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
+        return {
+            'active_module':host_module(request.url.hostname or ''),
+            'user':public_user(user),
+            'platform_admin':root,
+            'pastor':pastor,
+            'encryption':'AES-128-Fernet-HMAC-SHA256',
+            'notifications':notifs,
+            'modules':[{
+                'id':key,'name':name,'url':module_url(key),
+                'enabled':allowed(c,user,key),
+                'role':('admin' if key!='kids' else user['role']) if root else ('pastor' if pastor else (user['role'] if key=='kids' else grants.get(key,{}).get('role'))),
+                'scope':'' if (root or pastor) else scopes.get(key,''),
+                'status':'operational'
+            } for key,name in MODULES.items()]
+        }
+
+@router.get('/community')
+def community_catalog(user=Depends(session)):
+    from .modules.schema import ensure_official_gcs
+    with s.db() as c:
+        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
+            ensure_official_gcs(c)
+        cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name')]
+        counts={r['ministry']:dict(r) for r in c.execute('SELECT ministry,count(*) total,sum(CASE WHEN is_leader=1 THEN 1 ELSE 0 END) leaders FROM ministries_assignments WHERE active=1 GROUP BY ministry')}
+        my_apps=[]
+        for r in c.execute('SELECT * FROM sector_applications WHERE user_id=? OR (email!=? AND lower(email)=?) ORDER BY created_at DESC LIMIT 50',(user['id'],'',user['email'].lower())):
+            d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
+        notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
+        return {
+            'cells':cells,
+            'ministries':[{'name':m,'total':counts.get(m,{}).get('total',0),'leaders':counts.get(m,{}).get('leaders',0)} for m in MINISTRY_CATALOG],
+            'my_applications':my_apps,
+            'notifications':notifs
+        }
+
+class CommunityApplication(BaseModel):
+    target_type:str=Field(pattern='^(gc|ministry)$')
+    target_id:str=Field(default='',max_length=80)
+    target_name:str=Field(min_length=2,max_length=120)
+    role_desired:str=Field(default='Participante',max_length=100)
+    phone:str=Field(default='',max_length=40)
+    notes:str=Field(default='',max_length=500)
+
+@router.post('/apply')
+def apply_to_sector(data:CommunityApplication,user=Depends(session)):
+    t_name=data.target_name.strip()
+    if data.target_type=='ministry' and t_name not in MINISTRY_CATALOG:
+        fail('ministry','Selecione um ministério oficial válido.')
+    rid=secrets.token_hex(16)
+    phone=(data.phone or user.get('phone') or '').strip()
+    role_des=(data.role_desired or ('Participante de GC' if data.target_type=='gc' else 'Voluntário')).strip()
+    now=s.now()
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        if data.target_type=='gc':
+            cell=c.execute('SELECT id,name FROM members_cells WHERE (id=? OR lower(name)=?) AND active=1',(data.target_id.strip(),t_name.lower())).fetchone()
+            if not cell:fail('gc','GC não encontrado.',404)
+            t_id=cell['id'];t_name=cell['name']
+        else:
+            t_id=t_name
+        dup=c.execute("SELECT id FROM sector_applications WHERE user_id=? AND target_type=? AND lower(target_name)=? AND status='pending'",(user['id'],data.target_type,t_name.lower())).fetchone()
+        if dup:return {'id':dup['id'],'ok':True,'message':f'Sua solicitação para {t_name} já está em análise pelo líder do setor!'}
+        c.execute(
+            'INSERT INTO sector_applications(id,user_id,member_name,phone,email,target_type,target_id,target_name,role_desired,notes,status,reviewed_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (rid,user['id'],user['name'],phone,user['email'],data.target_type,t_id,t_name,role_des,encrypt_text(data.notes), 'pending', None, now)
+        )
+        if phone and not user.get('phone'):
+            c.execute('UPDATE users SET phone=? WHERE id=?',(phone,user['id']))
+        # Determine responsible leaders to notify
+        leaders=set()
+        for r in c.execute('SELECT user_id FROM platform_admins'):leaders.add(r['user_id'])
+        for r in c.execute('SELECT user_id FROM pastoral_users'):leaders.add(r['user_id'])
+        if data.target_type=='ministry':
+            for r in c.execute("SELECT ma.user_id, coalesce(ms.scope,'') scope FROM module_access ma LEFT JOIN module_scopes ms ON ms.user_id=ma.user_id AND ms.module='ministries' WHERE ma.module='ministries' AND ma.enabled=1 AND ma.role IN ('admin','pastor','editor')"):
+                if not r['scope'] or r['scope'].lower()==t_name.lower():
+                    leaders.add(r['user_id'])
+            for r in c.execute("SELECT u.id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id JOIN users u ON (lower(u.email)=lower(p.email) OR lower(u.name)=lower(p.name)) WHERE a.ministry=? AND a.is_leader=1 AND a.active=1 AND u.active=1",(t_name,)):
+                leaders.add(r['id'])
+            n_title=f'🙌 Nova Candidatura · Ministério {t_name}'
+            n_msg=f"{user['name']} ({phone or user['email']}) candidatou-se ao ministério {t_name} na função '{role_des}'. Entre em contato para preparar e aprovar!"
+        else:
+            for r in c.execute("SELECT user_id FROM module_access WHERE module='members' AND enabled=1 AND role IN ('admin','pastor','editor')"):
+                leaders.add(r['user_id'])
+            n_title=f'🏠 Novo Pedido de GC · {t_name}'
+            n_msg=f"{user['name']} ({phone or user['email']}) deseja participar do {t_name}. Entre em contato para acolher e integrar ao grupo!"
+        for lid in leaders:
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(lid,None,'sector_application',n_title,n_msg,user['id'],now))
+        s.audit(c,user['id'],f'sector_apply:{data.target_type}:{t_name}')
+    return {'id':rid,'ok':True,'message':f'Inscrição enviada! O responsável por {t_name} foi notificado e entrará em contato.'}
+
+@router.post('/notifications/{nid}/read')
+def mark_notification_read(nid:int,user=Depends(session)):
+    with s.db() as c:
+        c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?',(s.now(),nid,user['id']))
+    return {'ok':True}
 
 @router.get('/modules/{module}')
 def module_home(module:str,user=Depends(session)):
@@ -35,6 +133,7 @@ def users(user=Depends(central_admin)):
         return [{
             'id':r['id'],'name':r['name'],'email':r['email'],'active':bool(r['active']),
             'platform_admin':platform_admin(c,r['id']),
+            'pastor':is_pastor(c,r['id']),
             'grants':[dict(g)|({'role':r['role']} if g['module']=='kids' else {})|{'scope':all_scopes.get((r['id'],g['module']),'')} for g in c.execute('SELECT module,role,enabled FROM module_access WHERE user_id=?',(r['id'],))]
         } for r in c.execute('SELECT id,name,email,active,role FROM users ORDER BY name')]
 
@@ -58,6 +157,7 @@ class PlatformUserPatch(BaseModel):
     active:bool|None=None
     password:str|None=Field(default=None,max_length=128)
     platform_admin:bool|None=None
+    pastor:bool|None=None
 
 @router.patch('/users/{uid}')
 def update_identity(uid:int,data:PlatformUserPatch,user=Depends(central_admin)):
@@ -84,6 +184,15 @@ def update_identity(uid:int,data:PlatformUserPatch,user=Depends(central_admin)):
             else:
                 c.execute('DELETE FROM platform_admins WHERE user_id=?',(uid,))
                 s.audit(c,user['id'],'platform_admin_revoked:'+str(uid))
+        if data.pastor is not None:
+            if data.pastor:
+                c.execute('INSERT INTO pastoral_users(user_id) VALUES(?) ON CONFLICT(user_id) DO NOTHING',(uid,))
+                c.execute("UPDATE users SET staff_role='pastor' WHERE id=?",(uid,))
+                s.audit(c,user['id'],'pastor_role_granted:'+str(uid))
+            else:
+                c.execute('DELETE FROM pastoral_users WHERE user_id=?',(uid,))
+                c.execute("UPDATE users SET staff_role='' WHERE id=? AND staff_role IN ('pastor','pastora')",(uid,))
+                s.audit(c,user['id'],'pastor_role_revoked:'+str(uid))
     return {'ok':True,'message':'Conta atualizada com sucesso.'}
 
 class Grant(BaseModel):
@@ -100,10 +209,14 @@ def set_grant(uid:int,module:str,data:Grant,user=Depends(central_admin)):
         if platform_admin(c,uid):fail('platform_admin','Administradores centrais mantêm acesso a todos os sistemas.',409)
         c.execute('INSERT INTO module_access(user_id,module,role,enabled) VALUES(?,?,?,?) ON CONFLICT(user_id,module) DO UPDATE SET role=excluded.role,enabled=excluded.enabled',(uid,module,data.role,int(data.enabled)))
         c.execute('INSERT INTO module_scopes(user_id,module,scope) VALUES(?,?,?) ON CONFLICT(user_id,module) DO UPDATE SET scope=excluded.scope',(uid,module,data.scope.strip()))
+        if data.role=='pastor' and data.enabled:
+            c.execute('INSERT INTO pastoral_users(user_id) VALUES(?) ON CONFLICT(user_id) DO NOTHING',(uid,))
+            c.execute("UPDATE users SET staff_role='pastor' WHERE id=?",(uid,))
         if module=='kids':
+            kids_db_role='admin' if data.role=='pastor' else data.role
             old=c.execute('SELECT role FROM users WHERE id=?',(uid,)).fetchone()
-            if old['role']=='parent' and data.role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():fail('family','Transfira os vínculos familiares antes de alterar o perfil Kids.',409)
-            c.execute('UPDATE users SET role=? WHERE id=?',(data.role,uid))
+            if old['role']=='parent' and kids_db_role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():fail('family','Transfira os vínculos familiares antes de alterar o perfil Kids.',409)
+            c.execute('UPDATE users SET role=? WHERE id=?',(kids_db_role,uid))
         s.audit(c,user['id'],'module_access:'+module+':'+str(uid)+':'+data.role+':'+str(int(data.enabled))+(':'+data.scope.strip() if data.scope.strip() else ''))
     return {'ok':True}
 
@@ -143,4 +256,5 @@ def export_backup(user=Depends(central_admin)):
         }
         s.audit(c,user['id'],'platform:backup_exported')
     return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':'attachment; filename="lagoinha-systems-backup.json"'})
+
 
