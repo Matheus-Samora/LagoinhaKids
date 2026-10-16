@@ -1,7 +1,8 @@
 import {ministryEmblem,MINISTRY_META} from './emblems.js';
+import {attachRubberSegments} from './rubber-segment.js';
 
 export function createSectors({api,e,identity,openQrModal}){
- let key='',data={},directory=[],query='',ministryFilter='',generation=0,host;
+ let key='',data={},directory=[],query='',ministryFilter='',generation=0,host,activeTab='all';
  const cash=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
  const date=v=>v?v.slice(0,10).split('-').reverse().join('/'):'—';
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
@@ -483,10 +484,14 @@ export function createSectors({api,e,identity,openQrModal}){
 
  function paint(message=''){
   const kinds=key==='members'?['people','families','cells']:key==='ministries'?['schedules','assignments','resources']:['entries','closings','accounts','cost-centers','invoices'];
+  const displayedKinds=activeTab==='all'?kinds:kinds.filter(k=>k===activeTab);
   const roleBadgeLabel=role()==='viewer'?'Somente consulta':role()==='pastor'?' Acesso Pastoral Pleno (Alteração liberada)':role()==='admin'?' Administração do Setor':' Cadastro e Edição';
-  host.innerHTML=`<div class="page-enter"><div class="sector-toolbar"><div style="display:flex;gap:8px;flex-wrap:wrap;"><a class="button secondary" href="/membro">← Área do Membro</a></div><span class="badge">${roleBadgeLabel}</span></div><p role="status" class="status">${e(message)}</p>${heroBanner()}${selfRegistrationsPanel()}${summary()}<form class="sector-search"><label>Buscar ${key==='ministries'?'pessoa ou escala':key==='members'?'membro':'lançamento ou nota'}<input name="q" value="${e(query)}" maxlength="100" placeholder="Digite um nome ou descrição"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${kinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
+  const subTabs=`<div class="sector-tabs-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:14px 0 10px 0;"><div class="sector-tabs" data-rubber-segment style="display:inline-flex;gap:4px;padding:4px;background:var(--card, #18181b);border:1px solid var(--border, #27272a);border-radius:12px;"><button type="button" class="sector-tab-btn ${activeTab==='all'?'active':''}" data-sector-tab="all" style="padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:700;border:none;background:transparent;color:inherit;cursor:pointer;">Todos (${kinds.length})</button>${kinds.map(k=>`<button type="button" class="sector-tab-btn ${activeTab===k?'active':''}" data-sector-tab="${k}" style="padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:700;border:none;background:transparent;color:inherit;cursor:pointer;">${labels[k]} (${(getRowsForKind(k)||[]).length})</button>`).join('')}</div></div>`;
+  host.innerHTML=`<div class="page-enter"><div class="sector-toolbar"><div style="display:flex;gap:8px;flex-wrap:wrap;"><a class="button secondary" href="/membro">← Área do Membro</a></div><span class="badge">${roleBadgeLabel}</span></div><p role="status" class="status">${e(message)}</p>${heroBanner()}${selfRegistrationsPanel()}${summary()}${subTabs}<form class="sector-search"><label>Buscar ${key==='ministries'?'pessoa ou escala':key==='members'?'membro':'lançamento ou nota'}<input name="q" value="${e(query)}" maxlength="100" placeholder="Digite um nome ou descrição"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${displayedKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
   host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');void refresh();};
+  host.querySelectorAll('[data-sector-tab]').forEach(b=>{b.onclick=()=>{activeTab=b.dataset.sectorTab;paint();};});
   host.querySelectorAll('[data-sector-action]').forEach(b=>b.onclick=()=>void action(b));
+  attachRubberSegments(host);
  }
 
  async function refresh(message=''){
@@ -494,7 +499,7 @@ export function createSectors({api,e,identity,openQrModal}){
   try{const result=await api('/'+key+'?q='+encodeURIComponent(query));if(n!==generation)return;data=result;paint(message);}catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
  }
 
- async function mount(module){key=module.id;host=document.getElementById('sector-content');query='';ministryFilter='';if(host)await refresh();}
+ async function mount(module){key=module.id;host=document.getElementById('sector-content');query='';ministryFilter='';activeTab='all';if(host)await refresh();}
 
  function field(name,label,value='',type='text',required=false,opts=null,allowFutureDate=false){
   const attrs=`name="${name}" ${required?'required':''}`;
