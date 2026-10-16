@@ -1,3 +1,11 @@
+# Lagoinha Systems
+
+Plataforma modular: Kids, Finance, Members e Ministries. [Arquitetura e desenvolvimento dos módulos](docs/LAGOINHA-SYSTEMS.md).
+
+O Kids permanece operacional. Os demais módulos possuem base de acesso e aguardam a implementação das funcionalidades.
+
+---
+
 # Lagoinha Kids 1.2.0
 
 Aplicativo do ministério infantil com acesso administrativo, de professores e de responsáveis. Backend FastAPI/SQLite, frontend Vite e aplicativo Capacitor Android/iOS.

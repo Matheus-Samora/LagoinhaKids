@@ -27,7 +27,7 @@ def send(subscription,notification_id):
             'title': 'Lagoinha Kids — chamado da salinha' if is_urgent else 'Lagoinha Kids',
             'body': 'A equipe precisa falar com você. Abra o aplicativo.' if is_urgent else 'Você recebeu um novo aviso. Abra o aplicativo para conferir.',
             'tag': f'notice-{notification_id}',
-            'url': '/#notifications',
+            'url': '/kids#notifications',
             'id': notification_id,
             'kind': 'urgent_call' if is_urgent else 'general',
             'urgent': is_urgent,

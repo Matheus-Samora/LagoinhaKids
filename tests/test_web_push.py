@@ -76,7 +76,7 @@ def test_real_web_push_encryption_without_network(monkeypatch):
     assert web_push_transport.send({'endpoint':data['endpoint'],'keys_json':json.dumps(data['keys'])},123)
     payload=http_ece.decrypt(captured['data'],private_key=receiver,auth_secret=auth,version='aes128gcm')
     decoded=json.loads(payload)
-    assert decoded['id']==123 and decoded['url']=='/#notifications'
+    assert decoded['id']==123 and decoded['url']=='/kids#notifications'
     assert decoded['body']=='Você recebeu um novo aviso. Abra o aplicativo para conferir.'
     assert 'authorization' in {k.lower() for k in captured['headers']}
 
