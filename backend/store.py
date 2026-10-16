@@ -319,6 +319,9 @@ def seed():
 def init():
     init_legacy()
     from .platform_access import migrate
-    with db() as connection:migrate(connection,bool(os.getenv('KIDS_DATABASE_URL')))
+    with db() as connection:
+        migrate(connection,bool(os.getenv('KIDS_DATABASE_URL')))
+        from .modules.schema import migrate as migrate_business
+        migrate_business(connection)
 
 init()
