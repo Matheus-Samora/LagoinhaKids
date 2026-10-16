@@ -2,7 +2,7 @@ FROM node:22-slim AS frontend
 WORKDIR /web
 COPY package*.json ./
 RUN npm ci
-COPY index.html vite.config.* ./
+COPY index.html systems.html vite.config.* ./
 COPY public public
 COPY src src
 RUN npm run build

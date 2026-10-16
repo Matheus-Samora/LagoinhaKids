@@ -20,6 +20,6 @@ assert(!displayed[0].title.includes('Private'));
 assert(!displayed[0].options.body.includes('Private'));
 handlers.notificationclick({action:'on_my_way',notification:{data:{urgent:true},close(){}},waitUntil:p=>pending=p});
 await pending;
-assert.deepEqual(opened,['/#notifications']);
+assert.deepEqual(opened,['/kids#notifications']);
 assert.equal(displayed.length,1,'Must not report acknowledgement before an authenticated confirmation');
 console.log('3 notification behavior checks passed');

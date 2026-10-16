@@ -13,7 +13,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Kids',version='1.4.3')
+app=FastAPI(title='Lagoinha Systems',version='2.0.0')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -31,7 +31,10 @@ def public_user(row):
         staff_r = 'teacher'
     elif not staff_r and row['role'] == 'admin':
         staff_r = 'admin'
+    from .platform_access import platform_admin
+    with s.db() as c:central=platform_admin(c,row['id'])
     return {k:row[k] for k in ('id','name','email','role','active')} | {
+        'platform_admin':central,
         'staff_role': staff_r,
         'email_verified':bool(row['email_verified']) if 'email_verified' in keys else False,
         'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in keys else False,
@@ -40,7 +43,9 @@ def public_user(row):
         'google_linked': bool(row['google_sub'])
     }
 
-ALLOWED_ORIGINS={PUBLIC_URL,*NATIVE_ORIGINS,*filter(None,(x.strip().rstrip('/') for x in os.getenv('KIDS_ALLOWED_ORIGINS','').split(',')))}
+from .platform_access import MODULES as PLATFORM_MODULES
+MODULE_HOSTS=json.loads(os.getenv('SYSTEMS_MODULE_HOSTS','{}'))
+ALLOWED_ORIGINS={PUBLIC_URL,*('https://'+host for host in MODULE_HOSTS),*NATIVE_ORIGINS,*filter(None,(x.strip().rstrip('/') for x in os.getenv('KIDS_ALLOWED_ORIGINS','').split(',')))}
 def is_allowed_origin(origin, request: Request):
     if not origin:return True
     return origin.rstrip('/') in ALLOWED_ORIGINS
@@ -67,7 +72,7 @@ async def protection(request:Request,call_next):
     return response
 
 CSRF_EXEMPT_PATHS = set()
-app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client','X-Service-Worker'])
+app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_credentials=True,allow_methods=['GET','POST','PUT','PATCH','DELETE'],allow_headers=['Content-Type','Authorization','X-CSRF-Token','X-Native-Client','X-Service-Worker'])
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
@@ -76,10 +81,25 @@ def session(request:Request):
         row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=?',(s.digest(token),)).fetchone()
     if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
+    from .platform_access import allowed,host_module
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/')) or request.url.path=='/api/me'
+    if not shared:
+        requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
+        requested=requested if requested in PLATFORM_MODULES else 'kids'
+        with s.db() as c:
+            if not allowed(c,dict(row),requested):fail('module_access','Seu acesso ao Lagoinha Kids não foi autorizado.',403)
+        selected=host_module(request.url.hostname or '')
+        if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
     return dict(row)
 def admin(user=Depends(session)):
     if user['role']!='admin': fail('forbidden','Acesso exclusivo da administração.',403)
     return user
+def identity_admin(user=Depends(admin)):
+    from .platform_access import platform_admin
+    with s.db() as c:
+        if not platform_admin(c,user['id']):fail('platform_admin','Gerencie as contas pela administração central.',403)
+    return user
+
 def staff(user=Depends(session)):
     if user['role'] not in ('admin','teacher'): fail('forbidden','Acesso exclusivo da equipe.',403)
     return user
@@ -131,7 +151,7 @@ class Register(Login):
 @app.get('/api/health')
 def health():
     from .web_push_transport import ready as web_push_ready
-    return {'status':'ok','application':'Lagoinha Kids','google_enabled':google_ready(),'push_enabled':bool(push_platforms()) or web_push_ready(),'native_push_enabled':bool(push_platforms()),'biometric_liveness':False}
+    return {'status':'ok','application':'Lagoinha Systems','google_enabled':google_ready(),'push_enabled':bool(push_platforms()) or web_push_ready(),'native_push_enabled':bool(push_platforms()),'biometric_liveness':False}
 @app.post('/api/auth/login')
 def login(data:Login,request:Request,response:Response):
     addr=request.client.host if request.client else 'unknown'
@@ -170,6 +190,8 @@ def register(data:Register,response:Response,request:Request):
         failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
         c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,failures,int(time.time())+900))
         c.execute('INSERT INTO terms_consents(user_id,child_id,term_version,term_type,ip_address,user_agent,created_at) VALUES(?,?,?,?,?,?,?)',(uid,None,'2026.1','privacy_and_terms',addr,request.headers.get('user-agent','unknown')[:200],s.now()))
+        from .platform_access import kids_grant
+        kids_grant(c,uid,'parent')
         row=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
     return {'user':public_user(row),**login_user(response,uid,request.headers.get('x-native-client')=='1')}
 @app.get('/api/me')
@@ -370,20 +392,22 @@ def read_notification(nid:int,user=Depends(session)):
     return {'ok':True}
 
 @app.get('/api/users')
-def users(user=Depends(admin)):
+def users(user=Depends(identity_admin)):
     with s.db() as c: return [public_user(r)|{'rooms':[x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]} for r in c.execute('SELECT * FROM users ORDER BY name')]
 class UserIn(Register):
     role:str='parent'
     staff_role:str=''
     rooms:list[int]=[]
 @app.post('/api/users')
-def create_user(data:UserIn,user=Depends(admin)):
+def create_user(data:UserIn,user=Depends(identity_admin)):
     if data.role not in ('admin','teacher','parent'): fail('role','Perfil inválido.')
     validate_password(data.password)
     with s.db() as c:
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=?',(rid,)).fetchone() for rid in data.rooms): fail('room','Turma inválida.')
         try: uid=c.execute('INSERT INTO users(name,email,password,role,staff_role,created_at) VALUES(?,?,?,?,?,?)',(data.name,email(data.email),s.password_hash(data.password),data.role,data.staff_role or '',s.now())).lastrowid
         except sqlite3.IntegrityError: fail('exists','E-mail já cadastrado.',409)
+        from .platform_access import kids_grant
+        kids_grant(c,uid,data.role)
         if data.role=='teacher':
             for rid in set(data.rooms):
                 c.execute('UPDATE rooms SET created_by=? WHERE id=?',(uid,rid))
@@ -401,7 +425,7 @@ class UserUpdate(BaseModel):
     password:str|None=Field(default=None,max_length=128)
     avatar_url:str|None=Field(default=None,max_length=500)
 @app.patch('/api/users/{uid}')
-def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
+def update_user(uid:int,data:UserUpdate,user=Depends(identity_admin)):
     with s.db() as c:
         row=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
         if not row:fail('missing','Usuário não encontrado.',404)
@@ -411,6 +435,8 @@ def update_user(uid:int,data:UserUpdate,user=Depends(admin)):
         if data.password:
             if uid==user['id']:fail('self','Troque sua própria senha em Minha conta.')
             validate_password(data.password)
+        from .platform_access import platform_admin
+        if platform_admin(c,uid) and (role!='admin' or not data.active):fail('platform_admin','Mantenha o acesso do administrador central.',409)
         target_email=email(data.email) if data.email is not None else row['email']
         target_avatar=data.avatar_url.strip() if data.avatar_url is not None else (row['avatar_url'] if 'avatar_url' in row.keys() else '')
         s_role=data.staff_role if data.staff_role is not None else (row['staff_role'] if 'staff_role' in row.keys() else '')
@@ -452,10 +478,12 @@ def get_team(user=Depends(staff)):
                 visible={k:visible[k] for k in ('id','name','role','active','staff_role','avatar_url')}
                 rooms=[rid for rid in rooms if room_allowed(c,user,rid)]
             members.append(visible | {'rooms': rooms})
+        from .platform_access import platform_admin
+        central=platform_admin(c,user['id'])
         candidates = [public_user(r) for r in c.execute('''
             SELECT * FROM users WHERE role='parent' AND active=1 ORDER BY name
         ''').fetchall()]
-        return {'members': members, 'candidates': candidates if user['role']=='admin' else []}
+        return {'members': members, 'candidates': candidates if central else []}
 
 class TeamMemberIn(BaseModel):
     name: str = Field(min_length=2, max_length=100)
@@ -466,7 +494,7 @@ class TeamMemberIn(BaseModel):
     phone: str | None = Field(default='', max_length=30)
 
 @app.post('/api/team/member')
-def create_team_member(data: TeamMemberIn, user=Depends(admin)):
+def create_team_member(data: TeamMemberIn, user=Depends(identity_admin)):
     s_role = data.staff_role if data.staff_role in ('teacher', 'monitor', 'admin') else 'teacher'
     validate_password(data.password)
     target_mail = email(data.email)
@@ -480,6 +508,8 @@ def create_team_member(data: TeamMemberIn, user=Depends(admin)):
             ''', (data.name.strip(), target_mail, s.password_hash(data.password), 'admin' if s_role=='admin' else 'teacher', s_role, (data.phone or '').strip(), s.now())).lastrowid
         except sqlite3.IntegrityError:
             fail('exists', 'E-mail já cadastrado.', 409)
+        from .platform_access import kids_grant
+        kids_grant(c,uid,'admin' if s_role=='admin' else 'teacher')
         for rid in set(data.rooms):
             c.execute('INSERT OR IGNORE INTO teacher_rooms VALUES(?,?)', (uid, rid))
             if s_role == 'teacher':
@@ -495,12 +525,14 @@ class TeamDelegateIn(BaseModel):
     rooms: list[int] = []
 
 @app.post('/api/team/delegate')
-def delegate_team_member(data: TeamDelegateIn, user=Depends(admin)):
+def delegate_team_member(data: TeamDelegateIn, user=Depends(identity_admin)):
     s_role = data.staff_role if data.staff_role in ('teacher', 'monitor') else 'teacher'
     with s.db() as c:
         target = c.execute('SELECT * FROM users WHERE id=?', (data.user_id,)).fetchone()
         if not target:
             fail('missing', 'Usuário não encontrado.', 404)
+        from .platform_access import platform_admin
+        if platform_admin(c,data.user_id):fail('platform_admin','Não altere a função central por este formulário.',409)
         if target['role'] == 'admin' and user['role'] != 'admin':
             fail('forbidden', 'Não é permitido alterar administradores.', 403)
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1', (rid,)).fetchone() for rid in data.rooms):
@@ -530,7 +562,7 @@ class TeamMemberUpdate(BaseModel):
     password: str | None = Field(default=None, max_length=128)
 
 @app.patch('/api/team/member/{uid}')
-def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(admin)):
+def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(identity_admin)):
     with s.db() as c:
         target = c.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
         if not target:
@@ -540,6 +572,8 @@ def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(admin)):
         if data.role == 'admin' and user['role'] != 'admin':
             fail('forbidden', 'Apenas administradores podem conceder o perfil de administrador.', 403)
         target_role = data.role or target['role']
+        from .platform_access import platform_admin
+        if platform_admin(c,uid) and (target_role!='admin' or data.active is False):fail('platform_admin','Mantenha o acesso do administrador central.',409)
         if target_role not in ('admin', 'teacher', 'parent'):
             fail('role', 'Perfil inválido.')
         s_role = data.staff_role if data.staff_role is not None else target['staff_role']
@@ -589,7 +623,7 @@ def update_my_avatar(data:AvatarIn,user=Depends(session)):
         s.audit(c,user['id'],'user_avatar_updated')
     return {'ok':True,'avatar_url':url}
 @app.get('/api/audit')
-def audit_log(user=Depends(admin)):
+def audit_log(user=Depends(identity_admin)):
     with s.db() as c: return [dict(r) for r in c.execute('SELECT a.*,u.name actor_name FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.id DESC LIMIT 100')]
 
 # Biometrics are 1:1 against a deliberately selected child. Never automatic release.
@@ -719,6 +753,10 @@ from .events import router as events_router
 app.include_router(events_router)
 from .web_push import router as web_push_router
 app.include_router(web_push_router)
+from .platform import router as platform_router
+app.include_router(platform_router)
+from .modules import routers as module_routers
+for module_router in module_routers:app.include_router(module_router)
 from .calendar_export import router as calendar_router
 app.include_router(calendar_router)
 
@@ -727,35 +765,43 @@ WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 def get_build_id():
     html_file = WEB_DIR / 'index.html'
     if html_file.is_file():
-        return hashlib.md5(html_file.read_bytes()).hexdigest()[:12]
+        portal=WEB_DIR/'systems.html'
+        return hashlib.sha256(html_file.read_bytes()+(portal.read_bytes() if portal.is_file() else b'')).hexdigest()[:12]
     return 'dev'
 
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '1.4.3',
+        'version': '2.0.0',
         'build': get_build_id(),
-        'app': 'Lagoinha Kids',
+        'app': 'Lagoinha Systems',
         'timestamp': s.now()
     }
 
+def frontend_file(name):
+    path=WEB_DIR/name
+    if not path.is_file():fail('not_found','Interface não compilada.',404)
+    return FileResponse(path,media_type='text/html',headers={'Cache-Control':'no-store','X-App-Build':get_build_id()})
+
 @app.get('/')
 @app.get('/index.html')
-def serve_index():
-    index_path = WEB_DIR / 'index.html'
-    if not index_path.is_file():
-        fail('not_found', 'Frontend build não encontrado.', 404)
-    bid = get_build_id()
-    return FileResponse(
-        index_path,
-        media_type='text/html',
-        headers={
-            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'X-App-Build': bid,
-        }
-    )
+def serve_root(request:Request):
+    from .platform_access import host_module
+    return frontend_file('index.html' if host_module(request.url.hostname or '')=='kids' else 'systems.html')
+
+@app.get('/kids')
+@app.get('/kids/')
+def serve_kids():return frontend_file('index.html')
+
+@app.get('/systems')
+@app.get('/systems/')
+@app.get('/finance')
+@app.get('/finance/')
+@app.get('/members')
+@app.get('/members/')
+@app.get('/ministries')
+@app.get('/ministries/')
+def serve_systems():return frontend_file('systems.html')
 
 if WEB_DIR.is_dir(): app.mount('/',StaticFiles(directory=WEB_DIR,html=True),name='frontend')
 

@@ -104,8 +104,8 @@ async function load(){
   api('/lessons'),
   api('/events'),
   api('/paging/active'),
-  S.user.role==='admin'?api('/users'):[],
-  S.user.role==='admin'?api('/audit'):[],
+  S.user.platform_admin?api('/users'):[],
+  S.user.platform_admin?api('/audit'):[],
   S.user.role!=='parent'?api('/guests/active'):[],
   S.user.role!=='parent'?api('/team').catch(()=>({members:[],candidates:[]})):{members:[],candidates:[]}
  ]);
@@ -117,7 +117,7 @@ async function load(){
 function navItems(){
  if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell']];
  if(S.user.role==='teacher')return [['rooms','Minhas turmas','rooms'],['team','Equipe','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell']];
- return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['team','Professores e Monitores','kids'],['children','Alunos','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']];
+ return [['overview','Visão geral','home'],['rooms','Turmas','rooms'],['team','Professores e Monitores','kids'],['children','Alunos','kids'],['attendance','Chamada','check'],['events','Eventos','calendar'],['notifications','Avisos','bell'],['users','Usuários e acessos','shield'],['settings','Minha conta','settings']].filter(([id])=>id!=='users'||S.user.platform_admin);
 }
 function mobileNavItems(){
  if(S.user.role==='parent')return [['overview','Meus filhos','kids'],['events','Eventos','calendar'],['lessons','Aulinhas','clock'],['notifications','Avisos','bell'],['settings','Conta','settings']];
@@ -204,7 +204,7 @@ window.addEventListener('popstate',()=>{
   const pageLabel = S.user.role==='parent'&&S.page==='overview'?'Meus filhos':(paths[S.page]||'Aulinhas');
   const formattedDate = new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date());
 
-   app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">lagoinha <strong>kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">NOSSO ESPAÇO</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions">${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>Check-in QR</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>Baixar App</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">Baixar App</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
+   app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">NOSSO ESPAÇO</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">lagoinha <strong>kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">NOSSO ESPAÇO</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions"><a class="topbar-action-pill secondary" href="/systems" aria-label="Voltar ao Lagoinha Systems">Sistemas</a>${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>Check-in QR</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>Baixar App</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">Baixar App</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer">Lagoinha Kids · Cuidado que conecta <span>Ambiente seguro · Igreja Batista da Lagoinha</span></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
   app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
  }
 function title(title,subtitle,button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</div>`;}
@@ -265,7 +265,7 @@ function teamPage(){
   return true;
  });
 
- const headerActions=S.user.role==='admin'?`
+ const headerActions=S.user.platform_admin?`
   <div class="team-header-actions">
     <button class="btn primary" data-action="new-team-member">${icon('plus',16)} Novo Professor / Monitor</button>
     <button class="btn secondary" data-action="delegate-team-role">🤝 Delegar a Membro</button>
@@ -285,7 +285,7 @@ function teamPage(){
   const cleanPhone=(m.phone||'').replace(/\D/g,'');
   const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${m.name}! Sou da equipe Lagoinha Kids.`)}`:'';
   const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
-  const canEdit=S.user.role==='admin';
+  const canEdit=Boolean(S.user.platform_admin);
 
   return `<article class="team-member-card">
     <div class="team-card-top">
@@ -1418,7 +1418,7 @@ async function syncLive(){
           paging_id:urgentActive.id,
           kind:'urgent_call',
           isPaging:true,
-          url:'/?page=overview'
+          url:'/kids#overview'
         });
       }
     }else{
@@ -1775,7 +1775,7 @@ async function sendSystemNotification({ title, message, tag, url, id, child_id, 
             extra:{
               child_id,
               paging_id,
-              url:urgent?'/?page=overview':(url||'/?page=notifications')
+              url:urgent?'/kids#overview':(url||'/kids#notifications')
             },
             iconColor:'#000000'
           }
@@ -1797,7 +1797,7 @@ async function sendSystemNotification({ title, message, tag, url, id, child_id, 
     renotify:true,
     requireInteraction:urgent,
     data:{
-      url:url||(urgent?'/?page=overview':'/?page=notifications'),
+      url:url||(urgent?'/kids#overview':'/kids#notifications'),
       id:id||null,
       child_id:child_id||null,
       paging_id:paging_id||null,

@@ -1,8 +1,8 @@
 {
   "name": "Lagoinha Kids",
   "short_name": "Lagoinha Kids",
-  "description": "Cuidado que conecta - MinistÃƒÂ©rio Infantil Lagoinha",
-  "start_url": "/",
+  "description": "Turmas, presença e comunicação com as famílias.",
+  "start_url": "/kids",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

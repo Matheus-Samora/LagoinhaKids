@@ -23,7 +23,10 @@ def main():
         if not c.execute('SELECT 1 FROM users LIMIT 1').fetchone():
             password=os.getenv('KIDS_BOOTSTRAP_PASSWORD','')
             if len(password)<16:raise RuntimeError('An initial administrator password is required.')
-            c.execute('INSERT INTO users(name,email,password,role,created_at) VALUES(?,?,?,?,?)',('Administração Lagoinha Kids',os.environ['KIDS_BOOTSTRAP_EMAIL'],s.password_hash(password),'admin',s.now()))
+            uid=c.execute('INSERT INTO users(name,email,password,role,created_at) VALUES(?,?,?,?,?)',('Administração Lagoinha Systems',os.environ['KIDS_BOOTSTRAP_EMAIL'],s.password_hash(password),'admin',s.now())).lastrowid
+            c.execute('INSERT INTO platform_admins VALUES(?)',(uid,))
+            from .platform_access import kids_grant
+            kids_grant(c,uid,'admin')
     processes=[subprocess.Popen([sys.executable,'-m','uvicorn','backend.app:app','--host','0.0.0.0','--port',os.getenv('PORT','8770'),'--proxy-headers']),subprocess.Popen([sys.executable,'-m','backend.push_worker'])]
     stopping=False
     def stop(*_):

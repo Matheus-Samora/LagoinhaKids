@@ -37,7 +37,7 @@ self.addEventListener('push', event => {
     vibrate: isUrgent ? [1000, 300, 1000, 300, 1000, 300, 1500] : [200, 100, 200],
     silent: false,
     data: {
-      url: data.url || (isUrgent ? '/#overview' : '/#notifications'),
+      url: data.url || (isUrgent ? '/kids#overview' : '/kids#notifications'),
       id: data.id || null,
       kind: data.kind || (isUrgent ? 'urgent_call' : 'general'),
       urgent: isUrgent,
@@ -84,7 +84,7 @@ self.addEventListener('notificationclick', event => {
   // 2. Abrir / Focar o aplicativo diretamente no chamado:
   event.waitUntil(
     (async () => {
-      const targetUrl = '/#notifications';
+      const targetUrl = '/kids#notifications';
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const client of windows) {
         if (new URL(client.url).origin === self.location.origin) {
@@ -92,6 +92,7 @@ self.addEventListener('notificationclick', event => {
             client.postMessage({ type: 'TRIGGER_CALL_MODAL', payload: data });
           }
           client.postMessage({ type: 'NAVIGATE_PAGE', page: data.urgent ? 'overview' : 'notifications' });
+          if(!new URL(client.url).pathname.startsWith('/kids'))await client.navigate(targetUrl);
           return client.focus();
         }
       }

@@ -270,7 +270,7 @@ def migrate_school():
         conn.rollback();raise
     finally:conn.close()
 
-def init():
+def init_legacy():
     if os.getenv('KIDS_DATABASE_URL'):
         from .postgres import init as postgres_init
         postgres_init()
@@ -315,5 +315,10 @@ def seed():
     text+='\n'.join(f'- **{r}**: `{e}` — senha: `{p}`' for r,e,p in credentials)
     (DATA/'ACESSOS-LOCAIS.md').write_text(text,encoding='utf-8')
     return True
+
+def init():
+    init_legacy()
+    from .platform_access import migrate
+    with db() as connection:migrate(connection,bool(os.getenv('KIDS_DATABASE_URL')))
 
 init()
