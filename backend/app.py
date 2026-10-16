@@ -261,6 +261,8 @@ def google_callback(request:Request,state:str='',code:str='',error:str=''):
         else:
             if c.execute('SELECT 1 FROM users WHERE email=?',(mail,)).fetchone(): return RedirectResponse('/?auth_error=link_required',303)
             uid=c.execute('INSERT INTO users(name,email,role,google_sub,created_at) VALUES(?,?,?,?,?)',(claims.get('name',mail)[:100],mail,'parent',sub,s.now())).lastrowid
+            from .platform_access import kids_grant
+            kids_grant(c,uid,'parent')
     response=RedirectResponse('/',303);response.delete_cookie('google_flow',path='/api/auth/google');login_user(response,uid);return response
 
 class Link(BaseModel): parent_id:int
