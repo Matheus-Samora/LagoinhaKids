@@ -62,3 +62,17 @@ def test_finance_only_user_cannot_access_kids_but_can_access_finance():
     assert parent.get('/api/finance').status_code==200
     assert parent.get('/api/members').status_code==403
     assert parent.get('/api/children').status_code==403
+
+def test_revoked_kids_access_stops_pending_push(monkeypatch):
+    from backend import push_worker
+    from test_web_push import configure
+    data=configure(monkeypatch);parent=client(3)
+    assert parent.post('/api/web-push/subscribe',json=data).status_code==200
+    assert parent.post('/api/web-push/test').status_code==200
+    with s.db() as c:c.execute("UPDATE module_access SET enabled=0 WHERE user_id=3 AND module='kids'")
+    delivered=[]
+    monkeypatch.setattr(push_worker,'fcm_ready',lambda:False)
+    monkeypatch.setattr(push_worker,'apns_ready',lambda:False)
+    monkeypatch.setattr(push_worker.web_push,'send',lambda *args:delivered.append(True) or True)
+    assert push_worker.deliver_batch()['sent']==0
+    assert delivered==[]
