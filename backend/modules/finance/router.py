@@ -1,4 +1,5 @@
 from datetime import date,timedelta
+from decimal import Decimal
 import csv,io,secrets,json,html as html_lib
 from fastapi import APIRouter,Depends,Query,UploadFile,File,Response
 from pydantic import Field
@@ -14,6 +15,10 @@ class SafeCsvWriter:
     def writerow(self,values):
         # Exported user text must not become a spreadsheet formula.
         self.writer.writerow(["'"+v if isinstance(v,str) and v.lstrip().startswith(('=','+','-','@')) else v for v in values])
+
+def json_number(value):
+    if isinstance(value,Decimal):return int(value) if value==value.to_integral_value() else str(value)
+    raise TypeError('Tipo não suportado no relatório financeiro.')
 
 class CostCenter(Record):
     name:str=Field(min_length=2,max_length=120)
@@ -337,7 +342,7 @@ def generate_custom_report(
 
     if format=='json':
         payload={'generated_at':s.now(),'report_type':report_type,'filters':{'start_date':start_date,'end_date':end_date,'account_id':account_id,'bank':bank,'cost_center_id':cost_center_id,'direction':direction,'payment_status':payment_status},'engine':engine,'accounts':accounts,'cost_centers':cost_centers,'entries':entries,'closings':closings}
-        return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.json"'})
+        return Response(json.dumps(payload,ensure_ascii=False,indent=2,default=json_number).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.json"'})
 
     if format=='csv':
         buf=io.StringIO();buf.write('\ufeff');writer=SafeCsvWriter(buf)
