@@ -109,8 +109,8 @@ def main():
     gcloud('builds','submit','--config=cloudbuild.yaml','--substitutions=_IMAGE='+image,'--service-account=projects/'+PROJECT+'/serviceAccounts/'+build_sa)
     url=f'https://{SERVICE}-{NUMBER}.{REGION}.run.app'
     gcloud('run','deploy',SERVICE,'--image='+image,'--region='+REGION,'--service-account='+SA,'--add-cloudsql-instances='+connection,
-        '--set-secrets=KIDS_DATABASE_URL=kids-database-url:latest,KIDS_MASTER_KEY=kids-master-key:latest,KIDS_WEB_PUSH_PRIVATE_KEY=kids-vapid-key:latest,KIDS_BOOTSTRAP_PASSWORD=kids-bootstrap-password:latest',
-        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com',
+        '--set-secrets=KIDS_DATABASE_URL=kids-database-url:latest,KIDS_MASTER_KEY=kids-master-key:latest,KIDS_WEB_PUSH_PRIVATE_KEY=kids-vapid-key:latest,KIDS_BOOTSTRAP_PASSWORD=kids-bootstrap-password:latest,SMTP_PASSWORD=lagoinha-systems-smtp-password:latest',
+        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_USER=be996a001@smtp-brevo.com,SMTP_FROM=imm.tecnologia1@gmail.com',
         '--min-instances=1','--max-instances=2','--concurrency=40','--memory=1Gi','--cpu=1','--timeout=60','--no-cpu-throttling','--execution-environment=gen2','--allow-unauthenticated')
     service=json.loads(gcloud('run','services','describe',SERVICE,'--region='+REGION,'--format=json').stdout)
     actual=service['status']['url']

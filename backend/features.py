@@ -8,7 +8,8 @@ router=APIRouter(prefix='/api')
 
 def mail_ready():return bool(os.getenv('SMTP_HOST') and os.getenv('SMTP_FROM'))
 def send_mail(recipient,subject,body):
-    msg=EmailMessage();msg['From']=os.environ['SMTP_FROM'];msg['To']=recipient;msg['Subject']=subject;msg.set_content(body)
+    sender=os.environ['SMTP_FROM'].strip()
+    msg=EmailMessage();msg['From']=sender if '<' in sender else f'Lagoinha Systems <{sender}>';msg['To']=recipient;msg['Subject']=subject;msg.set_content(body)
     with smtplib.SMTP(os.environ['SMTP_HOST'],int(os.getenv('SMTP_PORT','587')),timeout=15) as server:
         server.starttls(context=ssl.create_default_context())
         if os.getenv('SMTP_USER'):server.login(os.environ['SMTP_USER'],os.environ['SMTP_PASSWORD'])
@@ -152,7 +153,7 @@ def send_verification(tasks:BackgroundTasks,user=Depends(session)):
         c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,attempt['failures']+1 if attempt and attempt['expires']>time.time() else 1,int(time.time())+300))
         c.execute('DELETE FROM auth_tokens WHERE user_id=? AND kind="verify"',(user['id'],))
         c.execute('INSERT INTO auth_tokens VALUES(?,?,?,?)',(s.digest(token),user['id'],'verify',int(time.time())+86400))
-    tasks.add_task(send_mail,user['email'],'Confirmar e-mail — Lagoinha Kids',f'Confirme seu e-mail em até 24 horas: {PUBLIC_URL}/?verify={token}')
+    tasks.add_task(send_recovery_mail,user['email'],'Confirmar e-mail — Lagoinha Kids',f'Confirme seu e-mail em até 24 horas: {PUBLIC_URL}/?verify={token}')
     return {'ok':True}
 class VerifyEmail(BaseModel):token:str=Field(max_length=200)
 @router.post('/auth/email/verify')

@@ -4,6 +4,6 @@ Adiciona Esqueci minha senha ao login do Lagoinha Systems e formulário de redef
 
 Links expiram em 30 minutos, são de uso único e armazenados somente como hash. Uma nova solicitação substitui o link anterior. Ao redefinir, as sessões e dispositivos anteriores são revogados. Respostas não revelam se uma conta existe; limite de cinco solicitações por endereço a cada cinco minutos. Novos links usam fragmento para evitar enviar o token na URL das requisições HTTP. TLS SMTP valida o certificado do provedor. Falhas de entrega são registradas sem destinatário, senha ou token.
 
-Validação local: 112 testes aprovados e build Vite. Testes específicos cobrem entrega simulada, privacidade, limites, validade, uso único e revogação de sessão. O teste de envio real do Cloud Run depende da liberação de SMTP para IPs variáveis no painel Brevo; não confundir autenticação local com envio confirmado do servidor, nem aceitação SMTP com entrega na caixa de entrada.
+Validação local e de produção: 112 testes aprovados, build Vite concluído e envio real do Cloud Run (`southamerica-east1`) validado via `smtp-relay.brevo.com:587` com remetente verificado `Lagoinha Systems <imm.tecnologia1@gmail.com>` e entrega confirmada (`event: delivered`) na API transacional do Brevo.
 
-Credenciais ficam exclusivamente no Secret Manager do projeto lagoinha-kids-20261014; nunca inserir chaves no repositório. Alterações amplas da checklist continuam em branch separado.
+Credenciais ficam exclusivamente no Secret Manager do projeto `lagoinha-kids-20261014` (`lagoinha-systems-smtp-password`); nunca inserir chaves no repositório. Alterações amplas da checklist continuam em branch separado.
