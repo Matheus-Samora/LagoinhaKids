@@ -211,8 +211,8 @@ window.addEventListener('popstate',()=>{
     app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
     translateDOM(app);
   }
-function title(title,subtitle,button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</div>`;}
-function stat(label,value,helper,i,color){return `<article class="stat"><div><span>${label}</span><strong>${value}</strong><small>${helper}</small></div><span class="stat-icon" style="background:${color}">${icon(i,23)}</span></article>`;}
+function title(title,subtitle='',button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1>${subtitle?`<p>${subtitle}</p>`:''}</div>${button}</div>`;}
+function stat(label,value,helper,i,color){return `<article class="stat"><div><span>${label}</span><strong>${value}</strong>${helper?`<small>${helper}</small>`:''}</div><span class="stat-icon" style="background:${color}">${icon(i,23)}</span></article>`;}
 function filtered(){return S.children.filter(ch=>(S.room==='all'||String(ch.room_id)===S.room)&&ch.name.toLowerCase().includes(S.search.toLowerCase()));}
 function filters(){return `<div class="filters"><label class="search">${icon('search',18)}<input id="student-search" placeholder="Buscar aluno pelo nome" value="${escape(S.search)}" aria-label="Buscar aluno pelo nome"/></label><select id="room-filter" aria-label="Filtrar turma"><option value="all">Todas as minhas turmas</option>${S.rooms.map(r=>`<option value="${r.id}" ${String(r.id)===S.room?'selected':''}>${escape(r.name)}</option>`).join('')}</select></div>`;}
 
@@ -253,7 +253,7 @@ function pagingAlertBanner(){
 
 function teamPage(){
  const staff=S.user&&S.user.role!=='parent';
- if(!staff)return empty('Acesso restrito','Esta área é exclusiva para professores e administração do Lagoinha Kids.');
+ if(!staff)return empty('Acesso restrito','Área exclusiva para equipe do Lagoinha Kids.');
 
  const members=S.teamMembers||[];
  const filter=S.teamFilter||'all';
@@ -276,7 +276,7 @@ function teamPage(){
   </div>
  `:'';
 
- return `${title('Professores e Monitores','Equipe que cuida das turmas e conduz as aulinhas.',headerActions)}
+ return `${title('Professores e Monitores','',headerActions)}
  <div class="filter-chips">
   <button class="filter-chip ${filter==='all'?'active':''}" data-action="filter-team" data-filter="all">Todos (${members.length})</button>
   <button class="filter-chip ${filter==='teachers'?'active':''}" data-action="filter-team" data-filter="teachers">👨‍🏫 Professores (${teachersCount})</button>
@@ -310,24 +310,24 @@ function teamPage(){
       ${cleanPhone?`
         <div class="team-contact-row">
           <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="team-whatsapp-link">
-            ${icon('whatsapp',14)} <span>${escape(m.phone)} (Conversar)</span>
+            ${icon('whatsapp',14)} <span>${escape(m.phone)}</span>
           </a>
         </div>
       `:''}
 
       <div class="team-rooms-section">
-        <span class="team-rooms-label">Turmas de atuação:</span>
+        <span class="team-rooms-label">Turmas:</span>
         <div class="team-rooms-chips">
-          ${assignedRooms.length?assignedRooms.map(rname=>`<span class="room-chip">${escape(rname)}</span>`).join(''):'<span class="soft-info">Nenhuma turma atribuída</span>'}
+          ${assignedRooms.length?assignedRooms.map(rname=>`<span class="room-chip">${escape(rname)}</span>`).join(''):'<span class="soft-info">Nenhuma atribuída</span>'}
         </div>
       </div>
     </div>
 
     <div class="team-card-footer">
-      ${canEdit?`<button type="button" class="mini-button secondary" data-action="edit-team-member" data-id="${m.id}">${icon('settings',14)} Gerenciar cadastro</button>`:'<span class="soft-info">Gerenciado pela coordenação</span>'}
+      ${canEdit?`<button type="button" class="mini-button secondary" data-action="edit-team-member" data-id="${m.id}">${icon('settings',14)} Editar</button>`:''}
     </div>
   </article>`;
- }).join('')}</div>`:empty('Nenhum membro nesta categoria','Cadastre novos professores e monitores para fortalecer o ministério infantojuvenil.')}`;
+ }).join('')}</div>`:empty('Nenhum membro nesta categoria','')}`;
 }
 
 function eventsPage(){
@@ -339,11 +339,11 @@ function eventsPage(){
   return true;
  });
 
- return `${title('Mural de Eventos','Acampamentos, EBF, Cultos e atividades para Kids e Teens.',staff?`<button class="btn primary" data-action="new-event">${icon('plus',17)} Novo evento</button>`:'')}
+ return `${title('Mural de Eventos','',staff?`<button class="btn primary" data-action="new-event">${icon('plus',17)} Novo evento</button>`:'')}
  <div class="filter-chips">
-  <button class="filter-chip ${audience==='all'?'active':''}" data-action="filter-events" data-target="all">Todos os eventos</button>
-  <button class="filter-chip ${audience==='kids'?'active':''}" data-action="filter-events" data-target="kids">Kids (0 a 11 anos)</button>
-  <button class="filter-chip ${audience==='teens'?'active':''}" data-action="filter-events" data-target="teens">Teens (12 a 17 anos)</button>
+  <button class="filter-chip ${audience==='all'?'active':''}" data-action="filter-events" data-target="all">Todos</button>
+  <button class="filter-chip ${audience==='kids'?'active':''}" data-action="filter-events" data-target="kids">Kids (0 a 11)</button>
+  <button class="filter-chip ${audience==='teens'?'active':''}" data-action="filter-events" data-target="teens">Teens (12 a 17)</button>
  </div>
  ${filtered.length?`<div class="events-grid">${filtered.map(ev=>{
   const regCount=ev.registrations_count||0;
@@ -366,11 +366,11 @@ function eventsPage(){
     <div class="event-meta-list">
      <div class="event-meta-item">${icon('clock',16)} <span>${dateStr}</span></div>
      <div class="event-meta-item">${icon('home',16)} <span>${escape(ev.location||'Templo Lagoinha')}</span></div>
-     <div class="event-meta-item">${icon('kids',16)} <span>Faixa etária: ${ev.min_age} a ${ev.max_age} anos</span></div>
+     <div class="event-meta-item">${icon('kids',16)} <span>${ev.min_age} a ${ev.max_age} anos</span></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:11px;color:#71717a;margin-bottom:6px;">
-     <span>${regCount} participante${regCount===1?'':'s'}</span>
-     <span>${cap-regCount>0?`${cap-regCount} vagas restantes`:'Vagas esgotadas'}</span>
+     <span>${regCount} inscrito${regCount===1?'':'s'}</span>
+     <span>${cap-regCount>0?`${cap-regCount} vagas`:'Esgotado'}</span>
     </div>
     <div class="event-capacity-bar">
      <div class="event-capacity-fill" style="width:${pct}%"></div>
@@ -386,14 +386,14 @@ function eventsPage(){
     </div>`:''}
    </div>
   </article>`;
- }).join('')}</div>`:empty('Nenhum evento nesta categoria','Acompanhe o mural para ficar por dentro dos próximos encontros!')}`;
+ }).join('')}</div>`:empty('Nenhum evento','')}`;
 }
 
 function roster(children,compact=false){return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th><th>${compact?'Entrada':'Responsável'}</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{
   const parentPhone=ch.parent_phone||'';
   return `<tr><td><div class="person">${kidAvatar(ch)}<div><strong>${escape(ch.name)}</strong><small>${age(ch.birthday)} anos</small>${ch.allergies?`<span class="allergy-badge" title="Alergia: ${escape(ch.allergies)}">⚠️ ${escape(ch.allergies)}</span>`:''}${ch.special_needs?`<span class="allergy-badge special" title="Necessidade Especial: ${escape(ch.special_needs)}">♿ ${escape(ch.special_needs)}</span>`:''}</div></div></td><td><span class="room-label">${escape(ch.room_name)}</span></td><td><span class="status ${ch.status}"><i></i>${statusName[ch.status]}</span>${ch.claim_code?`<span class="claim-tag-badge">TAG: ${escape(ch.claim_code)}</span>`:''}</td><td>${compact?time(ch.in_at):escape(ch.parent_name||'Aguardando vínculo')}</td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}">${ch.status==='present'?'Registrar saída':'Registrar entrada'}</button><button class="icon-button" title="Carteirinha Digital (QR Code)" aria-label="Carteirinha de ${escape(ch.name)}" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',18)}</button>${S.user.role!=='parent'&&ch.status==='present'?`<button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Chamar responsável no telão">${icon('speaker',15)} Telão</button>`:''}${parentPhone?`<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da equipe do Lagoinha Kids sobre ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" title="Conversar no WhatsApp">${icon('whatsapp',14)} Whats</a>`:''}<button class="icon-button" title="Notificar responsável" aria-label="Notificar responsável de ${escape(ch.name)}" data-action="notify" data-kind="please_pickup" data-id="${ch.id}">${icon('bell',18)}</button>${!compact&&S.user.role==='admin'?`<button class="icon-button" title="Vincular responsável" aria-label="Vincular responsável a ${escape(ch.name)}" data-action="link-guardian" data-id="${ch.id}">${icon('kids',18)}</button>`:''}</div></td></tr>`;
-}).join('')}</tbody></table></div>`:empty('Nenhum aluno por aqui','Ajuste a busca ou cadastre o primeiro aluno da turma.');}
-function empty(title,sub){return `<div class="empty">${icon('heart',30)}<h3>${title}</h3><p>${sub}</p></div>`;}
+}).join('')}</tbody></table></div>`:empty('Nenhum aluno','');}
+function empty(title,sub=''){return `<div class="empty">${icon('heart',30)}<h3>${title}</h3>${sub?`<p>${sub}</p>`:''}</div>`;}
 function unreadBanner(){
  const unread=S.notifications.filter(n=>!n.read_at).length;
  if(!unread || S.page==='notifications') return '';
@@ -401,11 +401,11 @@ function unreadBanner(){
  return `<aside class="unread-banner" data-page="notifications" role="alert" tabindex="0">
   <div class="unread-banner-icon">${icon('bell', 20)}</div>
   <div class="unread-banner-content">
-   <strong>${unread === 1 ? '1 novo recado da salinha' : `${unread} novos recados da salinha`}</strong>
-   <p>${escape(latest?.title ? `${latest.title}: ${latest.message}` : 'Toque para conferir os recados da equipe.')}</p>
+   <strong>${unread === 1 ? '1 novo recado' : `${unread} novos recados`}</strong>
+   <p>${escape(latest?.title ? `${latest.title}: ${latest.message}` : 'Toque para ver.')}</p>
   </div>
   <div class="unread-banner-action">
-   <span>Ver avisos</span> ${icon('arrow', 14)}
+   <span>Ver</span> ${icon('arrow', 14)}
   </div>
  </aside>`;
 }
@@ -425,26 +425,25 @@ function renderInnerPage(){
    const targetRoom=S.rooms.find(r=>r.id!==curRoom.id&&cAge>=r.min_age&&cAge<=r.max_age);
    return {child:ch,curRoom,cAge,targetRoom};
   }).filter(Boolean):[];
-  const transitionBanner=ageTransitions.length?`<section class="panel" style="margin-bottom:18px;border:1.5px solid #18181b;background:#fafafa;"><div class="panel-heading"><div><h2>🎂 Transição de Faixa Etária (${ageTransitions.length})</h2><p>Crianças que completaram idade para avançar de turma no Lagoinha Kids.</p></div><span class="tag">Gestão Pedagógica</span></div><div style="display:grid;gap:8px;">${ageTransitions.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid #e4e4e7;border-radius:10px;flex-wrap:wrap;"><div><strong>${escape(t.child.name)}</strong> <span class="tag">${t.cAge} anos</span><small style="display:block;color:#71717a;">Turma atual: ${escape(t.curRoom.name)} (${t.curRoom.min_age}-${t.curRoom.max_age} anos)${t.targetRoom?` → Recomendada: ${escape(t.targetRoom.name)} (${t.targetRoom.min_age}-${t.targetRoom.max_age} anos)`:''}</small></div>${t.targetRoom&&S.user.role==='admin'?`<button type="button" class="mini-button" data-action="transfer-child-room" data-id="${t.child.id}" data-room-id="${t.targetRoom.id}">Transferir p/ ${escape(t.targetRoom.name)} →</button>`:'<span class="tag">Verificar turma</span>'}</div>`).join('')}</div></section>`:'';
-   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'Um novo encontro. Muitas histórias para acolher.')}<section class="welcome"><div><span class="pill">${icon('heart',13)} CADA CRIANÇA IMPORTA</span><h2>Mais presença.<br>Mais cuidado. <em>Mais conexão.</em></h2><p>Organize a salinha e mantenha as famílias por perto.<br>Vamos fazer de hoje um dia especial?</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button>${S.user.role!=='parent'?`<button class="btn secondary" data-action="totem-kiosk" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.28);">🖥️ Modo Totem Recepção</button>`:''}</div></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos cadastrados',S.children.length,'Nas suas turmas','kids','#f4f4f5')}${stat('Na salinha agora',present,'Presença confirmada pela equipe','check','#f4f4f5')}${stat('Saídas registradas',departed,'Com responsável conferido','out','#f4f4f5')}${stat('Minhas turmas',S.rooms.length,'Espaços para crescer','rooms','#f4f4f5')}</div>${transitionBanner}<div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2><p>Acompanhe quem já chegou.</p></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Um lugar para cada um</h2><p>O movimento das suas turmas.</p></div><button class="text-link" data-page="rooms">Gerenciar turmas ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}<div class="note-soft">${icon('shield',17)} Entradas e saídas sempre confirmadas por uma pessoa da equipe.</div></section></div>`;
+  const transitionBanner=ageTransitions.length?`<section class="panel" style="margin-bottom:18px;border:1.5px solid #18181b;background:#fafafa;"><div class="panel-heading"><div><h2>🎂 Transição de Faixa Etária (${ageTransitions.length})</h2></div><span class="tag">Pedagógico</span></div><div style="display:grid;gap:8px;">${ageTransitions.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid #e4e4e7;border-radius:10px;flex-wrap:wrap;"><div><strong>${escape(t.child.name)}</strong> <span class="tag">${t.cAge} anos</span><small style="display:block;color:#71717a;">${escape(t.curRoom.name)}${t.targetRoom?` → ${escape(t.targetRoom.name)}`:''}</small></div>${t.targetRoom&&S.user.role==='admin'?`<button type="button" class="mini-button" data-action="transfer-child-room" data-id="${t.child.id}" data-room-id="${t.targetRoom.id}">Transferir →</button>`:'<span class="tag">Verificar</span>'}</div>`).join('')}</div></section>`:'';
+   return `${title(`Olá, ${escape(S.user.name.split(' ')[0])} <span class="wave">✦</span>`,'')}<section class="welcome"><div><span class="pill">${icon('heart',13)} LAGOINHA KIDS</span><h2>Mais presença.<br>Mais cuidado.</h2><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"><button class="btn dark" data-page="attendance">Abrir chamada ${icon('arrow',17)}</button>${S.user.role!=='parent'?`<button class="btn secondary" data-action="totem-kiosk" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.28);">🖥️ Modo Totem</button>`:''}</div></div><div class="welcome-art" aria-hidden="true"><div class="art-arch"></div><span class="flower">✳</span><div class="sun">☀</div><div class="hill"></div><div class="little-star">✦</div></div></section><div class="stats">${stat('Alunos',S.children.length,'','kids','#f4f4f5')}${stat('Na salinha',present,'','check','#f4f4f5')}${stat('Saídas',departed,'','out','#f4f4f5')}${stat('Turmas',S.rooms.length,'','rooms','#f4f4f5')}</div>${transitionBanner}<div class="dashboard-grid"><section class="panel"><div class="panel-heading"><div><h2>Presenças de hoje</h2></div><button class="text-link" data-page="attendance">Ver chamada ${icon('arrow',16)}</button></div>${roster(S.children.slice(0,5),true)}</section><section class="panel room-summary"><div class="panel-heading"><div><h2>Turmas</h2></div><button class="text-link" data-page="rooms">Gerenciar ${icon('arrow',16)}</button></div>${S.rooms.map(r=>`<button class="room-summary-item" data-action="filter-room" data-id="${r.id}"><span class="room-symbol" style="background:${r.color}">${icon('rooms',18)}</span><div><strong>${escape(r.name)}</strong><small>${r.min_age} a ${r.max_age} anos</small><div class="progress"><i style="width:${Math.min(100,r.present/r.capacity*100)}%;background:${r.color}"></i></div></div><span>${r.present}<small>/${r.capacity}</small></span></button>`).join('')}</section></div>`;
  }
  if(S.page==='events')return eventsPage();
  if(S.page==='team'&&S.user.role!=='parent')return teamPage();
  if(S.page==='notifications'){
   const unread=S.notifications.filter(n=>!n.read_at).length;
-  const markAllBtn = unread ? `<button class="btn secondary" data-action="mark-all-read">${icon('check',16)} Marcar todas como lidas</button>` : '';
+  const markAllBtn = unread ? `<button class="btn secondary" data-action="mark-all-read">${icon('check',16)} Marcar lidas</button>` : '';
   const pushActive = hasPushPermission();
   const pushBanner = pushActive ? `
     <div class="push-status-card enabled">
       <div class="push-card-content">
         <div class="push-icon-bubble active">${icon('check', 20)}</div>
         <div>
-          <strong>Notificações no celular ativadas ✓</strong>
-          <p>Ative avisos neste aparelho para recebê-los também com o aplicativo fechado.</p>
+          <strong>Notificações ativadas ✓</strong>
         </div>
       </div>
       <div class="push-card-actions">
-        <button class="mini-button secondary" data-action="test-push-notification" title="Testar envio de notificação">${icon('bell', 14)} Testar alerta</button>
+        <button class="mini-button secondary" data-action="test-push-notification">${icon('bell', 14)} Testar</button>
       </div>
     </div>
   ` : `
@@ -452,23 +451,22 @@ function renderInnerPage(){
       <div class="push-card-content">
         <div class="push-icon-bubble">${icon('bell', 22)}</div>
         <div>
-          <strong>Ativar notificações no celular</strong>
-          <p>Receba avisos instantâneos de check-in, saída e chamadas das professoras fora do app.</p>
+          <strong>Notificações no celular</strong>
         </div>
       </div>
       <div class="push-card-actions">
-        <button class="btn primary push-action-btn" data-action="open-push-modal">${icon('bell', 16)} Ativar agora</button>
+        <button class="btn primary push-action-btn" data-action="open-push-modal">${icon('bell', 16)} Ativar</button>
       </div>
     </div>
   `;
-  return `${title('Avisos','Recados da equipe e da família.', markAllBtn)}${pushBanner}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta"><span class="notification-tag">${escape(n.child_name||'Lagoinha Kids')}</span> · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Marcar como lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Tudo tranquilo por aqui','Os avisos para você aparecerão neste espaço.')}</section>`;
- }if(S.page==='users'&&S.user.role==='admin')return `${title('Pessoas que cuidam.','Gerencie os acessos e as turmas da sua equipe.',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'Nenhuma atribuída':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
+  return `${title('Avisos','', markAllBtn)}${pushBanner}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta"><span class="notification-tag">${escape(n.child_name||'Lagoinha Kids')}</span> · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Sem avisos','')}</section>`;
+ }if(S.page==='users'&&S.user.role==='admin')return `${title('Usuários','',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'—':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
  if(S.page==='settings')return settingsPage();
  return '';
 }
-function settingsPage(){return `${title('Seu espaço, seu acesso.','Confira sua conta e escolha como entrar.')}<div class="settings-grid"><section class="panel settings-panel"><h2>Minha conta</h2><div class="profile-card"><div class="profile-avatar-wrap">${userAvatar(S.user,'big')}<label class="avatar-upload-badge" title="Alterar foto de perfil" tabindex="0">${icon('settings',14)}<input type="file" id="user-avatar-file-input" accept="image/jpeg,image/png,image/webp" hidden/></label></div><div class="profile-details"><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;"><span class="tag">${roles[S.user.role]}</span><label class="btn secondary btn-sm" style="cursor:pointer;padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><span>📷 Trocar foto</span><input type="file" id="user-avatar-file-input-btn" accept="image/jpeg,image/png,image/webp" hidden/></label>${S.user.avatar_url?`<button type="button" class="mini-button danger-button" data-action="remove-user-avatar" style="padding:4px 8px;font-size:11px;">Remover foto</button>`:''}</div></div></div><div class="settings-aux-prefs"><div class="settings-aux-head"><strong>Preferências do Aplicativo</strong><small>Funções auxiliares de aparência e idioma</small></div><div class="settings-aux-controls"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Modo Claro') : t('theme.dark', '🌙 Modo Escuro')}</button><select class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.label} (${l.code.toUpperCase()})</option>`).join('')}</select></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair desta conta / Trocar de usuário</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #27272a;border-radius:10px;background:#18181b;color:#ffffff;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:32px;height:32px;border-radius:8px;background:#27272a;display:inline-grid;place-items:center;color:#ffffff;flex-shrink:0;">${icon('download', 18)}</span><div><strong style="font-size:13px;color:#ffffff;display:block;">Aplicativo no Celular</strong><small style="font-size:11px;color:#a1a1aa;">Instale no Android ou iPhone ou baixe o APK</small></div></div><button type="button" class="btn primary full" data-action="install-modal" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 16)} Baixar / Instalar no Celular</button></div><div style="margin-top:14px;padding:12px 14px;border:1.5px solid var(--border, #e4e4e7);border-radius:10px;background:var(--bg-soft, #fafafa);"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><strong style="font-size:13px;display:flex;align-items:center;gap:6px;">${icon('bell', 16)} Notificações no celular</strong><span class="push-status-pill">${hasPushPermission() ? 'Ativadas ✓' : 'Desativadas'}</span></div><p style="font-size:11.5px;color:#71717a;margin:0 0 10px 0;line-height:1.4;">Alertas de check-in, saída e chamadas das tias fora do app.</p><button type="button" class="btn secondary full" data-action="${hasPushPermission() ? 'test-push-notification' : 'open-push-modal'}">${hasPushPermission() ? '🔔 Enviar notificação de teste' : '🔔 Configurar e Ativar Notificações'}</button></div>${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar meu e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Vínculo Google</h3><p>${S.user.google_linked?'Sua conta Google está vinculada.':'Vincule a conta Google do mesmo e-mail após entrar com sua senha.'}</p><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Conta Google vinculada':'Vincular conta Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Política de Privacidade & LGPD</button>${!S.google?'<p class="muted-note">A integração aguarda configuração pela equipe de desenvolvimento.</p>':''}</section><section class="panel settings-panel"><h2>Trocar minha senha</h2><p>Use uma senha exclusiva com pelo menos 12 caracteres.</p><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico administrativo</h2><p>Últimas ações registradas no aplicativo.</p></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
+function settingsPage(){return `${title('Minha conta','')}<div class="settings-grid"><section class="panel settings-panel"><h2>Perfil</h2><div class="profile-card"><div class="profile-avatar-wrap">${userAvatar(S.user,'big')}<label class="avatar-upload-badge" title="Alterar foto de perfil" tabindex="0">${icon('settings',14)}<input type="file" id="user-avatar-file-input" accept="image/jpeg,image/png,image/webp" hidden/></label></div><div class="profile-details"><h3>${escape(S.user.name)}</h3><p>${escape(S.user.email)}</p><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;"><span class="tag">${roles[S.user.role]}</span><label class="btn secondary btn-sm" style="cursor:pointer;padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><span>📷 Foto</span><input type="file" id="user-avatar-file-input-btn" accept="image/jpeg,image/png,image/webp" hidden/></label>${S.user.avatar_url?`<button type="button" class="mini-button danger-button" data-action="remove-user-avatar" style="padding:4px 8px;font-size:11px;">Remover</button>`:''}</div></div></div><div class="settings-aux-prefs"><div class="settings-aux-head"><strong>Preferências</strong><small>Aparência e idioma</small></div><div class="settings-aux-controls"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Modo Claro') : t('theme.dark', '🌙 Modo Escuro')}</button><select class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.label} (${l.code.toUpperCase()})</option>`).join('')}</select></div></div><button type="button" class="btn secondary full logout-panel-btn" data-action="logout" style="margin-top:14px;border:1.5px solid #18181b;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('out',17)} <strong>Sair da conta</strong></button><button class="btn secondary full" data-action="revoke-sessions" style="margin-top:12px">Encerrar outros acessos</button><div style="margin-top:14px;padding:12px 14px;border:1.5px solid #27272a;border-radius:10px;background:#18181b;color:#ffffff;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:32px;height:32px;border-radius:8px;background:#27272a;display:inline-grid;place-items:center;color:#ffffff;flex-shrink:0;">${icon('download', 18)}</span><div><strong style="font-size:13px;color:#ffffff;display:block;">Aplicativo no Celular</strong></div></div><button type="button" class="btn primary full" data-action="install-modal" style="display:flex;align-items:center;justify-content:center;gap:8px;">${icon('download', 16)} Baixar / Instalar</button></div><div style="margin-top:14px;padding:12px 14px;border:1.5px solid var(--border, #e4e4e7);border-radius:10px;background:var(--bg-soft, #fafafa);"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><strong style="font-size:13px;display:flex;align-items:center;gap:6px;">${icon('bell', 16)} Notificações</strong><span class="push-status-pill">${hasPushPermission() ? 'Ativadas ✓' : 'Desativadas'}</span></div><button type="button" class="btn secondary full" data-action="${hasPushPermission() ? 'test-push-notification' : 'open-push-modal'}">${hasPushPermission() ? '🔔 Testar notificação' : '🔔 Ativar notificações'}</button></div>${S.user.role==='admin'?'<button class="btn secondary full" data-action="mfa" style="margin-top:12px">Autenticação em dois fatores</button>':''}${!S.user.email_verified?'<button class="btn secondary full" data-action="verify-email" style="margin-top:12px">Confirmar e-mail</button>':'<p class="muted-note">E-mail confirmado</p>'}<hr/><h3>Conta Google</h3><button class="btn secondary" data-action="google-link"><span class="google-g">G</span> ${S.user.google_linked?'Google vinculado':'Vincular Google'}</button><button type="button" class="btn secondary full" data-action="privacy-terms" style="margin-top:10px;border:1px solid #27272a;">${icon('shield',16)} Privacidade & LGPD</button></section><section class="panel settings-panel"><h2>Senha</h2><form data-form="password"><label>Senha atual<input type="password" name="current" autocomplete="current-password" required maxlength="128"/></label><label>Nova senha<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128"/></label><label>Confirmar nova senha<input type="password" name="confirm" autocomplete="new-password" required minlength="12" maxlength="128"/></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar senha</button></form></section></div>${S.user.role==='admin'?`<section class="panel audit-panel"><div class="panel-heading"><div><h2>Histórico</h2></div><span class="tag">Auditoria</span></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Aluno</th></tr></thead><tbody>${S.audit.slice(0,30).map(a=>`<tr><td>${new Date(a.created_at).toLocaleDateString('pt-BR')} · ${time(a.created_at)}</td><td>${escape(a.actor_name)}</td><td>${escape(a.action)}</td><td>${a.child_id?escape(S.children.find(ch=>ch.id===a.child_id)?.name||a.child_id):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;}
 
-function showModal(title,subtitle,html){modal.querySelector('#modal-content').innerHTML=`<div class="modal-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-button" data-action="close" aria-label="Fechar">${icon('close')}</button></div>${html}`;modal.showModal();}
+function showModal(title,subtitle,html){modal.querySelector('#modal-content').innerHTML=`<div class="modal-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h2>${title}</h2>${subtitle?`<p>${subtitle}</p>`:''}</div><button class="icon-button" data-action="close" aria-label="Fechar">${icon('close')}</button></div>${html}`;modal.showModal();}
 async function privacyModal(){
  try{
   const d=await api('/terms/privacy');
@@ -552,49 +550,48 @@ function faceModal(ch,mode){
  S.faceMode=mode||(ch.face_enrolled?'verify':'enroll');S.faceFile=null;if(S.faceUrl)URL.revokeObjectURL(S.faceUrl);S.faceUrl=null;
  showModal('Conferência facial auxiliar',escape(ch.name)+' · '+escape(ch.room_name),`${!ch.face_allowed?`<div class="soft-info">O responsável ainda não autorizou o recurso. A conferência manual continua disponível.</div>${ch.parent_id?`<button class="btn secondary full" data-action="request-consent" data-id="${ch.id}">Solicitar autorização ao responsável</button>`:''}`:`<div class="face-tabs"><button class="${S.faceMode==='enroll'?'selected':''}" data-action="face-mode" data-mode="enroll" data-id="${ch.id}">Cadastrar / atualizar</button><button class="${S.faceMode==='verify'?'selected':''}" data-action="face-mode" data-mode="verify" data-id="${ch.id}" ${!ch.face_enrolled?'disabled':''}>Conferir 1:1</button></div><form data-form="face" data-id="${ch.id}"><label class="face-drop" tabindex="0" role="button" aria-label="Selecionar retrato"><input type="file" id="face-input" accept="image/jpeg,image/png,image/webp" hidden/><div id="face-placeholder">${icon('face',44)}<strong>Selecionar foto autorizada</strong><span>Um rosto · JPG, PNG ou WebP · até 8 MB</span></div><img id="face-preview" alt="Retrato selecionado" hidden/></label><button type="button" class="btn secondary full" data-action="face-camera">${icon('face',18)} Capturar com a câmera</button><div id="camera-region" hidden><video id="face-video" autoplay muted playsinline></video><button type="button" class="btn dark full" data-action="face-snap">Capturar retrato</button></div><p class="soft-info">${S.faceMode==='enroll'?'Somente o descritor criptografado será salvo no servidor, vinculado a este aluno.':'O resultado é uma medida de similaridade, não uma confirmação de identidade.'} Modelo ainda não validado para crianças. Sem prova de vida. Não registra entrada ou saída.</p><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${S.faceMode==='enroll'?'Salvar cadastro autorizado':'Comparar com cadastro'} ${icon('arrow',18)}</button><div id="face-result" aria-live="polite"></div></form>${ch.face_enrolled?`<button class="text-link danger-link" data-action="delete-face" data-id="${ch.id}">Excluir descritor cadastrado</button>`:''}`}`);
 }
-function userModal(user){showModal(user?'Gerenciar acesso':'Mais uma pessoa para cuidar.',user?escape(user.name):'Atribua o perfil adequado e as turmas de atuação.',`<form data-form="${user?'edit-user':'user'}" ${user?`data-id="${user.id}"`:''}>${user?`<label class="checkbox-label"><input type="checkbox" name="active" ${user.active?'checked':''}/>Acesso ativo</label>`:`<label>Nome completo<input name="name" required minlength="2" maxlength="100"/></label><label>E-mail<input name="email" type="email" required maxlength="200"/></label><label>Senha inicial<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Pelo menos 12 caracteres"/></label><label>Perfil<select name="role"><option value="teacher">Professor(a)</option><option value="parent">Responsável</option><option value="admin">Administração / desenvolvimento</option></select></label>`}<fieldset><legend>Turmas de atuação (perfil professor)</legend>${S.rooms.map(r=>`<label class="checkbox-label"><input type="checkbox" name="rooms" value="${r.id}" ${user?.rooms.includes(r.id)?'checked':''}/>${escape(r.name)}</label>`).join('')}</fieldset><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${user?'Salvar acesso':'Criar usuário'}</button></form>`);}
+function userModal(user){showModal(user?'Gerenciar acesso':'Novo usuário',user?escape(user.name):'',`<form data-form="${user?'edit-user':'user'}" ${user?`data-id="${user.id}"`:''}>${user?`<label class="checkbox-label"><input type="checkbox" name="active" ${user.active?'checked':''}/>Acesso ativo</label>`:`<label>Nome completo<input name="name" required minlength="2" maxlength="100"/></label><label>E-mail<input name="email" type="email" required maxlength="200"/></label><label>Senha inicial<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Mínimo 12 caracteres"/></label><label>Perfil<select name="role"><option value="teacher">Professor(a)</option><option value="parent">Responsável</option><option value="admin">Administração</option></select></label>`}<fieldset><legend>Turmas</legend>${S.rooms.map(r=>`<label class="checkbox-label"><input type="checkbox" name="rooms" value="${r.id}" ${user?.rooms.includes(r.id)?'checked':''}/>${escape(r.name)}</label>`).join('')}</fieldset><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${user?'Salvar':'Criar usuário'}</button></form>`);}
 function teamMemberModal(member=null){
  const isEdit=Boolean(member);
- const titleText=isEdit?'Gerenciar Membro da Equipe':'Cadastrar Professor ou Monitor';
- const subText=isEdit?escape(member.name):'Cadastre um voluntário como professor ou monitor para atuar nas turmas.';
+ const titleText=isEdit?'Editar Membro':'Novo Professor / Monitor';
+ const subText=isEdit?escape(member.name):'';
  const isTargetAdmin=member?.role==='admin';
  const currentRole=member?.staff_role||(member?.role==='admin'?'admin':'teacher');
 
  const html=`<form data-form="team-member" ${isEdit?`data-id="${member.id}"`:''}>
   <label>Nome completo
-    <input name="name" value="${escape(member?.name||'')}" required minlength="2" maxlength="100" placeholder="Nome completo do voluntário"/>
+    <input name="name" value="${escape(member?.name||'')}" required minlength="2" maxlength="100"/>
   </label>
   <label>E-mail
-    <input name="email" type="email" value="${escape(member?.email||'')}" required maxlength="200" placeholder="email@exemplo.com"/>
+    <input name="email" type="email" value="${escape(member?.email||'')}" required maxlength="200"/>
   </label>
-  <label>Celular / WhatsApp
-    <input name="phone" type="tel" value="${escape(member?.phone||'')}" maxlength="30" placeholder="(31) 99999-9999"/>
+  <label>WhatsApp
+    <input name="phone" type="tel" value="${escape(member?.phone||'')}" maxlength="30"/>
   </label>
   ${!isEdit?`
     <label>Senha inicial
-      <input name="password" type="password" required minlength="12" maxlength="128" placeholder="Mínimo 12 caracteres (ex: LagoinhaKids#2026)"/>
+      <input name="password" type="password" required minlength="12" maxlength="128" placeholder="Mínimo 12 caracteres"/>
     </label>
   `:`
     <label>Nova senha (opcional)
-      <input name="password" type="password" minlength="12" maxlength="128" placeholder="Deixe em branco para manter a senha atual"/>
+      <input name="password" type="password" minlength="12" maxlength="128"/>
     </label>
   `}
-  <label>Função no Ministério
+  <label>Função
     <select name="staff_role" ${isTargetAdmin&&S.user.role!=='admin'?'disabled':''}>
-      <option value="teacher" ${currentRole==='teacher'?'selected':''}>👨‍🏫 Professor(a) — Conduz a aulinha e chamada</option>
-      <option value="monitor" ${currentRole==='monitor'?'selected':''}>🤝 Monitor(a) — Apoio na sala e acolhimento</option>
-      ${S.user.role==='admin'?`<option value="admin" ${member?.role==='admin'?'selected':''}>🛡️ Coordenação / Admin</option>`:''}
+      <option value="teacher" ${currentRole==='teacher'?'selected':''}>👨‍🏫 Professor(a)</option>
+      <option value="monitor" ${currentRole==='monitor'?'selected':''}>🤝 Monitor(a)</option>
+      ${S.user.role==='admin'?`<option value="admin" ${member?.role==='admin'?'selected':''}>🛡️ Coordenação</option>`:''}
     </select>
   </label>
   ${isEdit?`
     <label class="checkbox-label" style="margin: 12px 0;">
       <input type="checkbox" name="active" ${member.active?'checked':''}/>
-      <span>Acesso ativo na equipe</span>
+      <span>Acesso ativo</span>
     </label>
   `:''}
   <fieldset style="border: 1px solid #27272a; border-radius: 8px; padding: 12px; margin: 14px 0;">
-    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas de Atuação</legend>
-    <p class="soft-info" style="margin-top: 0; margin-bottom: 8px; font-size: 11.5px;">Selecione as turmas em que este voluntário atuará:</p>
+    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas</legend>
     <div style="display: flex; flex-direction: column; gap: 6px;">
       ${S.rooms.map(r=>`
         <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -605,7 +602,7 @@ function teamMemberModal(member=null){
     </div>
   </fieldset>
   <p class="form-error" role="alert"></p>
-  <button class="btn primary full" type="submit">${isEdit?'Salvar alterações':'Cadastrar Membro'} ${icon('check',17)}</button>
+  <button class="btn primary full" type="submit">${isEdit?'Salvar':'Cadastrar'} ${icon('check',17)}</button>
  </form>`;
  showModal(titleText,subText,html);
 }
@@ -613,22 +610,21 @@ function teamMemberModal(member=null){
 function delegateRoleModal(){
  const candidates=S.teamCandidates||[];
  const html=`<form data-form="delegate-team">
-  <p class="soft-info" style="margin-top:0;margin-bottom:12px;">Selecione um membro ou responsável já cadastrado no Lagoinha Kids para delegar a função de professor ou monitor.</p>
-  <label>Membro Cadastrado
+  <label>Membro
     <select name="user_id" required>
-      <option value="">Selecione um membro...</option>
+      <option value="">Selecione...</option>
       ${candidates.map(c=>`<option value="${c.id}">${escape(c.name)} · ${escape(c.email)}</option>`).join('')}
     </select>
   </label>
-  ${!candidates.length?'<p class="soft-info" style="color:#ef4444;">Não há membros candidatos disponíveis no momento.</p>':''}
-  <label>Função a Delegar
+  ${!candidates.length?'<p class="soft-info" style="color:#ef4444;">Nenhum membro disponível.</p>':''}
+  <label>Função
     <select name="staff_role" required>
-      <option value="teacher">👨‍🏫 Professor(a) — Condução da aulinha e chamada</option>
-      <option value="monitor">🤝 Monitor(a) — Monitor de apoio na turma</option>
+      <option value="teacher">👨‍🏫 Professor(a)</option>
+      <option value="monitor">🤝 Monitor(a)</option>
     </select>
   </label>
   <fieldset style="border: 1px solid #27272a; border-radius: 8px; padding: 12px; margin: 14px 0;">
-    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas de Atuação</legend>
+    <legend style="font-size: 12px; font-weight: 700; padding: 0 6px;">Turmas</legend>
     <div style="display: flex; flex-direction: column; gap: 6px;">
       ${S.rooms.map(r=>`
         <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -639,9 +635,9 @@ function delegateRoleModal(){
     </div>
   </fieldset>
   <p class="form-error" role="alert"></p>
-  <button class="btn primary full" type="submit" ${candidates.length?'':'disabled'}>Confirmar Delegação ${icon('check',17)}</button>
+  <button class="btn primary full" type="submit" ${candidates.length?'':'disabled'}>Confirmar ${icon('check',17)}</button>
  </form>`;
- showModal('Delegar Função a Membro','Promova um usuário para a equipe de ministério infantil.',html);
+ showModal('Delegar Função','',html);
 }
 
 function stopCamera(){S.stream?.getTracks().forEach(t=>t.stop());S.stream=null;}

@@ -2862,25 +2862,24 @@ button:active,
 /* Filter Chips */
 .filter-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
   padding: 4px 0 16px;
-  scrollbar-width: none;
-}
-.filter-chips::-webkit-scrollbar {
-  display: none;
 }
 .filter-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 8px 14px;
+  min-height: 38px;
   border-radius: 9999px;
   border: 1px solid #e4e4e7;
   background: #ffffff;
   color: #52525b;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;

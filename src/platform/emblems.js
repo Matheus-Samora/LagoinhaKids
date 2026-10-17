@@ -44,48 +44,48 @@ export const SECTOR_EMBLEMS = {
 
 export const MINISTRY_META = {
   'Music': {
-    tagline: 'Louvor & Adoração Musical',
-    description: 'Conduz a igreja em adoração através da música, banda, vocais e direção musical nos cultos e conferências.',
+    tagline: 'Louvor & Adoração',
+    description: 'Música, banda e vocais nos cultos.',
     roles: ['Ministro de Louvor', 'Vocal / Backing Vocal', 'Tecladista', 'Baterista', 'Guitarrista', 'Violonista', 'Baixista', 'Cordas / Sopros', 'Diretor Musical', 'VS / Tracks'],
     accent: '#7c3aed',
     bannerUrl: '/ministries/music.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/music.webp" alt="Ministério Music" loading="lazy"/></div>`
   },
   'Intercessão': {
-    tagline: 'Clamor, Vigília & Cobertura Espiritual',
-    description: 'Sustenta a igreja, famílias, pastores e cultos em oração contínua, intercessão profética e aconselhamento.',
+    tagline: 'Oração & Vigília',
+    description: 'Cobertura espiritual e oração pela igreja.',
     roles: ['Intercessor(a) de Culto', 'Torre de Oração', 'Líder de Turno', 'Aconselhamento de Altar'],
     accent: '#b45309',
     bannerUrl: '/ministries/intercessao.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/intercessao.webp" alt="Ministério Intercessão" loading="lazy"/></div>`
   },
   'Hero': {
-    tagline: 'Ministério de Homens & Crescimento Espiritual',
-    description: 'Fortalecimento espiritual de homens, sacerdócio bíblico no lar, comunhão e mentoria cristã para o crescimento com Deus.',
+    tagline: 'Ministério de Homens',
+    description: 'Comunhão e crescimento espiritual para homens.',
     roles: ['Integrante Hero', 'Líder de Homens', 'Mentoria Espiritual', 'Apoio aos Encontros'],
     accent: '#1e293b',
     bannerUrl: '/ministries/hero.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/hero.webp" alt="Ministério Hero" loading="lazy"/></div>`
   },
   'Shine': {
-    tagline: 'Grupo de Mulheres & Crescimento Espiritual',
-    description: 'Grupo de mulheres para crescimento espiritual e comunhão entre as mulheres.',
+    tagline: 'Grupo de Mulheres',
+    description: 'Comunhão e crescimento espiritual para mulheres.',
     roles: ['Voluntária Shine', 'Comunhão & Discipulado', 'Recepção Feminina', 'Organização de Encontros'],
     accent: '#be185d',
     bannerUrl: '/ministries/shine.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/shine.webp" alt="Ministério Shine" loading="lazy"/></div>`
   },
   'Bem Casados': {
-    tagline: 'Família, Casais & Aliança',
-    description: 'Fortalecimento de casamentos, cursos para noivos e casais, encontros familiares e mentoria conjugal.',
+    tagline: 'Casais & Família',
+    description: 'Fortalecimento de casamentos e famílias.',
     roles: ['Casal Mentor', 'Apoio em Cursos de Casais', 'Organização de Encontros', 'Acolhimento Familiar'],
     accent: '#0f766e',
     bannerUrl: '/ministries/bem-casados.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/bem-casados.webp" alt="Ministério Bem Casados" loading="lazy"/></div>`
   },
   'Rocket': {
-    tagline: 'Ministério de Adolescentes (Teens)',
-    description: 'Desperta uma geração de adolescentes apaixonados por Jesus com cultos vibrantes, GCs, acampamentos e discipulado.',
+    tagline: 'Adolescentes (Teens)',
+    description: 'Cultos, GCs e discipulado para adolescentes.',
     roles: ['Líder / Conselheiro Rocket', 'Louvor Rocket', 'Mídia & Criativo Rocket', 'Recreação & Eventos'],
     accent: '#ea580c',
     bannerUrl: '/ministries/rocket.webp',
@@ -93,79 +93,79 @@ export const MINISTRY_META = {
   },
   'Legacy': {
     tagline: 'Ministério de Jovens',
-    description: 'Movimento de jovens vocacionados a viver o Evangelho com intensidade nas universidades, trabalho e sociedade.',
+    description: 'Jovens vivendo o Evangelho em comunhão.',
     roles: ['Voluntário Legacy', 'Conector de Jovens', 'Produção & Louvor Legacy', 'Líder de GC Jovem'],
     accent: '#4338ca',
     bannerUrl: '/ministries/legacy.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/legacy.webp" alt="Ministério Legacy" loading="lazy"/></div>`
   },
   'Kids': {
-    tagline: 'Ministério Infantil Lagoinha Kids',
-    description: 'Ensina a Palavra de Deus às crianças com amor, excelência pedagógica e segurança total para as famílias.',
+    tagline: 'Ministério Infantil',
+    description: 'Ensino bíblico e cuidado para as crianças.',
     roles: ['Professor(a) Kids', 'Monitor(a) de Turma', 'Check-in & Recepção Kids', 'Louvor & Teatro Infantil'],
     accent: '#16a34a',
     bannerUrl: '/ministries/kids.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/kids.webp" alt="Ministério Kids" loading="lazy"/></div>`
   },
   'Manutenção': {
-    tagline: 'Infraestrutura, Zeladoria & Engenharia',
-    description: 'Cuida da casa de Deus mantendo instalações elétricas, acústicas, climatização e estrutura sempre impecáveis.',
+    tagline: 'Infraestrutura & Zeladoria',
+    description: 'Cuidado técnico e estrutura física da igreja.',
     roles: ['Técnico / Eletricista', 'Manutenção Geral', 'Climatização & Estrutura', 'Apoio Logístico'],
     accent: '#475569',
     bannerUrl: '/ministries/manutencao.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/manutencao.webp" alt="Ministério Manutenção" loading="lazy"/></div>`
   },
   'Voluntário': {
-    tagline: 'Recepção, Hospitalidade & Serviço',
-    description: 'O primeiro sorriso da igreja: acolhe membros e visitantes nas portas, auditório, corredores e ações sociais.',
+    tagline: 'Recepção & Hospitalidade',
+    description: 'Acolhimento, recepção e apoio nos cultos.',
     roles: ['Recepção de Porta', 'Organização de Auditório', 'Boas-Vindas', 'Apoio Geral nos Cultos'],
     accent: '#0284c7',
     bannerUrl: '/ministries/voluntario.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/voluntario.webp" alt="Ministério Voluntário" loading="lazy"/></div>`
   },
   'Follow': {
-    tagline: 'Mídia, Fotografia & Gravações',
-    description: 'Ministério de mídia da igreja, responsável pelas postagens, fotos e gravações.',
+    tagline: 'Mídia & Comunicação',
+    description: 'Postagens, fotografia e gravações.',
     roles: ['Fotógrafo(a)', 'Filmagem / Gravação', 'Social Media / Postagens', 'Design & Criativo', 'Transmissão Ao Vivo'],
     accent: '#059669',
     bannerUrl: '/ministries/follow.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/follow.webp" alt="Ministério Follow" loading="lazy"/></div>`
   },
   'Link': {
-    tagline: 'Grupo de Adolescentes da Igreja',
-    description: 'Ministério dedicado aos adolescentes da igreja, promovendo discipulado, encontros, comunhão e crescimento espiritual.',
+    tagline: 'Grupo de Adolescentes',
+    description: 'Encontros, comunhão e discipulado de adolescentes.',
     roles: ['Líder de Adolescentes', 'Conselheiro(a) Teen', 'Louvor & Dinâmicas', 'Acolhimento Teen'],
     accent: '#2563eb',
     bannerUrl: '/ministries/link.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/link.webp" alt="Ministério Link" loading="lazy"/></div>`
   },
   'Future': {
-    tagline: 'Mesa de Som, Áudio & Iluminação',
-    description: 'Responsável pela mesa de som de P.A., áudio de palco, mixagem, iluminação cênica e suporte técnico dos cultos.',
+    tagline: 'Som & Iluminação',
+    description: 'Mesa de som, áudio e iluminação dos cultos.',
     roles: ['Operador(a) de Som (Mesa P.A.)', 'Técnico de Monitor / Palco', 'Iluminação Cênica', 'Mixagem de Áudio'],
     accent: '#0891b2',
     bannerUrl: '/ministries/future.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/future.webp" alt="Ministério Future" loading="lazy"/></div>`
   },
   'Gourmet': {
-    tagline: 'Cozinha da Igreja & Gastronomia',
-    description: 'Equipe dedicada ao trabalho na cozinha da igreja, refeições, cantina, café pós-culto e comunhão à mesa.',
+    tagline: 'Cozinha & Comunhão',
+    description: 'Cozinha da igreja, refeições e cantina.',
     roles: ['Cozinheiro(a)', 'Auxiliar de Cozinha', 'Café & Cantina', 'Organização de Cozinha'],
     accent: '#b91c1c',
     bannerUrl: '/ministries/gourmet.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/gourmet.webp" alt="Ministério Gourmet" loading="lazy"/></div>`
   },
   'Champions': {
-    tagline: 'Saúde, Esportes, Lazer & Comunhão',
-    description: 'Ministério voltado para saúde e lazer da igreja, com esportes, atividades físicas e comunhão.',
+    tagline: 'Saúde, Esportes & Lazer',
+    description: 'Esportes, atividades físicas e comunhão.',
     roles: ['Líder Esportivo / Treinos', 'Organização de Atividades Físicas', 'Eventos de Lazer & Torneios', 'Comunhão & Acolhimento'],
     accent: '#ca8a04',
     bannerUrl: '/ministries/champions.webp',
     emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/champions.webp" alt="Ministério Champions" loading="lazy"/></div>`
   },
   'DNA': {
-    tagline: 'Escola de Discipulado & Integração',
-    description: 'Ensina a identidade cristã, visão da Igreja Batista da Lagoinha, preparação para o batismo e formação de discípulos.',
+    tagline: 'Discipulado & Integração',
+    description: 'Formação cristã, batismo e integração.',
     roles: ['Professor(a) Trilha DNA', 'Monitor(a) de Turma DNA', 'Equipe de Batismo', 'Secretaria DNA'],
     accent: '#9333ea',
     bannerUrl: '/ministries/dna.webp',
@@ -201,27 +201,21 @@ export async function openAppDownloadQrModal() {
   dlg.innerHTML = `
     <div class="sector-modal app-qr-modal-content">
       <div class="section-title" style="margin-bottom:12px;">
-        <div>
-          <span class="pill" style="margin-bottom:6px;">📲 DOWNLOAD & INSTALAÇÃO OFICIAL</span>
-          <h2 style="margin:0;">Baixar App Lagoinha no Celular</h2>
-        </div>
+        <h2 style="margin:0;">Instalar App no Celular</h2>
         <button type="button" class="secondary" id="close-app-qr-btn">Fechar</button>
       </div>
-      <p class="subtle" style="margin-top:0;">Aponte a câmera do seu celular para o QR Code abaixo ou toque nos botões para baixar e instalar diretamente.</p>
       <div class="qr-cards-grid">
         <article class="qr-download-card">
-          <span class="badge">🌐 App Web / iOS & Android (PWA)</span>
+          <span class="badge">🌐 App Web (iOS & Android)</span>
           ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code Portal Lagoinha" class="qr-code-img"/>` : ''}
-          <strong>Acesso Direto & Área de Membros</strong>
-          <small>Escaneie para abrir a Área de Membros, GCs, Ministérios e Kids e instalar na tela inicial.</small>
-          <a class="button" href="${appUrl}" target="_blank" rel="noopener" style="width:100%;margin-top:8px;">Abrir Portal no Aparelho</a>
+          <strong>Acesso Direto</strong>
+          <a class="button" href="${appUrl}" target="_blank" rel="noopener" style="width:100%;margin-top:8px;">Abrir Portal</a>
         </article>
         <article class="qr-download-card">
-          <span class="badge" style="background:#09090b;color:#fff;">🤖 Instalador Nativo Android (APK)</span>
+          <span class="badge" style="background:#09090b;color:#fff;">🤖 Android (.APK)</span>
           ${qrApkDataUrl ? `<img src="${qrApkDataUrl}" alt="QR Code APK Android" class="qr-code-img"/>` : ''}
-          <strong>Download Direto do Aplicativo (.APK)</strong>
-          <small>Escaneie com um celular Android ou toque abaixo para baixar o instalador oficial.</small>
-          <a class="button" href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk" style="width:100%;margin-top:8px;">📥 Baixar Aplicativo Android</a>
+          <strong>Instalador Android</strong>
+          <a class="button" href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk" style="width:100%;margin-top:8px;">📥 Baixar APK</a>
         </article>
       </div>
     </div>

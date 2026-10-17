@@ -26,14 +26,14 @@
   .topbar {
     height: auto;
     min-height: 56px;
-    padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px 16px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px 12px;
     background: #000000;
     color: #ffffff;
     border-bottom: 1px solid #27272a;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: nowrap;
     position: sticky;
     top: 0;
@@ -44,28 +44,31 @@
   .topbar-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
-    flex: 1;
+    flex: 1 1 0%;
+    overflow: hidden;
   }
 
   .topbar-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     text-decoration: none;
     cursor: pointer;
-    flex-shrink: 0;
+    flex-shrink: 1;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
 
   .topbar-logo-badge {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
     border-radius: 50%;
     background: #09090b;
     border: 1px solid rgba(255, 255, 255, 0.22);
@@ -96,15 +99,18 @@
     flex-direction: column;
     justify-content: center;
     min-width: 0;
+    overflow: hidden;
     line-height: 1.15;
   }
 
   .topbar-brand-name {
-    font-size: 14.5px;
+    font-size: 14px;
     font-weight: 500;
     letter-spacing: -0.3px;
     color: #ffffff;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .topbar-brand-name strong {
@@ -113,9 +119,9 @@
   }
 
   .topbar-brand-sub {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     text-transform: uppercase;
     color: #a1a1aa;
     white-space: nowrap;
@@ -135,7 +141,9 @@
     margin-left: auto;
   }
 
-  .topbar-date-chip {
+  .topbar-date-chip,
+  .top-actions [data-action="install-modal"],
+  .top-actions .bell-button {
     display: none !important;
   }
 
@@ -144,8 +152,8 @@
     align-items: center;
     justify-content: center;
     gap: 5px;
-    height: 36px;
-    padding: 0 10px;
+    height: 34px;
+    padding: 0 9px;
     border-radius: 8px;
     background: #18181b;
     border: 1px solid #27272a;
@@ -161,10 +169,10 @@
     background: #27272a;
   }
 
-  @media (max-width: 440px) {
+  @media (max-width: 480px) {
     .topbar-action-pill.secondary {
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       padding: 0;
       display: inline-grid !important;
       place-items: center;
@@ -175,8 +183,8 @@
   }
 
   .topbar-action-pill.primary {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     display: inline-grid;
     place-items: center;
@@ -191,10 +199,10 @@
   }
 
   .topbar-icon-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
     border-radius: 8px;
     background: transparent;
     border: 1px solid #27272a;
@@ -220,8 +228,8 @@
   }
 
   .topbar-avatar-btn .avatar {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     font-size: 11px;
     background: #18181b;
     color: #ffffff;
