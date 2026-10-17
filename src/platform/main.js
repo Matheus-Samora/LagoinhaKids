@@ -81,10 +81,12 @@ function login(message='',prefillEmail=''){
  const saved=getSavedAccounts();
  const savedHtml=saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos neste dispositivo</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-saved-email="${e(a.email)}"><span class="avatar mini">${e(initials(a.name||a.email))}</span><div class="saved-account-text"><strong>${e(a.name||a.email)}</strong><small>${e(a.email)}</small></div></button><button type="button" class="saved-account-del" data-remove-email="${e(a.email)}" title="Remover conta deste aparelho" aria-label="Remover"></button></div>`).join('')}</div></div>`:'';
 
- root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código do autenticador <small>Se você ativou a verificação em duas etapas</small><input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar no Sistema')}</button></form><div style="display:flex;justify-content:center;margin-top:10px;"><button type="button" class="secondary" id="auth-qr-btn" style="font-size:12px;min-height:36px;padding:6px 14px;"> ${t('auth.install_app', 'Instalar app')}</button></div><footer class="auth-footer"><a class="subtle" href="/kids">Cadastro de Membros e Famílias (Lagoinha Kids) →</a></footer></section></main>`;
+ root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código do autenticador <small>Se você ativou a verificação em duas etapas</small><input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar no Sistema')}</button></form><footer class="auth-footer"><a class="subtle" href="/kids">Cadastro de Membros e Famílias (Lagoinha Kids) →</a><div class="aux-controls-bar"><button type="button" class="aux-btn" id="auth-qr-btn">${t('auth.install_app', 'Instalar app')}</button><button type="button" class="aux-btn" id="auth-theme-btn" title="Alternar tema">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="auth-lang-select" class="aux-lang-select" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></section></main>`;
  translateDOM(root);
 
  root.querySelector('#auth-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
+ root.querySelector('#auth-theme-btn')?.addEventListener('click',()=>{toggleTheme();login(message,root.querySelector('#login-email')?.value||'');});
+ root.querySelector('#auth-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);login(message,root.querySelector('#login-email')?.value||'');});
  root.querySelector('#toggle-pwd')?.addEventListener('click',ev=>{
   const inp=root.querySelector('#login-password');
   if(!inp)return;
@@ -166,19 +168,22 @@ function notificationsBanner(){
  const notifs=identity?.notifications||[];
  const unread=notifs.filter(n=>!n.read_at);
  if(!unread.length&&!notifDrawerOpen)return '';
- return `<section class="panel notif-panel" style="margin-bottom:22px;border-color:#4338ca;background:linear-gradient(135deg,#eef2ff,#ffffff);">
+ return `<section class="panel notif-panel">
   <div class="section-title" style="margin-bottom:10px;">
    <div>
-    <h2 style="font-size:17px;color:#312e81;"> Notificações (${unread.length} nova${unread.length===1?'':'s'})</h2>
-    <p style="margin:2px 0 0;font-size:13px;color:#4338ca;">Avisos de novos candidatos aos seus Ministérios/GCs e confirmações da liderança.</p>
+    <h2 class="notif-panel-title"> Notificações (${unread.length} nova${unread.length===1?'':'s'})</h2>
+    <p class="notif-panel-sub">Avisos de novos candidatos aos seus Ministérios/GCs e confirmações da liderança.</p>
    </div>
-   ${unread.length?`<button type="button" class="secondary" id="mark-all-notifs-read" style="min-height:36px;padding:6px 12px;font-size:12px;"> Marcar todas como lidas</button>`:''}
+   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button type="button" class="secondary" data-enable-push="1" style="min-height:34px;padding:5px 11px;font-size:12px;">🔔 ${t("nav.enable_notices", "Ativar avisos")}</button>
+    ${unread.length?`<button type="button" class="secondary" id="mark-all-notifs-read" style="min-height:34px;padding:5px 11px;font-size:12px;"> Marcar todas como lidas</button>`:''}
+   </div>
   </div>
   <div class="insight-list" style="max-height:240px;overflow-y:auto;">
-   ${notifs.slice(0,12).map(n=>`<div class="insight-item" style="${n.read_at?'opacity:0.75;':'border-left:4px solid #4338ca;background:#fff;'}">
+   ${notifs.slice(0,12).map(n=>`<div class="insight-item ${n.read_at?'is-read':'is-unread'}">
     <div>
      <strong>${e(n.title)}</strong>
-     <small style="color:#3f3f46;font-size:12.5px;">${e(n.message)}</small>
+     <small style="font-size:12.5px;">${e(n.message)}</small>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
      <small>${e(new Date(n.created_at).toLocaleDateString('pt-BR'))}</small>
@@ -276,7 +281,7 @@ function memberCommunityPortal(){
    <div>
     <span class="eyebrow" style="color:#0f766e;">COMUNHÃO NAS CASAS · GRUPOS DE CRESCIMENTO</span>
     <h2> Escolha seu GC pelos Banners Oficiais (${cells.length} GCs Ativos)</h2>
-    <p style="margin:4px 0 0;color:#52525b;">Confira a arte, o endereço e o dia de encontro de cada GC. Toque em <strong>Participar deste GC</strong> para avisar o líder!</p>
+    <p class="subtle" style="margin:4px 0 0;">Confira a arte, o endereço e o dia de encontro de cada GC. Toque em <strong>Participar deste GC</strong> para avisar o líder!</p>
    </div>
   </div>
   <div class="gc-showcase-grid">
@@ -312,7 +317,7 @@ function memberCommunityPortal(){
    <div>
     <span class="eyebrow" style="color:#4338ca;">CADA DOM A SERVIÇO DO REINO · 16 MINISTÉRIOS OFICIAIS</span>
     <h2> Candidate-se para Servir nos Ministérios da Lagoinha</h2>
-    <p style="margin:4px 0 0;color:#52525b;">Cada card possui identidade única com arte oficial. Ao se candidatar, o líder responsável pelo ministério recebe uma notificação imediata para entrar em contato, preparar e aprovar você!</p>
+    <p class="subtle" style="margin:4px 0 0;">Cada card possui identidade única com arte oficial. Ao se candidatar, o líder responsável pelo ministério recebe uma notificação imediata para entrar em contato, preparar e aprovar você!</p>
    </div>
   </div>
   <div class="ministry-showcase-grid">
@@ -321,19 +326,19 @@ function memberCommunityPortal(){
     const alreadyPending=myApps.some(a=>a.target_type==='ministry'&&a.target_name.toLowerCase()===m.name.toLowerCase()&&a.status==='pending');
     const banner=meta.bannerUrl;
     return `<article class="ministry-showcase-card ${banner?'has-banner':''}">
-     ${banner?`<div class="ministry-card-banner"><img src="${e(banner)}" alt="Arte do Ministério ${e(m.name)}" loading="lazy"/><span class="ministry-banner-pill"> ARTE OFICIAL</span></div>`:''}
+     ${banner?`<div class="ministry-card-banner"><img src="${e(banner)}" alt="Arte do Ministério ${e(m.name)}" loading="lazy"/><span class="ministry-banner-pill">ARTE OFICIAL</span></div>`:''}
      <div class="ministry-showcase-top">
-      ${ministryEmblem(m.name)}
+      ${banner?`<small class="ministry-tagline">${e(meta.tagline)}</small>`:ministryEmblem(m.name)}
       <div class="ministry-showcase-counts">
        <span class="badge">${m.total||0} ativo(s)</span>
       </div>
      </div>
      <div class="ministry-showcase-content">
-      <small class="ministry-tagline">${e(meta.tagline)}</small>
+      ${!banner?`<small class="ministry-tagline">${e(meta.tagline)}</small>`:''}
       <h3>Ministério ${e(m.name)}</h3>
       <p>${e(meta.description||meta.desc)}</p>
       <div class="ministry-role-pills">
-       ${(meta.roles||[]).slice(0,4).map(r=>`<span class="card-tag">${e(r)}</span>`).join('')}
+       ${(meta.roles||[]).slice(0,3).map(r=>`<span class="card-tag">${e(r)}</span>`).join('')}
       </div>
      </div>
      <button type="button" class="${alreadyPending?'secondary':''}" data-apply-ministry="${e(m.name)}" data-ministry-banner="${e(banner||'')}">
@@ -358,7 +363,7 @@ function openApplyModal(targetType,targetId,targetName,extra={}){
    <h2>${targetType==='gc'?` Participar do ${e(targetName)}`:` Candidatar-se · Ministério ${e(targetName)}`}</h2>
    <button type="button" class="secondary" id="close-apply-modal">Fechar</button>
   </div>
-  ${bannerImg?`<div style="border-radius:14px;overflow:hidden;max-height:220px;margin-bottom:14px;border:1px solid var(--border);"><img src="${e(bannerImg)}" alt="${e(targetName)}" style="width:100%;height:200px;object-fit:cover;display:block;"/></div>`:''}
+  ${bannerImg?`<div style="border-radius:14px;overflow:hidden;max-height:220px;margin-bottom:14px;border:1px solid var(--line);"><img src="${e(bannerImg)}" alt="${e(targetName)}" style="width:100%;height:200px;object-fit:cover;display:block;"/></div>`:''}
   <p class="subtle" style="margin-top:0;">
    ${targetType==='gc'
     ?`Endereço do GC: <strong>${e(extra.address||'Consulte com o líder')}</strong>. Sua solicitação será enviada diretamente para a liderança de GCs entrar em contato e receber você!`
@@ -433,7 +438,7 @@ function openPublishAnnouncementModal(){
    <label>Título do Comunicado / Evento
     <input name="title" required maxlength="120" placeholder="Ex.: Ensaio Geral do Louvor, Vigília, Culto Especial...">
    </label>
-   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+   <div class="form-grid-2">
     <label>Setor de Destino
      <select name="target_sector" required>
       ${isRoot?`<option value="all">🌐 Todos os Setores &amp; Membros (Geral)</option>`:''}
@@ -510,17 +515,12 @@ function render(message=''){
    ${navLinks}
   </nav>
   <div class="topbar-user-area">
-   <button type="button" class="quiet" id="topbar-theme-btn" title="Alternar Modo Escuro / Claro" style="padding:6px 10px;min-height:38px;font-size:12.5px;">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button>
-   <select id="topbar-lang-select" class="topbar-lang-select" aria-label="Idioma">
-    ${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}
-   </select>
-   <button type="button" class="quiet" id="topbar-qr-btn" title="Baixar Aplicativo via QR Code" style="padding:6px 12px;min-height:38px;font-size:12.5px;"> ${t("nav.app_qr", "App QR")}</button>
-   <button type="button" class="quiet" id="topbar-notif-btn" title="Notificações" style="padding:6px 12px;min-height:38px;font-size:12.5px;position:relative;">${t("nav.notices", "Avisos")} ${unreadCount?`<span class="badge" style="background:#dc2626;color:#fff;padding:2px 6px;font-size:10.5px;">${unreadCount}</span>`:''}</button>
+   <button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
    <div class="topbar-user-chip">
     <span class="avatar mini">${e(initials(identity.user.name))}</span>
-    <span>${e(identity.user.name)}${identity.pastor?' <small style="color:#b45309;font-weight:800;">(Pastor/a)</small>':''}</span>
+    <span class="topbar-user-name">${e(identity.user.name)}${identity.pastor?' <small class="pastor-tag">(Pastor/a)</small>':''}</span>
    </div>
-   <button class="quiet" id="enable-push">${t("nav.enable_notices", "Ativar avisos")}</button><button class="quiet" id="logout">${t("nav.sign_out", "Sair")}</button>
+   <button type="button" class="quiet topbar-btn-compact" id="logout">${t("nav.sign_out", "Sair")}</button>
   </div>
  </header>
  <main class="workspace page-enter">
@@ -539,11 +539,28 @@ function render(message=''){
   `}
   ${identity.platform_admin&&!module&&!isMemberPortal?permissions()+auditSection():''}
  </main>
- <footer class="platform-footer">Lagoinha Systems · 2.4.0</footer>`;
+ <footer class="platform-footer">
+  <div class="platform-footer-inner">
+   <span class="platform-footer-brand">Lagoinha Systems · 2.4.0 — Ambiente Institucional Seguro</span>
+   <div class="aux-controls-bar" aria-label="Preferências e funções auxiliares">
+    <button type="button" class="aux-btn" id="enable-push">${t("nav.enable_notices", "Ativar avisos")}</button>
+    <button type="button" class="aux-btn" id="topbar-qr-btn" title="Baixar Aplicativo via QR Code">${t("nav.app_qr", "App QR")}</button>
+    <button type="button" class="aux-btn" id="topbar-theme-btn" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button>
+    <select id="topbar-lang-select" class="aux-lang-select" aria-label="Idioma">
+     ${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}
+    </select>
+   </div>
+  </div>
+ </footer>`;
 
  if(module?.enabled&&module.id!=='kids')void sectors.mount(module);
 
- root.querySelector('#enable-push').onclick=async(event)=>{const b=event.currentTarget;b.disabled=true;try{await subscribeWebPush(api);b.textContent='Avisos ativados';}catch(error){b.disabled=false;b.textContent='Ativar avisos';root.querySelector('.status').textContent=error.message;}};
+ const bindPushBtn=(btn)=>{
+  if(!btn)return;
+  btn.onclick=async(event)=>{const b=event.currentTarget;b.disabled=true;try{await subscribeWebPush(api);b.textContent='Avisos ativados ✓';}catch(error){b.disabled=false;b.textContent=t("nav.enable_notices", "Ativar avisos");root.querySelector('.status').textContent=error.message;}};
+ };
+ bindPushBtn(root.querySelector('#enable-push'));
+ root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
  root.querySelector('#logout').onclick=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#topbar-theme-btn')?.addEventListener('click',()=>{toggleTheme();render(message);});
  root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});

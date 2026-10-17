@@ -5339,3 +5339,136 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   display: flex;
   justify-content: flex-end;
 }
+
+/* ==========================================================================
+   Discreet Auxiliary Controls (Theme & Language) & Footer Harmony
+   ========================================================================== */
+
+.app-footer {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.aux-controls-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aux-btn {
+  background: transparent;
+  color: #52525b;
+  border: 1px solid var(--line, #e4e4e7);
+  border-radius: 8px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.aux-btn:hover {
+  background: #f4f4f5;
+  color: #09090b;
+  border-color: #d4d4d8;
+}
+
+.aux-lang-select,
+.topbar-lang-select {
+  width: auto !important;
+  min-width: 78px;
+  max-width: 140px;
+  height: 30px;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border-radius: 8px;
+  font-size: 11.5px !important;
+  font-weight: 600;
+  background: transparent;
+  color: #52525b;
+  border: 1px solid var(--line, #e4e4e7);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-aux-prefs {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #e4e4e7);
+  border-radius: 10px;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-aux-head strong {
+  display: block;
+  font-size: 13px;
+  color: #09090b;
+}
+
+.settings-aux-head small {
+  display: block;
+  font-size: 11.5px;
+  color: #71717a;
+  margin-top: 2px;
+}
+
+.settings-aux-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-aux-controls .aux-btn,
+.settings-aux-controls .aux-lang-select {
+  height: 36px;
+  min-height: 36px !important;
+  font-size: 12.5px !important;
+  padding: 0 12px !important;
+  max-width: 190px;
+  background: #ffffff;
+}
+
+[data-theme="dark"] .aux-btn,
+[data-theme="dark"] .aux-lang-select,
+[data-theme="dark"] .topbar-lang-select {
+  color: #a1a1aa;
+  border-color: #27272a;
+  background: #18181b;
+}
+
+[data-theme="dark"] .aux-btn:hover,
+[data-theme="dark"] .aux-lang-select:hover {
+  background: #27272a;
+  color: #f4f4f5;
+  border-color: #3f3f46;
+}
+
+[data-theme="dark"] .settings-aux-prefs {
+  background: #09090b;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] .settings-aux-head strong {
+  color: #f4f4f5;
+}
+
+[data-theme="dark"] .settings-aux-controls .aux-btn,
+[data-theme="dark"] .settings-aux-controls .aux-lang-select {
+  background: #18181b;
+  color: #f4f4f5;
+  border-color: #27272a;
+}
+

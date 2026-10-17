@@ -622,7 +622,6 @@ export function createSectors({api,e,identity,openQrModal}){
    const row=document.createElement('div');
    row.id=rowId;
    row.className='extra-musician-row';
-   row.style.cssText='display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px;align-items:center;padding:10px;border:1px solid #e4e4e7;border-radius:10px;background:#fcfcfc;';
    row.innerHTML=`
     <div>
      <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:2px;">Instrumento / Função</label>
@@ -635,7 +634,7 @@ export function createSectors({api,e,identity,openQrModal}){
       ${directory.map(p=>`<option value="${e(p.id)}">${e(p.name)}</option>`).join('')}
      </select>
     </div>
-    <button type="button" class="secondary danger-btn" style="min-height:36px;padding:6px 10px;font-size:12px;margin-top:16px;" title="Remover este integrante">✕</button>
+    <button type="button" class="secondary danger-btn" style="min-height:36px;padding:6px 10px;font-size:12px;" title="Remover este integrante">✕</button>
    `;
    row.querySelector('.danger-btn').onclick=()=>row.remove();
    extraContainer.appendChild(row);
@@ -712,13 +711,13 @@ export function createSectors({api,e,identity,openQrModal}){
    </div>
    <p class="subtle" style="margin-top:0;">Escolha o período e o formato.</p>
    <form class="record-form" id="finance-report-form">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="form-grid-2">
      ${field('start_date','Data Inicial (opcional)',firstDayMonth,'date',false,null,true)}
      ${field('end_date','Data Final (opcional)',today(),'date',false,null,true)}
     </div>
     ${field('account_id','Conta / Banco Vinculado','','text',false,[['','Todas as contas e bancos'],...opt(data.accounts)])}
     ${field('cost_center_id','Centro de Custo / Ministério','','text',false,[['','Todos os centros de custo'],...opt(data.cost_centers)])}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="form-grid-2">
      ${field('direction','Tipo de Movimentação','all','text',true,[['all','Entradas e Saídas (Completo)'],['income','Somente Entradas / Receitas'],['expense','Somente Saídas / Despesas']])}
      ${field('payment_status','Status de Liquidação','all','text',true,[['all','Liquidados + Pendentes'],['paid','Somente Liquidados (Pagos)'],['pending','Somente Pendentes (A Pagar/Receber)']])}
     </div>
@@ -751,11 +750,11 @@ export function createSectors({api,e,identity,openQrModal}){
    <div class="section-title"><h2> Documentos Oficiais · ${e(r.name)}</h2>${button('close','Fechar','class="secondary"')}</div>
    <div id="printable-member-doc" style="display:grid;gap:18px;margin:14px 0;">
     <article style="border:2px solid #18181b;border-radius:16px;padding:20px;background:#fff;color:#09090b;">
-     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #18181b;padding-bottom:12px;margin-bottom:14px;">
+     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #18181b;padding-bottom:12px;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
       <div><strong style="font-size:18px;letter-spacing:-0.02em;">IGREJA BATISTA DA LAGOINHA</strong><small style="display:block;color:#52525b;">CREDENCIAL OFICIAL DE MEMBRESIA · LAGOINHA MEMBERS</small></div>
       <span class="badge" style="background:#09090b;color:#fff;">ID #${e(code)}</span>
      </div>
-     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+     <div class="form-grid-2" style="gap:10px;font-size:13px;">
       <div><small style="color:#71717a;display:block;">Nome Completo</small><strong>${e(r.name)}</strong></div>
       <div><small style="color:#71717a;display:block;">Estágio Eclesiástico</small><strong>${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</strong></div>
       <div><small style="color:#71717a;display:block;">Núcleo Familiar</small><strong>${e(r.family_name||'Individual')} (${e(r.relationship||'Titular')})</strong></div>
