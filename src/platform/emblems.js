@@ -56,7 +56,8 @@ export const MINISTRY_META = {
     description: 'Sustenta a igreja, famílias, pastores e cultos em oração contínua, intercessão profética e aconselhamento.',
     roles: ['Intercessor(a) de Culto', 'Torre de Oração', 'Líder de Turno', 'Aconselhamento de Altar'],
     accent: '#b45309',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-inter" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#78350f"/><stop offset="100%" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-inter)"/><path d="M24 11C28 17 32 21 32 27C32 31.5 28.4 35 24 35C19.6 35 16 31.5 16 27C16 21 20 17 24 11Z" fill="rgba(254,243,199,0.2)" stroke="#fef3c7" stroke-width="2.2"/><path d="M24 18C26 21.5 27.5 23.5 27.5 26.8C27.5 29 25.9 30.8 24 30.8C22.1 30.8 20.5 29 20.5 26.8C20.5 23.5 22 21.5 24 18Z" fill="#fbbf24"/></svg>`
+    bannerUrl: '/ministries/intercessao.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/intercessao.webp" alt="Ministério Intercessão" loading="lazy"/></div>`
   },
   'Hero': {
     tagline: 'Ministério de Homens & Crescimento Espiritual',
@@ -79,7 +80,8 @@ export const MINISTRY_META = {
     description: 'Fortalecimento de casamentos, cursos para noivos e casais, encontros familiares e mentoria conjugal.',
     roles: ['Casal Mentor', 'Apoio em Cursos de Casais', 'Organização de Encontros', 'Acolhimento Familiar'],
     accent: '#0f766e',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-casados" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#134e4a"/><stop offset="100%" stop-color="#0d9488"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-casados)"/><circle cx="20" cy="25" r="7.5" stroke="#fde047" stroke-width="2.4"/><circle cx="28" cy="25" r="7.5" stroke="#ccfbf1" stroke-width="2.4"/><path d="M24 12L26 14.5L24 17L22 14.5L24 12Z" fill="#fde047"/></svg>`
+    bannerUrl: '/ministries/bem-casados.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/bem-casados.webp" alt="Ministério Bem Casados" loading="lazy"/></div>`
   },
   'Rocket': {
     tagline: 'Ministério de Adolescentes (Teens)',
@@ -110,7 +112,8 @@ export const MINISTRY_META = {
     description: 'Cuida da casa de Deus mantendo instalações elétricas, acústicas, climatização e estrutura sempre impecáveis.',
     roles: ['Técnico / Eletricista', 'Manutenção Geral', 'Climatização & Estrutura', 'Apoio Logístico'],
     accent: '#475569',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-manut" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#475569"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-manut)"/><circle cx="24" cy="24" r="6.5" stroke="#f1f5f9" stroke-width="2.4"/><path d="M24 12V15M24 33V36M12 24H15M33 24H36M15.5 15.5L17.8 17.8M30.2 30.2L32.5 32.5M32.5 15.5L30.2 17.8M17.8 30.2L15.5 32.5" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round"/></svg>`
+    bannerUrl: '/ministries/manutencao.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/manutencao.webp" alt="Ministério Manutenção" loading="lazy"/></div>`
   },
   'Voluntário': {
     tagline: 'Recepção, Hospitalidade & Serviço',
@@ -141,14 +144,16 @@ export const MINISTRY_META = {
     description: 'Responsável pela mesa de som de P.A., áudio de palco, mixagem, iluminação cênica e suporte técnico dos cultos.',
     roles: ['Operador(a) de Som (Mesa P.A.)', 'Técnico de Monitor / Palco', 'Iluminação Cênica', 'Mixagem de Áudio'],
     accent: '#0891b2',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-future" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#0891b2"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-future)"/><path d="M15 13V35M24 13V35M33 13V35" stroke="#a1a1aa" stroke-width="2.2" stroke-linecap="round"/><rect x="12" y="19" width="6" height="4" rx="1.5" fill="#38bdf8"/><rect x="21" y="26" width="6" height="4" rx="1.5" fill="#fbbf24"/><rect x="30" y="16" width="6" height="4" rx="1.5" fill="#4ade80"/></svg>`
+    bannerUrl: '/ministries/future.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/future.webp" alt="Ministério Future" loading="lazy"/></div>`
   },
   'Gourmet': {
     tagline: 'Cozinha da Igreja & Gastronomia',
     description: 'Equipe dedicada ao trabalho na cozinha da igreja, refeições, cantina, café pós-culto e comunhão à mesa.',
     roles: ['Cozinheiro(a)', 'Auxiliar de Cozinha', 'Café & Cantina', 'Organização de Cozinha'],
     accent: '#b91c1c',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-gourmet" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#7f1d1d"/><stop offset="100%" stop-color="#dc2626"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-gourmet)"/><path d="M15 22H31V27C31 31.4 27.4 35 23 35C18.6 35 15 31.4 15 27V22Z" stroke="#fee2e2" stroke-width="2.2" fill="rgba(254,226,226,0.15)"/><path d="M31 24H33.5C35.2 24 36.5 25.3 36.5 27C36.5 28.7 35.2 30 33.5 30H31" stroke="#fecaca" stroke-width="2.2"/><path d="M19 17V14M23 17V13M27 17V14" stroke="#fde047" stroke-width="2" stroke-linecap="round"/></svg>`
+    bannerUrl: '/ministries/gourmet.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/gourmet.webp" alt="Ministério Gourmet" loading="lazy"/></div>`
   },
   'Champions': {
     tagline: 'Saúde, Esportes, Lazer & Comunhão',
@@ -163,7 +168,8 @@ export const MINISTRY_META = {
     description: 'Ensina a identidade cristã, visão da Igreja Batista da Lagoinha, preparação para o batismo e formação de discípulos.',
     roles: ['Professor(a) Trilha DNA', 'Monitor(a) de Turma DNA', 'Equipe de Batismo', 'Secretaria DNA'],
     accent: '#9333ea',
-    emblem: `<svg viewBox="0 0 48 48" fill="none" class="ministry-svg-emblem"><defs><linearGradient id="m-dna" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#3b0764"/><stop offset="100%" stop-color="#9333ea"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#m-dna)"/><path d="M16 12C16 20 32 20 32 28C32 32 28 35 24 36M32 12C32 20 16 20 16 28C16 32 20 35 24 36" stroke="#f3e8ff" stroke-width="2.2" stroke-linecap="round"/><path d="M18 16H30M18 24H30M18 31H30" stroke="#facc15" stroke-width="2" stroke-linecap="round"/></svg>`
+    bannerUrl: '/ministries/dna.webp',
+    emblem: `<div class="ministry-svg-emblem ministry-art-emblem"><img src="/ministries/dna.webp" alt="Ministério DNA" loading="lazy"/></div>`
   }
 };
 
