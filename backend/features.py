@@ -1,4 +1,4 @@
-import os,secrets,time,smtplib,json
+import os,secrets,time,smtplib,json,ssl,logging
 from email.message import EmailMessage
 from fastapi import APIRouter,Depends,BackgroundTasks
 from pydantic import BaseModel,Field
@@ -10,9 +10,15 @@ def mail_ready():return bool(os.getenv('SMTP_HOST') and os.getenv('SMTP_FROM'))
 def send_mail(recipient,subject,body):
     msg=EmailMessage();msg['From']=os.environ['SMTP_FROM'];msg['To']=recipient;msg['Subject']=subject;msg.set_content(body)
     with smtplib.SMTP(os.environ['SMTP_HOST'],int(os.getenv('SMTP_PORT','587')),timeout=15) as server:
-        server.starttls()
+        server.starttls(context=ssl.create_default_context())
         if os.getenv('SMTP_USER'):server.login(os.environ['SMTP_USER'],os.environ['SMTP_PASSWORD'])
         server.send_message(msg)
+
+def send_recovery_mail(recipient,subject,body):
+    try:
+        send_mail(recipient,subject,body)
+    except Exception as exc:
+        logging.getLogger(__name__).error('password_recovery_delivery_failed error_type=%s',type(exc).__name__)
 
 class Recovery(BaseModel):
     email:str=Field(max_length=200)
@@ -34,7 +40,7 @@ def recover(data:Recovery,tasks:BackgroundTasks):
             c.execute('INSERT INTO auth_tokens VALUES(?,?,?,?)',(s.digest(token),user['id'],'reset',int(time.time())+1800))
             s.audit(c,user['id'],'password_recovery_requested')
             if mail_ready():
-                tasks.add_task(send_mail,address,'Recuperar acesso — Lagoinha Kids',f'Use este link em até 30 minutos: {PUBLIC_URL}/?reset={token}\nSe não solicitou, ignore esta mensagem.')
+                tasks.add_task(send_recovery_mail,address,'Recuperar acesso — Lagoinha Systems',f'Use este link em até 30 minutos: {PUBLIC_URL}/#reset={token}\nSe não solicitou, ignore esta mensagem.')
                 return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
     return {'ok':True,'message':'Se a conta existir, enviaremos as instruções.'}
 class Reset(BaseModel):token:str=Field(max_length=200);password:str=Field(max_length=128)

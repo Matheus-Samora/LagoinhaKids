@@ -1,3 +1,4 @@
+import {recoveryScreen} from './recovery.js';
 if(location.pathname==='/'&&['overview','children','rooms','attendance','events','lessons','notifications','settings','users','team'].includes(location.hash.slice(1)))location.replace('/kids'+location.hash);
 import './style.css';
 import {subscribeWebPush} from '../web-push.js';
@@ -116,10 +117,11 @@ function login(message='',prefillEmail=''){
  const saved=getSavedAccounts();
  const savedHtml=saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos salvos</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-saved-email="${e(a.email)}"><span class="avatar mini">${e(initials(a.name||a.email))}</span><div class="saved-account-text"><strong>${e(a.name||a.email)}</strong><small>${e(a.email)}</small></div></button><button type="button" class="saved-account-del" data-remove-email="${e(a.email)}" title="Remover conta" aria-label="Remover"></button></div>`).join('')}</div></div>`:'';
 
- root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código 2FA (opcional)<input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar')}</button></form><footer class="auth-footer"><a class="subtle" href="/kids">Lagoinha Kids →</a><div class="aux-controls-bar"><button type="button" class="aux-btn" id="auth-qr-btn">${t('auth.install_app', 'Instalar app')}</button><button type="button" class="aux-btn" id="auth-theme-btn" title="Alternar tema">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="auth-lang-select" class="aux-lang-select" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></section></main>`;
+ root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código 2FA (opcional)<input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar')}</button></form><button type="button" class="secondary" id="recover-access">Esqueci minha senha</button><footer class="auth-footer"><a class="subtle" href="/kids">Lagoinha Kids →</a><div class="aux-controls-bar"><button type="button" class="aux-btn" id="auth-qr-btn">${t('auth.install_app', 'Instalar app')}</button><button type="button" class="aux-btn" id="auth-theme-btn" title="Alternar tema">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="auth-lang-select" class="aux-lang-select" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></section></main>`;
  translateDOM(root);
 
  root.querySelector('#auth-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
+ root.querySelector('#recover-access').onclick=()=>recoveryScreen({root,api,e,login});
  root.querySelector('#auth-theme-btn')?.addEventListener('click',()=>{toggleTheme();login(message,root.querySelector('#login-email')?.value||'');});
  root.querySelector('#auth-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);login(message,root.querySelector('#login-email')?.value||'');});
  root.querySelector('#toggle-pwd')?.addEventListener('click',ev=>{
@@ -779,7 +781,9 @@ function auditSection(){
 }
 
 await welcome(currentAreaKey());
-try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}
+const resetToken=new URLSearchParams(location.search).get('reset')||new URLSearchParams(location.hash.slice(1)).get('reset');
+if(resetToken){history.replaceState(null,'',location.pathname);recoveryScreen({root,api,e,login,token:resetToken});}
+else {try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}}
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
