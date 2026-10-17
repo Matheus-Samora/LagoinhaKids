@@ -12,7 +12,7 @@ const moduleTags={
  kids:['QR Code','TAG Térmica','Chamada'],
  members:['GCs','Discipulado','Membros'],
  ministries:['16 Ministérios','Escala Louvor','Voluntários'],
- finance:['Previsão','Relatórios','Borderôs']
+ finance:['Previsão','Relatórios','Fechamento do culto']
 };
 const brandMeta={
  systems:{word:'Systems',tagline:'TI & ACESSOS'},
@@ -57,7 +57,7 @@ const AREA_TABS={
  finance:[
   {id:'all',label:'Visão Geral',icon:'📊'},
   {id:'entries',label:'Lançamentos',icon:'💸'},
-  {id:'closings',label:'Borderôs',icon:'📋'},
+  {id:'closings',label:'Fechamento do culto',icon:'📋'},
   {id:'accounts',label:'Contas',icon:'🏦'},
   {id:'cost-centers',label:'Centros',icon:'🏷️'},
   {id:'invoices',label:'Faturas',icon:'🧾'}

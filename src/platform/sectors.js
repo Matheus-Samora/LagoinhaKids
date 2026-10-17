@@ -22,7 +22,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   schedules:'Escalas',
   assignments:'Equipe',
   resources:'Materiais',
-  closings:'Borderôs',
+  closings:'Fechamento do culto',
   'cost-centers':'Centros de custo',
   accounts:'Contas',
   entries:'Lançamentos',
@@ -96,7 +96,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
    ?`${button('new','+ Membro','data-kind="people"')}${button('new','+ Família','class="ghost" data-kind="families"')}${button('self-reg-modal','Ficha de cadastro','class="ghost"')}`
    :key==='ministries'
    ?`${button('new','+ Vincular','data-kind="assignments"')}${button('worship-scale-modal','+ Escala de louvor','class="ghost"')}${button('new','+ Material','class="ghost" data-kind="resources"')}`
-   :`${button('new','+ Lançamento','data-kind="entries"')}${button('new','+ Borderô','class="ghost" data-kind="closings"')}${button('new','+ Conta','class="ghost" data-kind="accounts"')}`;
+   :`${button('new','+ Lançamento','data-kind="entries"')}${button('new','+ Fechamento do culto','class="ghost" data-kind="closings"')}${button('new','+ Conta','class="ghost" data-kind="accounts"')}`;
   return `<section class="sector-actions" aria-label="Ações do setor">${edit()?actions:''}${key==='finance'?button('finance-report-modal','Relatórios','class="secondary"'):''}</section>`;
  }
 
