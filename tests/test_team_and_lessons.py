@@ -1,3 +1,4 @@
+from datetime import datetime,timedelta,timezone
 import os, pytest
 from test_app import records, client, PASSWORD
 from backend import store as s
@@ -70,12 +71,13 @@ def test_room_with_teacher_and_monitor():
 
 def test_lesson_with_staff_materials_and_notes():
     admin = client(1)
+    day = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
     # Create lesson with teacher, monitor, materials and notes
     res = admin.post('/api/lessons', json={
         'room_id': 1,
         'title': 'Aulinha Davi e Golias',
-        'starts_at': '2026-10-18T10:00:00-03:00',
-        'ends_at': '2026-10-18T11:00:00-03:00',
+        'starts_at': day + 'T10:00:00-03:00',
+        'ends_at': day + 'T11:00:00-03:00',
         'repeat_weeks': 1,
         'teacher_id': 2,
         'materials_url': '/api/media/doc_exemplo.pdf',
