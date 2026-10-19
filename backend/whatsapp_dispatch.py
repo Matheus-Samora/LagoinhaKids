@@ -756,8 +756,11 @@ def connect_instance(user=Depends(session)):
 
             if 200 <= conn_resp.status_code < 300:
                 data = conn_resp.json()
-                if data.get('base64'):
-                    return {'state': 'qrcode', 'base64': data['base64'], 'code': data.get('code'), 'pairingCode': data.get('pairingCode')}
+                b64 = data.get('base64') or (data.get('qrcode') or {}).get('base64')
+                code = data.get('code') or (data.get('qrcode') or {}).get('code')
+                pairing = data.get('pairingCode') or (data.get('qrcode') or {}).get('pairingCode')
+                if b64:
+                    return {'state': 'qrcode', 'base64': b64, 'code': code, 'pairingCode': pairing}
                 if data.get('instance', {}).get('state') == 'open' or data.get('state') == 'open':
                     return {'state': 'open', 'message': 'WhatsApp já conectado com sucesso!'}
                 return {'state': 'connecting', 'raw': data}

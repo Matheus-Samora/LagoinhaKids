@@ -30,7 +30,11 @@ export function whatsappDispatchUI({ api, e }) {
     dlg.style.maxWidth = '720px';
     dlg.style.width = 'min(95vw, 720px)';
     document.body.append(dlg);
-    dlg.addEventListener('close', () => dlg.remove(), { once: true });
+    let qrPollTimer = null;
+    dlg.addEventListener('close', () => {
+      if (qrPollTimer) clearInterval(qrPollTimer);
+      dlg.remove();
+    }, { once: true });
 
     let state = {
       sector: defaultSector,
@@ -45,6 +49,10 @@ export function whatsappDispatchUI({ api, e }) {
       configData: null,
       lastResult: null,
       loading: true,
+      connectionState: 'unknown',
+      qrModalOpen: false,
+      qrLoading: false,
+      qrBase64: '',
       error: '',
       statusMsg: '',
     };
@@ -140,6 +148,120 @@ export function whatsappDispatchUI({ api, e }) {
       return opts.join('');
     }
 
+    async function checkConnectionStatus() {
+      try {
+        const res = await api('/platform/whatsapp/instance/status');
+        state.connectionState = res.state || 'unknown';
+      } catch {
+        state.connectionState = 'unknown';
+      }
+      render();
+    }
+
+    async function requestQrCode() {
+      state.qrModalOpen = true;
+      state.qrLoading = true;
+      state.error = '';
+      render();
+      try {
+        const res = await api('/platform/whatsapp/instance/connect', { method: 'POST' });
+        state.qrLoading = false;
+        if (res.state === 'qrcode' && res.base64) {
+          state.qrBase64 = res.base64;
+          state.qrCode = res.code || '';
+          startQrPolling();
+        } else if (res.state === 'open') {
+          state.connectionState = 'open';
+          state.qrModalOpen = false;
+          state.statusMsg = '✅ WhatsApp já conectado com sucesso!';
+        } else {
+          state.qrLoading = false;
+          state.connectionState = res.state || 'connecting';
+        }
+      } catch (err) {
+        state.qrLoading = false;
+        state.error = 'Erro ao solicitar QR Code: ' + (err.message || 'Tente novamente');
+      }
+      render();
+    }
+
+    function startQrPolling() {
+      if (qrPollTimer) clearInterval(qrPollTimer);
+      qrPollTimer = setInterval(async () => {
+        try {
+          const st = await api('/platform/whatsapp/instance/status');
+          if (st.state === 'open') {
+            clearInterval(qrPollTimer);
+            qrPollTimer = null;
+            state.connectionState = 'open';
+            state.qrModalOpen = false;
+            state.statusMsg = '🎉 Celular da igreja conectado com sucesso ao WhatsApp!';
+            render();
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    function renderConnectionCard() {
+      if (state.connectionState === 'open') {
+        return `
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:22px;">🟢</span>
+              <div>
+                <strong style="color:#166534;font-size:13.5px;display:block;">WhatsApp da Igreja Conectado</strong>
+                <small style="color:#15803d;">Pronto para disparar mensagens personalizadas em 2º plano.</small>
+              </div>
+            </div>
+            <button type="button" class="secondary" id="wa-disconnect-btn" style="padding:4px 10px;font-size:11.5px;">Desconectar Aparelho</button>
+          </div>
+        `;
+      }
+
+      if (state.qrModalOpen) {
+        return `
+          <div id="wa-active-qr-card" style="background:#ffffff;border:2px dashed #16a34a;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong style="font-size:14.5px;color:#166534;">📱 Conectar Celular da Igreja (WhatsApp Web)</strong>
+              <button type="button" class="secondary" id="wa-close-qr-box" style="padding:4px 10px;font-size:12px;">Fechar QR Code</button>
+            </div>
+            <div style="margin:12px auto;display:grid;place-items:center;">
+              ${
+                state.qrLoading
+                  ? '<div style="padding:40px;color:var(--muted);"><span class="spinner" style="display:inline-block;margin-bottom:8px;">⏳</span><br>Gerando QR Code no servidor...</div>'
+                  : state.qrBase64
+                  ? `<img src="${state.qrBase64}" alt="QR Code WhatsApp" style="width:230px;height:230px;display:block;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.08);" />`
+                  : '<div style="padding:30px;color:#dc2626;">Não foi possível carregar o QR Code. Tente novamente.</div>'
+              }
+            </div>
+            <ol style="text-align:left;max-width:390px;margin:12px auto 8px;padding-left:22px;font-size:13px;color:var(--text);line-height:1.5;">
+              <li>Abra o WhatsApp no celular da igreja</li>
+              <li>Toque nos <strong>3 pontinhos</strong> (ou <strong>Configurações</strong> no iPhone) → <strong>Aparelhos conectados</strong></li>
+              <li>Toque em <strong>Conectar um aparelho</strong> e aponte a câmera para o QR Code acima!</li>
+            </ol>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px;">
+              🔄 Aguardando leitura da câmera no celular (reconhece automaticamente)...
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div style="background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px;">📱</span>
+            <div>
+              <strong style="color:#854d0e;font-size:13.5px;display:block;">WhatsApp da Igreja Desconectado</strong>
+              <small style="color:#a16207;">Aponte a câmera do celular para o QR Code (como no WhatsApp Web). Você não precisa de chaves nem códigos.</small>
+            </div>
+          </div>
+          <button type="button" id="wa-open-qr-btn" class="btn primary" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">
+            📷 Conectar WhatsApp (Ler QR Code)
+          </button>
+        </div>
+      `;
+    }
+
     async function openConfigSubpanel() {
       try {
         state.configData = await api('/platform/whatsapp/config');
@@ -156,8 +278,11 @@ export function whatsappDispatchUI({ api, e }) {
       return `
         <div class="panel" style="margin-bottom:14px;border:1px solid var(--border);background:var(--surface-2, #f8fafc);padding:14px;border-radius:12px;">
           <div class="section-title" style="margin-bottom:10px;">
-            <h3 style="margin:0;font-size:15px;">⚙️ Conexão da API de WhatsApp (Envio em 2º Plano)</h3>
+            <h3 style="margin:0;font-size:15px;">⚙️ Opções Técnicas de Servidor</h3>
             <button type="button" class="secondary" id="wa-close-cfg" style="padding:4px 10px;font-size:12px;">Voltar ao Disparo</button>
+          </div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;">
+            💡 <strong>Servidor Pré-Configurado:</strong> A Evolution API já está conectada automaticamente ao Google Cloud da igreja. Você <strong>não precisa</strong> gerar nem alterar chaves aqui, a menos que queira conectar um servidor externo.
           </div>
           <form id="wa-config-form" class="record-form" style="gap:10px;">
             <div class="form-grid-2">
@@ -197,21 +322,6 @@ export function whatsappDispatchUI({ api, e }) {
               </div>
             </div>
           </form>
-
-          ${cfg.provider === 'evolution' ? `
-            <div id="wa-qr-box" style="margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface, #ffffff);text-align:center;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
-                <strong style="font-size:13px;">📱 Conexão do Aparelho (WhatsApp Web)</strong>
-                <div style="display:flex;gap:6px;">
-                  <button type="button" class="btn primary btn-sm" id="wa-get-qr-btn" style="padding:4px 10px;font-size:12px;">📷 Gerar QR Code</button>
-                  <button type="button" class="secondary btn-sm" id="wa-check-status-btn" style="padding:4px 10px;font-size:12px;">Verificar Status</button>
-                </div>
-              </div>
-              <div id="wa-qr-display" style="min-height:40px;display:grid;place-items:center;font-size:13px;color:var(--muted);">
-                Clique em "Gerar QR Code" para ler com a câmera do celular da igreja.
-              </div>
-            </div>
-          ` : ''}
         </div>
       `;
     }
@@ -227,17 +337,15 @@ export function whatsappDispatchUI({ api, e }) {
           <div style="display:flex;align-items:center;gap:8px;">
             <h2 style="margin:0;">💬 Disparo Personalizado · WhatsApp</h2>
             ${
-              pStatus
-                ? `<span class="badge" style="background:${pStatus.configured ? '#dcfce7' : '#fef3c7'};color:${pStatus.configured ? '#166534' : '#92400e'};">
-                    ${pStatus.configured ? `API Ativa (${e(pStatus.provider.toUpperCase())})` : 'API pendente'}
-                   </span>`
-                : ''
+              state.connectionState === 'open'
+                ? `<span class="badge" style="background:#dcfce7;color:#166534;">🟢 Celular Conectado</span>`
+                : `<span class="badge" style="background:#fef3c7;color:#92400e;">📱 Celular Desconectado</span>`
             }
           </div>
           <div style="display:flex;gap:6px;align-items:center;">
             ${
               pStatus?.can_configure
-                ? `<button type="button" class="secondary" id="wa-open-cfg" style="padding:6px 10px;font-size:12px;">⚙️ Configurar API</button>`
+                ? `<button type="button" class="secondary" id="wa-open-cfg" style="padding:6px 10px;font-size:12px;">⚙️ Opções Avançadas</button>`
                 : ''
             }
             <button type="button" class="secondary" id="wa-close-modal">Fechar</button>
@@ -248,6 +356,8 @@ export function whatsappDispatchUI({ api, e }) {
         ${state.statusMsg ? `<p role="status" class="status" style="margin-bottom:10px;color:#166534;font-weight:600;">${e(state.statusMsg)}</p>` : ''}
 
         ${state.configOpen ? renderConfigSubpanel() : ''}
+
+        ${renderConnectionCard()}
 
         ${
           state.loading
@@ -406,59 +516,24 @@ export function whatsappDispatchUI({ api, e }) {
         }
       });
 
-      let qrPollTimer = null;
-      dlg.querySelector('#wa-get-qr-btn')?.addEventListener('click', async () => {
-        const display = dlg.querySelector('#wa-qr-display');
-        if (!display) return;
-        display.innerHTML = '<span style="color:var(--muted);">Solicitando QR Code à Evolution API…</span>';
-        try {
-          const res = await api('/platform/whatsapp/instance/connect', { method: 'POST' });
-          if (res.state === 'qrcode' && res.base64) {
-            display.innerHTML = `
-              <div style="display:inline-block;padding:12px;background:#ffffff;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.12);margin-top:6px;">
-                <img src="${res.base64}" alt="QR Code WhatsApp" style="width:200px;height:200px;display:block;" />
-              </div>
-              <p style="font-size:12px;margin:10px 0 0;line-height:1.4;">
-                1. Abra o WhatsApp no celular da igreja.<br>
-                2. Toque em <strong>Aparelhos conectados → Conectar aparelho</strong>.<br>
-                3. Aponte a câmera para o QR Code acima.
-              </p>
-            `;
-            if (qrPollTimer) clearInterval(qrPollTimer);
-            qrPollTimer = setInterval(async () => {
-              try {
-                const st = await api('/platform/whatsapp/instance/status');
-                if (st.state === 'open') {
-                  clearInterval(qrPollTimer);
-                  display.innerHTML = '<strong style="color:#16a34a;font-size:14px;">✅ WhatsApp conectado com sucesso!</strong>';
-                  await fetchRecipients(true);
-                }
-              } catch {}
-            }, 3000);
-          } else if (res.state === 'open') {
-            display.innerHTML = '<strong style="color:#16a34a;font-size:14px;">✅ WhatsApp já conectado e pronto para envios!</strong>';
-          } else {
-            display.innerHTML = `<span style="color:var(--muted);">Status da instância: ${res.state}</span>`;
-          }
-        } catch (err) {
-          display.innerHTML = `<span style="color:#dc2626;">Erro ao obter QR Code: ${e(err.message)}</span>`;
+      dlg.querySelector('#wa-open-qr-btn')?.addEventListener('click', () => void requestQrCode());
+      dlg.querySelector('#wa-close-qr-box')?.addEventListener('click', () => {
+        state.qrModalOpen = false;
+        if (qrPollTimer) {
+          clearInterval(qrPollTimer);
+          qrPollTimer = null;
         }
+        render();
       });
-
-      dlg.querySelector('#wa-check-status-btn')?.addEventListener('click', async () => {
-        const display = dlg.querySelector('#wa-qr-display');
-        if (!display) return;
+      dlg.querySelector('#wa-disconnect-btn')?.addEventListener('click', async () => {
         try {
-          const st = await api('/platform/whatsapp/instance/status');
-          if (st.state === 'open') {
-            display.innerHTML = '<strong style="color:#16a34a;">✅ Conexão ativa! O WhatsApp da igreja está online.</strong>';
-          } else if (st.state === 'close' || st.state === 'not_created') {
-            display.innerHTML = '<span style="color:#dc2626;">⚠️ Aparelho desconectado. Clique em "Gerar QR Code" para reconectar.</span>';
-          } else {
-            display.innerHTML = `<span>Status atual: <strong>${st.state}</strong> (${st.detail || ''})</span>`;
-          }
+          await api('/platform/whatsapp/instance/logout', { method: 'POST' });
+          state.connectionState = 'close';
+          state.statusMsg = 'Aparelho desconectado com sucesso.';
+          render();
         } catch (err) {
-          display.innerHTML = `<span style="color:#dc2626;">Erro ao consultar: ${e(err.message)}</span>`;
+          state.error = err.message;
+          render();
         }
       });
 
@@ -584,6 +659,7 @@ export function whatsappDispatchUI({ api, e }) {
 
     dlg.showModal();
     void fetchRecipients(false);
+    void checkConnectionStatus();
   }
 
   return { openModal };
