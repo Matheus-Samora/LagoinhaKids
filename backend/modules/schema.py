@@ -66,7 +66,9 @@ def migrate(c):
         'CREATE INDEX IF NOT EXISTS changes_record ON module_changes(module,record_id,created_at)',
         'CREATE INDEX IF NOT EXISTS sector_apps_status ON sector_applications(target_type,status,created_at)',
         'CREATE INDEX IF NOT EXISTS announcements_sector_active ON platform_announcements(target_sector,active,created_at)',
-        '''CREATE TABLE IF NOT EXISTS module_scopes(user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,module TEXT NOT NULL,scope TEXT NOT NULL DEFAULT '',PRIMARY KEY(user_id,module))'''
+        '''CREATE TABLE IF NOT EXISTS module_scopes(user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,module TEXT NOT NULL,scope TEXT NOT NULL DEFAULT '',PRIMARY KEY(user_id,module))''',
+        '''CREATE TABLE IF NOT EXISTS whatsapp_settings(id TEXT PRIMARY KEY,provider TEXT NOT NULL DEFAULT 'evolution',api_url TEXT NOT NULL DEFAULT '',instance_id TEXT NOT NULL DEFAULT '',api_token TEXT NOT NULL DEFAULT '',client_token TEXT NOT NULL DEFAULT '',sender_name TEXT NOT NULL DEFAULT 'Lagoinha',enabled BIGINT NOT NULL DEFAULT 1,updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,updated_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS whatsapp_dispatches(id TEXT PRIMARY KEY,sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,sender_name TEXT NOT NULL,target_sector TEXT NOT NULL,target_group TEXT NOT NULL DEFAULT '',template_text TEXT NOT NULL,total_recipients BIGINT NOT NULL DEFAULT 0,sent_count BIGINT NOT NULL DEFAULT 0,failed_count BIGINT NOT NULL DEFAULT 0,provider TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)'''
     ]
     for statement in statements:
         c.execute(statement)

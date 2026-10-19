@@ -1,4 +1,5 @@
 import {personalDataUI} from './personal.js';
+import {whatsappDispatchUI} from './whatsapp.js';
 import {uiIcon} from '../ui/icons.js';
 import {recoveryScreen} from './recovery.js';
 if(location.pathname==='/'&&['overview','children','rooms','attendance','events','lessons','notifications','settings','users','team'].includes(location.hash.slice(1)))location.replace('/kids'+location.hash);
@@ -103,6 +104,7 @@ async function api(path,options={}){
 }
 
 const personal=personalDataUI({api,e});
+const whatsapp=whatsappDispatchUI({api,e});
 const sectors=createSectors({api,e,identity:()=>identity,openQrModal:()=>openAppDownloadQrModal()});
 
 const brand=(areaKey=currentAreaKey())=>{
@@ -264,7 +266,7 @@ function memberCommunityPortal(tab='all'){
  <section id="announcements-section" style="margin-top:20px;">
   <div class="section-title" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
    <h2>Comunicados e Eventos</h2>
-   ${isLeader?`<button type="button" class="btn primary" id="open-new-announcement-btn" style="min-height:38px;padding:6px 14px;font-size:12.5px;">+ Comunicado</button>`:''}
+   ${isLeader?`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn secondary" id="open-whatsapp-dispatch-btn" style="min-height:38px;padding:6px 14px;font-size:12.5px;border-color:#16a34a;color:#15803d;">💬 Disparo WhatsApp</button><button type="button" class="btn primary" id="open-new-announcement-btn" style="min-height:38px;padding:6px 14px;font-size:12.5px;">+ Comunicado</button></div>`:''}
   </div>
   ${anns.length?`
    <div class="announcements-mural-grid">
@@ -588,6 +590,7 @@ function render(message=''){
      </div>
     </div>
     <div class="topbar-user-area">
+     ${(identity?.platform_admin||identity?.pastor||identity?.modules?.some(m=>m.enabled&&['admin','pastor','editor'].includes(m.role)))?`<button type="button" class="quiet topbar-btn-compact" id="topbar-whatsapp-btn" title="Enviar mensagens personalizadas no WhatsApp" style="color:#16a34a;font-weight:600;">💬 WhatsApp</button>`:''}
      <button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
      <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
@@ -639,7 +642,20 @@ function render(message=''){
  }));
 
  root.querySelector('#my-personal-data')?.addEventListener('click',()=>personal.ownDialog());
- if(module?.enabled&&!personalOnly&&module.id!=='kids'){const container=root.querySelector('#sector-content');const archiveButton=document.createElement('button');archiveButton.type='button';archiveButton.className='secondary';archiveButton.textContent='Arquivados';archiveButton.onclick=()=>void personal.archives(module.id,()=>sectors.mount(module,activeSectionTab)).catch(error=>{root.querySelector('.status').textContent=error.message;});container.before(archiveButton);}
+ if(module?.enabled&&!personalOnly&&module.id!=='kids'){
+  const container=root.querySelector('#sector-content');
+  const bar=document.createElement('div');
+  bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
+  const archiveButton=document.createElement('button');
+  archiveButton.type='button';archiveButton.className='secondary';archiveButton.textContent='Arquivados';
+  archiveButton.onclick=()=>void personal.archives(module.id,()=>sectors.mount(module,activeSectionTab)).catch(error=>{root.querySelector('.status').textContent=error.message;});
+  const waButton=document.createElement('button');
+  waButton.type='button';waButton.className='secondary';waButton.style.cssText='border-color:#16a34a;color:#15803d;';
+  waButton.textContent='💬 Disparo WhatsApp';
+  waButton.onclick=()=>whatsapp.openModal({defaultSector:module.id});
+  bar.append(archiveButton,waButton);
+  container.before(bar);
+ }
  const bindPushBtn=(btn)=>{
   if(!btn)return;
   btn.onclick=async(event)=>{const b=event.currentTarget;b.disabled=true;try{await subscribeWebPush(api);b.textContent='Ativado ✓';}catch(error){b.disabled=false;b.textContent=t("nav.enable_notices", "Avisos");root.querySelector('.status').textContent=error.message;}};
@@ -655,6 +671,8 @@ function render(message=''){
  root.querySelector('#topbar-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelectorAll('[data-open-qr]').forEach(b=>b.addEventListener('click',()=>openAppDownloadQrModal()));
  root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>{notifDrawerOpen=!notifDrawerOpen;render(message);});
+ root.querySelector('#topbar-whatsapp-btn')?.addEventListener('click',()=>whatsapp.openModal({defaultSector:module?.id||''}));
+ root.querySelector('#open-whatsapp-dispatch-btn')?.addEventListener('click',()=>whatsapp.openModal({defaultSector:module?.id||''}));
  root.querySelector('#open-new-announcement-btn')?.addEventListener('click',()=>openPublishAnnouncementModal());
  root.querySelectorAll('[data-del-ann]').forEach(btn=>btn.addEventListener('click',async()=>{
   if(!confirm('Arquivar este comunicado?'))return;
