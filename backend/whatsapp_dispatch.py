@@ -110,6 +110,33 @@ def is_provider_configured(cfg: dict) -> bool:
     return bool(cfg.get('api_url') and cfg.get('api_token'))
 
 
+def meta_connection_status(cfg: dict) -> dict:
+    """Validate official credentials without sending a message or changing the number."""
+    if not is_provider_configured(cfg):
+        return {'state': 'unconfigured', 'provider': 'meta', 'message': 'Cadastre o Phone Number ID e o token da Meta.'}
+    phone_id = str(cfg.get('instance_id', '')).strip()
+    if not phone_id.isdigit():
+        return {'state': 'error', 'provider': 'meta', 'message': 'Phone Number ID deve conter somente números.'}
+    version = os.getenv('WHATSAPP_META_GRAPH_VERSION', 'v21.0')
+    if not re.fullmatch(r'v\d+\.0', version):
+        version = 'v21.0'
+    try:
+        with httpx.Client(timeout=10.0) as http:
+            resp = http.get(f'https://graph.facebook.com/{version}/{phone_id}',
+                            params={'fields': 'id,code_verification_status'},
+                            headers={'Authorization': f"Bearer {cfg['api_token']}"})
+        if resp.status_code != 200:
+            return {'state': 'error', 'provider': 'meta', 'message': 'A Meta recusou a credencial ou o acesso ao número. Revise o token e as permissões.'}
+        data = resp.json()
+        if str(data.get('id', '')) != phone_id:
+            return {'state': 'error', 'provider': 'meta', 'message': 'A Meta não confirmou o número configurado.'}
+        return {'state': 'credentials_valid', 'provider': 'meta',
+                'number_verified': data.get('code_verification_status') == 'VERIFIED',
+                'message': 'Credenciais validadas. O envio depende do registro do número e das regras de mensagens da Meta.'}
+    except (httpx.HTTPError, ValueError):
+        return {'state': 'offline', 'provider': 'meta', 'message': 'Não foi possível consultar a Meta. Tente novamente.'}
+
+
 def collect_recipients(c, sector: str, group: str = '', q: str = '', ministry_scope: str = '') -> list[dict]:
     """Gather deduplicated contacts with phone numbers for the requested sector and group filter."""
     users_by_email = {}
@@ -376,7 +403,12 @@ def send_via_provider(cfg: dict, recipient: dict, message_text: str, client: htt
             payload = {'phone': phone, 'message': message_text}
             resp = http_post(http, url, headers, payload)
         elif provider == 'meta':
-            url = f"https://graph.facebook.com/v21.0/{instance_id}/messages"
+            version = os.getenv('WHATSAPP_META_GRAPH_VERSION', 'v21.0')
+            if not re.fullmatch(r'v\d+\.0', version):
+                version = 'v21.0'
+            if not instance_id.isdigit():
+                return False, 'Phone Number ID inválido.'
+            url = f"https://graph.facebook.com/{version}/{instance_id}/messages"
             headers = {'Authorization': f'Bearer {api_token}', 'Content-Type': 'application/json'}
             payload = {
                 'messaging_product': 'whatsapp',
@@ -401,6 +433,17 @@ def send_via_provider(cfg: dict, recipient: dict, message_text: str, client: htt
         else:
             return False, f'Provedor desconhecido: {provider}'
 
+        if provider == 'meta':
+            try:
+                data = resp.json()
+            except ValueError:
+                return False, 'Resposta inválida da Meta.'
+            if 200 <= resp.status_code < 300 and any(m.get('id') for m in data.get('messages', []) if isinstance(m, dict)):
+                return True, 'Aceito pela Meta; entrega ainda não confirmada.'
+            code = (data.get('error') or {}).get('code')
+            if code == 131047:
+                return False, 'Fora da janela de atendimento: use um modelo aprovado pela Meta.'
+            return False, 'A Meta não confirmou o envio. Revise credenciais, número e modelo de mensagem.'
         if 200 <= resp.status_code < 300:
             return True, 'Enviado via API'
         return False, f'HTTP {resp.status_code}: {resp.text[:160]}'
@@ -518,7 +561,12 @@ def update_whatsapp_config(data: WhatsAppConfigInput, user=Depends(session)):
         if not (platform_admin(c, user['id']) or is_pastor(c, user['id'])):
             fail('forbidden', 'Apenas Pastores e Admin TI podem configurar o provedor de WhatsApp.', 403)
         current = load_whatsapp_config(c)
-        token_to_save = data.api_token.strip() if data.api_token.strip() else current.get('api_token', '')
+        if provider == 'meta' and not data.instance_id.strip().isdigit():
+            fail('instance_id', 'Informe o Phone Number ID numérico da Meta.')
+        same_provider = current.get('provider') == provider
+        token_to_save = data.api_token.strip() or (current.get('api_token', '') if same_provider else '')
+        if data.enabled and provider == 'meta' and not token_to_save:
+            fail('api_token', 'Informe o token da Meta; a chave da Evolution não pode ser reutilizada.')
         client_token_to_save = data.client_token.strip() if data.client_token.strip() else current.get('client_token', '')
         now = s.now()
         c.execute(
@@ -706,6 +754,8 @@ def get_instance_status(user=Depends(session)):
             return {'state': 'unconfigured', 'message': 'API não configurada.'}
 
         provider = cfg.get('provider', 'evolution')
+        if provider == 'meta':
+            return meta_connection_status(cfg)
         if provider != 'evolution':
             return {'state': 'external', 'provider': provider, 'message': 'Provedor externo configurado.'}
 
@@ -735,6 +785,11 @@ def connect_instance(user=Depends(session)):
         cfg = load_whatsapp_config(c)
         if not is_provider_configured(cfg):
             fail('config', 'Configure primeiro a URL e o Token da Evolution API.')
+
+        if cfg.get('provider') == 'meta':
+            return meta_connection_status(cfg)
+        if cfg.get('provider') != 'evolution':
+            fail('provider', 'Este provedor não utiliza QR Code da Evolution.')
 
         api_url = (cfg.get('api_url') or '').rstrip('/')
         instance_id = (cfg.get('instance_id') or 'lagoinha-systems').strip()

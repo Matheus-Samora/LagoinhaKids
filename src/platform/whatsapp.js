@@ -154,6 +154,8 @@ export function whatsappDispatchUI({ api, e }) {
       try {
         const res = await api('/platform/whatsapp/instance/status');
         state.connectionState = res.state || 'unknown';
+        state.connectionProvider = res.provider || '';
+        state.connectionMessage = res.message || '';
       } catch {
         state.connectionState = 'unknown';
       }
@@ -225,6 +227,15 @@ export function whatsappDispatchUI({ api, e }) {
     }
 
     function renderConnectionCard() {
+      if (state.connectionProvider === 'meta' || state.data?.provider_status?.provider === 'meta') {
+        return `<div class="panel" role="status" style="margin-bottom:14px;padding:16px;">
+          <strong>WhatsApp oficial · Meta</strong>
+          <p>${e(state.connectionMessage || 'Validando configuração da Meta...')}</p>
+          <small>Mensagens iniciadas pela igreja exigem modelos aprovados. Credenciais válidas não confirmam entrega.</small>
+          <button type="button" class="secondary" id="wa-validate-meta">Verificar conexão</button>
+        </div>`;
+      }
+
       if (state.connectionState === 'open') {
         return `
           <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -304,7 +315,7 @@ export function whatsappDispatchUI({ api, e }) {
             <button type="button" class="secondary" id="wa-close-cfg" style="padding:4px 10px;font-size:12px;">Voltar ao Disparo</button>
           </div>
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;">
-            💡 <strong>Servidor Pré-Configurado:</strong> A Evolution API já está conectada automaticamente ao Google Cloud da igreja. Você <strong>não precisa</strong> gerar nem alterar chaves aqui, a menos que queira conectar um servidor externo.
+            Configure o provedor autorizado pela igreja. Para a Meta oficial, use o Phone Number ID e o token do aplicativo empresarial. Não reutilize a chave da Evolution.
           </div>
           <form id="wa-config-form" class="record-form" style="gap:10px;">
             <div class="form-grid-2">
@@ -510,6 +521,7 @@ export function whatsappDispatchUI({ api, e }) {
             state.statusMsg = res.message;
             state.configOpen = false;
             await fetchRecipients(true);
+            await checkConnectionStatus();
           } catch (err) {
             state.error = err.message;
             render();
@@ -538,6 +550,7 @@ export function whatsappDispatchUI({ api, e }) {
         }
       });
 
+      dlg.querySelector('#wa-validate-meta')?.addEventListener('click', () => void checkConnectionStatus());
       dlg.querySelector('#wa-open-qr-btn')?.addEventListener('click', () => void requestQrCode());
       dlg.querySelector('#wa-close-qr-box')?.addEventListener('click', () => {
         state.qrModalOpen = false;

@@ -127,3 +127,57 @@ def test_pastor_and_admin_background_whatsapp_dispatch(records, monkeypatch):
     assert len(sent_payloads) == 2
     assert any('Gabriel!' in p['json']['text'] for p in sent_payloads)
     assert all(p['headers']['apikey'] == 'secret-evo-key' for p in sent_payloads)
+
+def test_meta_requires_own_credentials_and_numeric_phone_id(records):
+    admin = client(1)
+    assert admin.put('/api/platform/whatsapp/config', json={
+        'provider': 'evolution', 'api_url': 'https://example.test', 'api_token': 'evolution-only',
+    }).status_code == 200
+    assert admin.put('/api/platform/whatsapp/config', json={
+        'provider': 'meta', 'instance_id': '123456',
+    }).status_code == 400
+    assert admin.put('/api/platform/whatsapp/config', json={
+        'provider': 'meta', 'instance_id': '../bad', 'api_token': 'meta-only',
+    }).status_code == 400
+
+
+def test_meta_acceptance_requires_message_id(monkeypatch):
+    import httpx
+    import backend.whatsapp_dispatch as wd
+    cfg = {'provider': 'meta', 'instance_id': '123456', 'api_token': 'not-a-real-token'}
+    recipient = {'normalized_phone': '5511999990000'}
+    requests = []
+    def accept(request):
+        requests.append(request)
+        return httpx.Response(200, json={'messages': [{'id': 'test-message-id'}]})
+    with httpx.Client(transport=httpx.MockTransport(accept)) as http:
+        ok, detail = wd.send_via_provider(cfg, recipient, 'Teste isolado', client=http)
+    assert ok and 'entrega ainda' in detail
+    assert requests[0].url.host == 'graph.facebook.com'
+    assert requests[0].headers['authorization'] == 'Bearer not-a-real-token'
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))) as http:
+        assert wd.send_via_provider(cfg, recipient, 'Teste isolado', client=http)[0] is False
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(400, json={'error': {'code': 131047, 'message': 'sensitive provider details'}}))) as http:
+        ok, detail = wd.send_via_provider(cfg, recipient, 'Teste isolado', client=http)
+        assert not ok and 'modelo aprovado' in detail and 'sensitive' not in detail
+
+
+def test_meta_validation_is_read_only_and_has_no_qr(records, monkeypatch):
+    import httpx
+    import backend.whatsapp_dispatch as wd
+    admin = client(1)
+    assert admin.put('/api/platform/whatsapp/config', json={
+        'provider': 'meta', 'instance_id': '123456', 'api_token': 'not-a-real-token',
+    }).status_code == 200
+    real_client = httpx.Client
+    requests = []
+    def validate(request):
+        requests.append(request)
+        return httpx.Response(200, json={'id': '123456', 'code_verification_status': 'VERIFIED'})
+    monkeypatch.setattr(wd.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(validate), **kwargs))
+    result = admin.get('/api/platform/whatsapp/instance/status')
+    assert result.status_code == 200 and result.json()['state'] == 'credentials_valid'
+    assert result.json()['number_verified'] is True
+    assert admin.post('/api/platform/whatsapp/instance/connect').json()['state'] == 'credentials_valid'
+    assert all(r.method == 'GET' for r in requests)
+    assert client(3).get('/api/platform/whatsapp/instance/status').status_code == 403
