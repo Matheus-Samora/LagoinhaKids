@@ -289,7 +289,7 @@ function teamPage(){
   const roleLabel=m.role==='admin'?'🛡️ Coordenação':m.staff_role==='monitor'?'🤝 Monitor(a)':'👨‍🏫 Professor(a)';
   const rolePillClass=m.role==='admin'?'admin':m.staff_role==='monitor'?'monitor':'teacher';
   const cleanPhone=(m.phone||'').replace(/\D/g,'');
-  const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${m.name}! Sou da equipe Lagoinha Kids.`)}`:'';
+  const waLink='';
   const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
   const canEdit=Boolean(S.user.platform_admin);
 
@@ -311,9 +311,9 @@ function teamPage(){
     <div class="team-card-body">
       ${cleanPhone?`
         <div class="team-contact-row">
-          <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="team-whatsapp-link">
+          <span>
             ${icon('whatsapp',14)} <span>${escape(m.phone)}</span>
-          </a>
+          </span>
         </div>
       `:''}
 
@@ -567,7 +567,7 @@ function teamMemberModal(member=null){
   <label>E-mail
     <input name="email" type="email" value="${escape(member?.email||'')}" required maxlength="200"/>
   </label>
-  <label>WhatsApp
+  <label>Telefone
     <input name="phone" type="tel" value="${escape(member?.phone||'')}" maxlength="30"/>
   </label>
   ${!isEdit?`
@@ -818,7 +818,7 @@ function guestCheckinModal(){
    <label>Turma / Salinha<select name="room_id" required>${S.rooms.map(r=>`<option value="${r.id}">${escape(r.name)} (${r.min_age} a ${r.max_age} anos)</option>`).join('')}</select></label>
   </div>
   <label>Nome do responsável visitante<input name="guardian_name" required minlength="2" maxlength="100" placeholder="Nome do pai/mãe"/></label>
-  <label>WhatsApp do responsável<input name="guardian_phone" type="tel" required minlength="8" maxlength="30" placeholder="Ex.: 31988887777"/></label>
+  <label>Telefone do responsável<input name="guardian_phone" type="tel" required minlength="8" maxlength="30" placeholder="Ex.: 31988887777"/></label>
   <label>Alergias ou observações importantes<input name="allergies" placeholder="Ex.: Alergia a amendoim (ou deixe em branco)"/></label>
   <p class="form-error" role="alert"></p>
   <button class="btn primary full" type="submit">Emitir Etiqueta & Código de Retirada</button>
@@ -1023,7 +1023,7 @@ function eventParticipantsModal(evId){
    ${list.length?`<div class="participants-list">
     ${list.map(p=>{
      const cleanPhone=(p.guardian_phone||'').replace(/\D/g,'');
-     const waLink=cleanPhone?`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá! Sou do ministério infantil sobre a inscrição de ${p.child_name} no evento ${ev.title}.`)}`:'';
+     const waLink='';
      return `<article class="participant-item-card">
       <div class="participant-info-col">
        <div class="participant-avatar-row">
@@ -1040,7 +1040,7 @@ function eventParticipantsModal(evId){
        </div>`:''}
        <div class="participant-guardian-info">
         <span>Responsável: <strong>${escape(p.guardian_name||'Cadastrado')}</strong></span>
-        ${p.guardian_phone?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><small style="color:#a1a1aa;">${escape(p.guardian_phone)}</small>${waLink?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="whatsapp-btn" style="padding:2px 8px;font-size:11px;">${icon('whatsapp',13)} WhatsApp</a>`:''}</div>`:''}
+        ${p.guardian_phone?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><small style="color:#a1a1aa;">${escape(p.guardian_phone)}</small>${waLink?`<span>${icon('whatsapp',13)} WhatsApp</span>`:''}</div>`:''}
        </div>
        ${p.notes?`<div class="participant-notes"><small>Obs: ${escape(p.notes)}</small></div>`:''}
       </div>

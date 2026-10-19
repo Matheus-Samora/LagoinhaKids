@@ -457,7 +457,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
       ` : ''}
     </div>
   ` : '';
-  const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<a href="https://wa.me/55${g.guardian_phone.replace(/\\D/g,'')}" target="_blank" style="color:#22c55e;">WhatsApp: ${e(g.guardian_phone)}</a>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
+  const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<span>Telefone: ${e(g.guardian_phone)}</span>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
   return `${title('Chamada','',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} Ler QR Code</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Visitante</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
   <div class="scanner-desk-bar">
     <div class="scanner-desk-info">
@@ -543,7 +543,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
 
             <div class="student-family-info">
               <span>Responsável: <strong>${e(ch.parent_name || 'Aguardando vínculo')}</strong></span>
-              ${parentPhone ? `<a href="https://wa.me/55${parentPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Olá! Sou da salinha ${room?.name||'Lagoinha Kids'} sobre o(a) ${ch.name}.`)}" target="_blank" rel="noopener noreferrer" class="whatsapp-mini-btn">${icon('whatsapp',14)} WhatsApp</a>` : ''}
+              ${parentPhone ? `<span>${icon('whatsapp',14)} WhatsApp</span>` : ''}
             </div>
 
             <div class="student-actions-bar">

@@ -391,7 +391,7 @@ function openApplyModal(targetType,targetId,targetName,extra={}){
      ${roles.map(r=>`<option value="${e(r)}">${e(r)}</option>`).join('')}
     </select>
    </label>
-   <label>WhatsApp
+   <label>Telefone
     <input name="phone" type="tel" required placeholder="(33) 99999-0000" value="${e(identity?.user?.phone||'')}" maxlength="40">
    </label>
    <label>Observações (opcional)
