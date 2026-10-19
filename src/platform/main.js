@@ -1,3 +1,4 @@
+import {personalDataUI} from './personal.js';
 import {uiIcon} from '../ui/icons.js';
 import {recoveryScreen} from './recovery.js';
 if(location.pathname==='/'&&['overview','children','rooms','attendance','events','lessons','notifications','settings','users','team'].includes(location.hash.slice(1)))location.replace('/kids'+location.hash);
@@ -26,7 +27,7 @@ const brandMeta={
  finance:{word:'Finance',tagline:'GESTÃO FINANCEIRA'}
 };
 const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA'];
-const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Colaborador',viewer:'Consulta'};
+const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Responsável — lançar e editar',viewer:'Pessoal — somente meus dados'};
 let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=null,notifDrawerOpen=false,activeSectionTab='all';
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
@@ -101,6 +102,7 @@ async function api(path,options={}){
  const data=await response.json();if(!response.ok)throw new Error(data.detail?.message||'Não foi possível concluir. Tente novamente.');return data;
 }
 
+const personal=personalDataUI({api,e});
 const sectors=createSectors({api,e,identity:()=>identity,openQrModal:()=>openAppDownloadQrModal()});
 
 const brand=(areaKey=currentAreaKey())=>{
@@ -506,7 +508,8 @@ function render(message=''){
  const module=identity.modules.find(m=>m.id===selected);
  const isMemberPortal=!module&&(selected==='access'||selected==='membro'||!identity.platform_admin);
  const areaKey=module?module.id:(isMemberPortal?'membro':'systems');
- const tabs=AREA_TABS[areaKey]||AREA_TABS.membro;
+ const personalOnly=module&&module.id!=='kids'&&!identity.platform_admin&&!identity.pastor&&module.role==='viewer';
+ const tabs=personalOnly?[{id:'all',label:'Meus dados',icon:'identity'}]:(AREA_TABS[areaKey]||AREA_TABS.membro);
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -596,6 +599,7 @@ function render(message=''){
     ${!module&&activeSectionTab==='all'?portalHero(module,selected):''}
     <p class="status" role="status">${e(message)}</p>
     ${notificationsBanner()}
+    ${isMemberPortal?'<button type="button" id="my-personal-data" class="secondary">Meus dados e cadastro</button>':''}
     ${module?moduleView(module):`
      ${activeSectionTab==='all'&&visibleModules.length?`
       <div class="section-title" style="margin-bottom:14px;">
@@ -616,7 +620,7 @@ function render(message=''){
   </div>
  </div>`;
 
- if(module?.enabled&&module.id!=='kids')void sectors.mount(module,activeSectionTab);
+ if(module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
 
  root.querySelectorAll('[data-switch-tab]').forEach(btn=>btn.addEventListener('click',()=>{
   const nextTab=btn.dataset.switchTab||'all';
@@ -626,7 +630,7 @@ function render(message=''){
    const crumb=root.querySelector('.desktop-breadcrumb strong');
    const tObj=tabs.find(x=>x.id===nextTab);
    if(crumb&&tObj)crumb.textContent=tObj.label;
-   sectors.setTab(nextTab);
+   if(!personalOnly)sectors.setTab(nextTab);
    window.scrollTo({top:0,behavior:'smooth'});
   }else{
    render(message);
@@ -634,6 +638,8 @@ function render(message=''){
   }
  }));
 
+ root.querySelector('#my-personal-data')?.addEventListener('click',()=>personal.ownDialog());
+ if(module?.enabled&&!personalOnly&&module.id!=='kids'){const container=root.querySelector('#sector-content');const archiveButton=document.createElement('button');archiveButton.type='button';archiveButton.className='secondary';archiveButton.textContent='Arquivados';archiveButton.onclick=()=>void personal.archives(module.id,()=>sectors.mount(module,activeSectionTab)).catch(error=>{root.querySelector('.status').textContent=error.message;});container.before(archiveButton);}
  const bindPushBtn=(btn)=>{
   if(!btn)return;
   btn.onclick=async(event)=>{const b=event.currentTarget;b.disabled=true;try{await subscribeWebPush(api);b.textContent='Ativado ✓';}catch(error){b.disabled=false;b.textContent=t("nav.enable_notices", "Avisos");root.querySelector('.status').textContent=error.message;}};

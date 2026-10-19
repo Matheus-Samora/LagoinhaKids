@@ -4,10 +4,10 @@ from fastapi import APIRouter,Depends,Query
 from pydantic import BaseModel,Field
 from ...module_security import module_access
 from ... import store as s
-from ...app import fail
+from ...app import fail,session
 from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/members',tags=['Members'])
-read=module_access('members');write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
+read=module_access('members',('admin','editor'));write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
 STAGES=('visitor','new_convert','baptized','in_training','active_member','leader')
 
 class Cell(Record):
@@ -42,6 +42,7 @@ class Person(Record):
     pastoral_notes:str=Field(default='',max_length=600)
 
 class SelfRegister(BaseModel):
+    version:int|None=Field(default=None,ge=1)
     name:str=Field(min_length=2,max_length=120)
     family_name:str=Field(default='',max_length=120)
     birthday:date|None=None
@@ -65,19 +66,25 @@ def _decrypt_person(d:dict)->dict:
     return d
 
 @router.get('')
-def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
+def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('members'))):
     from ..schema import ensure_official_gcs
     with s.db() as c:
+        from ...record_policy import manager,personal_records
+        if not manager(c,user,'members'):return personal_records(c,user,'members')
         if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
             ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')]
         families=[dict(r) for r in c.execute("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE f.id=p.family_id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")]
         people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name LIMIT 200",('%'+q.lower()+'%',))]
+        from ...record_policy import global_manager
+        if not global_manager(c,user):
+            for person in people:person.pop('pastoral_notes',None)
         self_regs=[_decrypt_person(dict(r)) for r in c.execute("SELECT * FROM members_self_registrations WHERE status='pending' ORDER BY created_at DESC LIMIT 100")]
         gc_apps=[]
         for r in c.execute("SELECT * FROM sector_applications WHERE target_type='gc' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));gc_apps.append(d)
         return {
+            'pastoral_notes_allowed':bool(global_manager(c,user)),
             'cells':cells,
             'families':families,
             'people':people,
@@ -100,7 +107,12 @@ def persist(kind,data,user,rid=None):
         c.execute('BEGIN IMMEDIATE')
         if getattr(data,'cell_id',None):current(c,'members_cells',data.cell_id)
         if isinstance(data,Person) and data.family_id:current(c,'members_families',data.family_id)
-        return save(c,'members_'+kind,'members',data,values(data),user,rid)
+        from ...record_policy import global_manager
+        payload=values(data)
+        if isinstance(data,Person) and not global_manager(c,user):
+            if data.pastoral_notes.strip():fail('pastoral_notes','Anotações pastorais são exclusivas de TI e Pastores.',403)
+            payload.pop('pastoral_notes',None)
+        return save(c,'members_'+kind,'members',data,payload,user,rid)
 
 @router.post('/cells')
 def create_cell(data:Cell,user=Depends(write)):return persist('cells',data,user)
@@ -124,24 +136,34 @@ def create_person(data:Person,user=Depends(write)):return persist('people',data,
 def edit_person(rid:str,data:Person,user=Depends(write)):return persist('people',data,user,rid)
 
 @router.post('/self-register')
-def submit_self_registration(data:SelfRegister):
+def submit_self_registration(data:SelfRegister,user=Depends(session)):
     if not data.name.strip():fail('name','Informe seu nome completo.')
     check_date(data.birthday)
     if data.email and ('@' not in data.email or ' ' in data.email):fail('email','Confira o e-mail.')
+    from ...record_policy import manager
+    with s.db() as c:responsible=manager(c,user,'members')
+    if not responsible:data=data.model_copy(update={'email':user['email'],'integration_stage':'visitor'})
     stage=data.integration_stage if data.integration_stage in STAGES else 'visitor'
     rid=secrets.token_hex(16)
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        c.execute(
-            'INSERT INTO members_self_registrations(id,name,family_name,birthday,phone,email,marital_status,profession,address,integration_stage,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-            (rid,data.name.strip(),data.family_name.strip(),data.birthday.isoformat() if data.birthday else None,data.phone.strip(),data.email.strip(),data.marital_status.strip(),data.profession.strip(),encrypt_text(data.address.strip()),stage,'pending',s.now())
-        )
+        existing=c.execute("SELECT * FROM members_self_registrations WHERE owner_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1",(user['id'],)).fetchone()
+        fields={'name':data.name.strip(),'family_name':data.family_name.strip(),'birthday':data.birthday.isoformat() if data.birthday else None,'phone':data.phone.strip(),'email':data.email.strip(),'marital_status':data.marital_status.strip(),'profession':data.profession.strip(),'address':encrypt_text(data.address),'integration_stage':stage}
+        if existing:
+            rid=existing['id']
+            if all(existing[k]==v for k,v in fields.items() if k!='address') and decrypt_text(existing['address'])==data.address.strip():return {'id':rid,'ok':True,'message':'Cadastro já enviado para análise.'}
+            if data.version!=existing['version']:fail('conflict','Seu cadastro mudou. Recarregue antes de salvar.',409)
+            c.execute('UPDATE members_self_registrations SET '+','.join(k+'=?' for k in fields)+',version=version+1 WHERE id=? AND version=?',(*fields.values(),rid,data.version))
+        else:
+            c.execute('INSERT INTO members_self_registrations(id,'+','.join(fields)+",status,created_at,owner_id) VALUES("+','.join('?' for _ in range(len(fields)+4))+')',(rid,*fields.values(),'pending',s.now(),user['id']))
+        after=c.execute('SELECT * FROM members_self_registrations WHERE id=?',(rid,)).fetchone()
+        change(c,'members',rid,'registration_updated' if existing else 'registration_created',user,dict(existing) if existing else None,dict(after))
         if data.cell_id:
             cell=c.execute('SELECT id,name FROM members_cells WHERE id=? AND active=1',(data.cell_id.strip(),)).fetchone()
-            if cell:
+            if cell and not c.execute("SELECT 1 FROM sector_applications WHERE user_id=? AND target_type='gc' AND target_id=? AND status='pending'",(user['id'],cell['id'])).fetchone():
                 c.execute(
                     'INSERT INTO sector_applications(id,user_id,member_name,phone,email,target_type,target_id,target_name,role_desired,notes,status,reviewed_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    (secrets.token_hex(16),None,data.name.strip(),data.phone.strip(),data.email.strip(),'gc',cell['id'],cell['name'],'Participante de GC',encrypt_text('Solicitado via ficha de auto-cadastro'),'pending',None,s.now())
+                    (secrets.token_hex(16),user['id'],data.name.strip(),data.phone.strip(),data.email.strip(),'gc',cell['id'],cell['name'],'Participante de GC',encrypt_text('Solicitado via ficha de auto-cadastro'),'pending',None,s.now())
                 )
     return {'id':rid,'ok':True,'message':'Cadastro enviado para a secretaria com sucesso!'}
 
@@ -167,6 +189,8 @@ def approve_self_registration(rid:str,user=Depends(write)):
             'profession':reg['profession'] or '','address':decrypt_text(reg['address'] or ''),'pastoral_notes':encrypt_text('Auto-cadastro aprovado')
         }
         p_res=save(c,'members_people','members',Person(name=reg['name']),person_vals,user)
+        if reg['owner_id'] is not None:
+            c.execute('UPDATE members_people SET created_by=? WHERE id=?',(reg['owner_id'],p_res['id']))
         c.execute("UPDATE members_self_registrations SET status='approved' WHERE id=?",(rid,))
         s.audit(c,user['id'],'members:self_reg_approved:'+rid)
         return {'ok':True,'person_id':p_res['id'],'family_id':fam_id}

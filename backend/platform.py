@@ -6,6 +6,7 @@ from .app import session,fail,public_user,validate_password,email
 import sqlite3
 from .platform_access import MODULES,ROLES,allowed,platform_admin,is_pastor
 from .modules.common import encrypt_text,decrypt_text
+from .record_policy import visible_announcement
 from .modules.ministries.router import CATALOG as MINISTRY_CATALOG
 router=APIRouter(prefix='/api/platform')
 
@@ -48,10 +49,10 @@ def community_catalog(user=Depends(session)):
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name')]
         counts={r['ministry']:dict(r) for r in c.execute('SELECT ministry,count(*) total,sum(CASE WHEN is_leader=1 THEN 1 ELSE 0 END) leaders FROM ministries_assignments WHERE active=1 GROUP BY ministry')}
         my_apps=[]
-        for r in c.execute('SELECT * FROM sector_applications WHERE user_id=? OR (email!=? AND lower(email)=?) ORDER BY created_at DESC LIMIT 50',(user['id'],'',user['email'].lower())):
+        for r in c.execute('SELECT * FROM sector_applications WHERE user_id=? OR (email!=? AND lower(email)=?) ORDER BY created_at DESC LIMIT 50',(user['id'],'',user['email'].lower() if user.get('email_verified') else '')):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
-        announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 40')]
+        announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 200') if visible_announcement(c,user,dict(r))][:40]
         return {
             'cells':cells,
             'ministries':[{'name':m,'total':counts.get(m,{}).get('total',0),'leaders':counts.get(m,{}).get('leaders',0)} for m in MINISTRY_CATALOG],
@@ -132,7 +133,7 @@ class PlatformAnnouncementCreate(BaseModel):
 @router.get('/announcements')
 def list_announcements(user=Depends(session)):
     with s.db() as c:
-        return [dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 50')]
+        return [dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 200') if visible_announcement(c,user,dict(r))][:50]
 
 @router.post('/announcements')
 def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
@@ -149,9 +150,11 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
         is_leader=bool(is_root or pastor or leader_grants)
         if not is_leader:
             fail('forbidden','Apenas líderes responsáveis ou coordenadores de setores podem publicar comunicados e eventos.',403)
-        if not (is_root or pastor) and t_sector!='all' and t_sector not in leader_grants:
+        if not (is_root or pastor) and (t_sector=='all' or t_sector not in leader_grants):
             fail('forbidden',f'Seu usuário não possui coordenação autorizada para o setor {t_sector}.',403)
 
+        scope_row=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
+        target_scope=(scope_row['scope'] or '') if scope_row and t_sector=='ministries' and not (is_root or pastor) else ''
         c.execute(
             'INSERT INTO platform_announcements(id,title,message,target_sector,author_id,author_name,event_date,location,banner_url,active,created_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)',
             (aid,data.title.strip(),data.message.strip(),t_sector,user['id'],user['name'],data.event_date.strip() if data.event_date else None,data.location.strip() if data.location else None,data.banner_url.strip() if data.banner_url else '',now)
@@ -172,6 +175,9 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
         elif t_sector=='finance':
             for r in c.execute("SELECT user_id FROM module_access WHERE module='finance' AND enabled=1"):recipients.add(r['user_id'])
 
+        c.execute('UPDATE platform_announcements SET target_scope=? WHERE id=?',(target_scope,aid))
+        audience={'target_sector':t_sector,'target_scope':target_scope}
+        recipients={uid for uid in recipients if visible_announcement(c,dict(c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()),audience)}
         n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
         n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
         for uid in recipients:

@@ -22,10 +22,7 @@ def ensure_column(c, table, column, definition):
             c.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
 
 def ensure_official_gcs(c):
-    # Remove deprecated GC Union if present
-    c.execute("UPDATE members_people SET cell_id=NULL WHERE cell_id IN (SELECT id FROM members_cells WHERE lower(name) LIKE '%union%')")
-    c.execute("UPDATE members_families SET cell_id=NULL WHERE cell_id IN (SELECT id FROM members_cells WHERE lower(name) LIKE '%union%')")
-    c.execute("DELETE FROM members_cells WHERE lower(name) LIKE '%union%'")
+    # Existing user records are never deleted or detached by catalog seeding.
     now_iso = datetime.now(timezone.utc).isoformat(timespec='seconds')
     for gc_id, gc_name, neigh, addr, m_day, banner in OFFICIAL_GCS:
         existing = c.execute(
@@ -130,3 +127,23 @@ def migrate(c):
                     if isinstance(snapshot.get(key),str):snapshot[key]=encrypt(snapshot[key])
                 c.execute(f'UPDATE module_changes SET {field}=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),row['id']))
         c.execute("INSERT INTO platform_migrations VALUES('sensitive_fields_v231')")
+
+    # Additive ownership metadata. Existing records retain their IDs and contents.
+    owned_tables = {
+        'members':('members_cells','members_families','members_people'),
+        'ministries':('ministries_assignments','ministries_schedules','ministries_resources'),
+        'finance':('finance_accounts','finance_entries','finance_invoices','finance_cost_centers','finance_service_closings')
+    }
+    for tables in owned_tables.values():
+        for table in tables:
+            ensure_column(c,table,'created_by','BIGINT REFERENCES users(id)')
+            c.execute(f'CREATE INDEX IF NOT EXISTS {table}_owner_active ON {table}(created_by,active)')
+    ensure_column(c,'members_self_registrations','owner_id','BIGINT REFERENCES users(id)')
+    ensure_column(c,'platform_announcements','target_scope',"TEXT NOT NULL DEFAULT ''")
+    if not c.execute("SELECT 1 FROM platform_migrations WHERE name='record_ownership_v243'").fetchone():
+        for module,tables in owned_tables.items():
+            for table in tables:
+                c.execute(f"UPDATE {table} SET created_by=(SELECT actor FROM module_changes ch WHERE ch.module=? AND ch.record_id={table}.id AND ch.action='created' ORDER BY ch.created_at,ch.id LIMIT 1) WHERE created_by IS NULL",(module,))
+        c.execute("INSERT INTO platform_migrations VALUES('record_ownership_v243')")
+
+    ensure_column(c,'members_self_registrations','version','BIGINT NOT NULL DEFAULT 1')

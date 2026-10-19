@@ -824,7 +824,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     +field('email','E-mail',r.email,'email')
     +field('origin_church','Igreja de origem',r.origin_church)
     +field('address','Endereço',r.address)
-    +field('pastoral_notes','Observações',r.pastoral_notes);
+    +(data.pastoral_notes_allowed?field('pastoral_notes','Observações pastorais',r.pastoral_notes):'');
   }
   if(kind==='assignments'){
    directory=await api('/ministries/people');

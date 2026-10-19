@@ -54,6 +54,8 @@ def change(c,module,rid,action,user,before,after):
 def save(c,table,module,data,values,user,rid=None):
     if rid:
         old=current(c,table,rid)
+        from ..record_policy import can_change
+        can_change(c,user,module,old)
         if data.version is None or old['version']!=data.version:fail('conflict','Este registro mudou. Atualize a tela antes de salvar.',409)
         keys=list(values)
         updated=c.execute(f"UPDATE {table} SET "+','.join(k+'=?' for k in keys)+',version=version+1 WHERE id=? AND version=?',(*values.values(),rid,data.version))
@@ -65,6 +67,7 @@ def save(c,table,module,data,values,user,rid=None):
         if old:
             if old['active'] and all(decrypt_text(old[k])==decrypt_text(v) if isinstance(v,str) else old[k]==v for k,v in values.items()):return {'id':rid,'ok':True}
             fail('duplicate','Esta solicitação já foi utilizada. Atualize a tela.',409)
+        values=dict(values,created_by=user['id'])
         keys=['id',*values,'created_at']
         c.execute(f"INSERT INTO {table}("+','.join(keys)+') VALUES('+','.join('?' for _ in keys)+')',(rid,*values.values(),s.now()))
         change(c,module,rid,'created',user,None,current(c,table,rid))
@@ -72,6 +75,8 @@ def save(c,table,module,data,values,user,rid=None):
 
 def archive(c,table,module,rid,version,user):
     old=current(c,table,rid)
+    from ..record_policy import can_change
+    can_change(c,user,module,old)
     if old['version']!=version:fail('conflict','Registro alterado. Atualize a tela.',409)
     updated=c.execute(f'UPDATE {table} SET active=0,version=version+1 WHERE id=? AND version=?',(rid,version))
     if updated.rowcount!=1:fail('conflict','Registro alterado. Atualize a tela.',409)

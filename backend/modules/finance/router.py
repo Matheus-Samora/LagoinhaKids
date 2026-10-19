@@ -8,7 +8,7 @@ from ... import store as s
 from ...app import fail
 from ..common import Record,money,save,archive,current,check_date,change,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/finance',tags=['Finance'])
-read=module_access('finance');write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
+read=module_access('finance',('admin','editor'));write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
 
 class SafeCsvWriter:
     def __init__(self,stream):self.writer=csv.writer(stream,delimiter=';')
@@ -157,8 +157,10 @@ def compute_financial_engine(c,accounts,cost_centers,entries,totals):
     }
 
 @router.get('')
-def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
+def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('finance'))):
     with s.db() as c:
+        from ...record_policy import manager,personal_records
+        if not manager(c,user,'finance'):return personal_records(c,user,'finance')
         cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name LIMIT 200")]
         accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name LIMIT 500")]
         entries=[dict(r) for r in c.execute("SELECT e.*,a.name account_name,coalesce(a.bank,'') account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1 AND lower(e.description) LIKE ? ORDER BY e.occurred_on DESC,e.created_at DESC LIMIT 200",('%'+q.lower()+'%',))]

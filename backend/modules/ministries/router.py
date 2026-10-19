@@ -13,7 +13,7 @@ WORSHIP_ROLES=('Ministrante','Backing Vocal','Tecladista','Guitarrista','Baixist
 TRAINING_STATUSES=('certified','in_training','pending')
 SCHEDULE_STATUSES=('confirmed','pending','declined')
 RESOURCE_CATEGORIES=('repertorio','roteiro','checklist','documento')
-read=module_access('ministries');write=module_access('ministries',('admin','editor'));admin=module_access('ministries',('admin',))
+read=module_access('ministries',('admin','editor'));write=module_access('ministries',('admin','editor'));admin=module_access('ministries',('admin',))
 
 class Assignment(Record):
     person_id:str=Field(max_length=40)
@@ -65,8 +65,10 @@ def people(q:str=Query(default='',max_length=100),user=Depends(read)):
     with s.db() as c:return [dict(r) for r in c.execute("SELECT id,name FROM members_people WHERE active=1 AND lower(name) LIKE ? ORDER BY name LIMIT 200",('%'+q.lower()+'%',))]
 
 @router.get('')
-def listing(q:str=Query(default='',max_length=100),user=Depends(read)):
+def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('ministries'))):
     with s.db() as c:
+        from ...record_policy import manager,personal_records
+        if not manager(c,user,'ministries'):return personal_records(c,user,'ministries')
         rows=[dict(r) for r in c.execute('SELECT a.*,p.name person_name,coalesce(p.phone,\'\') person_phone FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1 AND p.active=1 AND lower(p.name) LIKE ? ORDER BY a.ministry,a.is_leader DESC,p.name LIMIT 300',('%'+q.lower()+'%',))]
         schedules=[dict(r) for r in c.execute('SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.active=1 AND p.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC,ms.ministry ASC LIMIT 300')]
         resources=[dict(r) for r in c.execute('SELECT * FROM ministries_resources WHERE active=1 ORDER BY ministry ASC,created_at DESC LIMIT 200')]
