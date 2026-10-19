@@ -126,9 +126,40 @@ class PlatformAnnouncementCreate(BaseModel):
     title:str=Field(min_length=2,max_length=140)
     message:str=Field(min_length=2,max_length=1200)
     target_sector:str=Field(default='all',max_length=40)
+    audience:str=Field(default='sector',pattern='^(sector|leaders|people)$')
+    recipient_ids:list[int]=Field(default_factory=list,max_length=1000)
     event_date:str|None=Field(default=None,max_length=40)
     location:str|None=Field(default=None,max_length=140)
     banner_url:str|None=Field(default=None,max_length=300)
+
+def announcement_people(c,user,sector):
+    if sector not in ('all','kids','members','ministries','finance'):fail('sector','Setor inválido.')
+    root=platform_admin(c,user['id']) or is_pastor(c,user['id'])
+    if not root and (sector=='all' or not c.execute("SELECT 1 FROM module_access WHERE user_id=? AND module=? AND enabled=1 AND role IN ('admin','pastor','editor')",(user['id'],sector)).fetchone()):
+        fail('forbidden','Sem permissão para comunicar neste setor.',403)
+    scope=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
+    scope=(scope['scope'] or '') if scope and sector=='ministries' and not root else ''
+    audience={'target_sector':sector,'target_scope':scope}
+    # Load access metadata once instead of issuing per-user database queries.
+    people=[dict(row) for row in c.execute('SELECT id,name,staff_role FROM users WHERE active=1 ORDER BY name,id')]
+    grants=[dict(row) for row in c.execute('SELECT user_id,module,role FROM module_access WHERE enabled=1')]
+    global_ids={row['user_id'] for row in c.execute('SELECT user_id FROM platform_admins')}
+    global_ids.update(row['user_id'] for row in c.execute('SELECT user_id FROM pastoral_users'))
+    global_ids.update(row['user_id'] for row in grants if row['role']=='pastor')
+    global_ids.update(p['id'] for p in people if (p['staff_role'] or '').strip().lower() in ('pastor','pastora'))
+    eligible={p['id'] for p in people} if sector=='all' else global_ids|{g['user_id'] for g in grants if g['module']==sector}
+    leaders=global_ids|{g['user_id'] for g in grants if (sector=='all' or g['module']==sector) and g['role'] in ('admin','pastor','editor','teacher')}
+    if scope:
+        scopes={row['user_id']:row['scope'] for row in c.execute("SELECT user_id,scope FROM module_scopes WHERE module='ministries'")}
+        managers={g['user_id'] for g in grants if g['module']=='ministries' and g['role'] in ('admin','editor')}
+        assigned={r['created_by'] for r in c.execute('SELECT p.created_by FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1 AND p.active=1 AND a.ministry=?',(scope,))}
+        eligible={uid for uid in eligible if uid in global_ids or scopes.get(uid)==scope or (uid in managers and not scopes.get(uid)) or uid in assigned}
+    result=[{'id':p['id'],'name':p['name'],'leader':p['id'] in leaders} for p in people if p['id'] in eligible]
+    return result
+
+@router.get('/announcement-recipients')
+def announcement_recipients(sector:str='all',user=Depends(session)):
+    with s.db() as c:return announcement_people(c,user,sector)
 
 @router.get('/announcements')
 def list_announcements(user=Depends(session)):
@@ -160,24 +191,18 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
             (aid,data.title.strip(),data.message.strip(),t_sector,user['id'],user['name'],data.event_date.strip() if data.event_date else None,data.location.strip() if data.location else None,data.banner_url.strip() if data.banner_url else '',now)
         )
 
-        recipients=set()
-        for r in c.execute('SELECT user_id FROM platform_admins'):recipients.add(r['user_id'])
-        for r in c.execute('SELECT user_id FROM pastoral_users'):recipients.add(r['user_id'])
-
-        if t_sector=='all':
-            for r in c.execute('SELECT id FROM users WHERE active=1'):recipients.add(r['id'])
-        elif t_sector=='kids':
-            for r in c.execute("SELECT id FROM users WHERE active=1 AND (role='parent' OR id IN (SELECT user_id FROM module_access WHERE module='kids' AND enabled=1))"):recipients.add(r['id'])
-        elif t_sector=='members':
-            for r in c.execute("SELECT u.id FROM users u WHERE u.active=1 AND (u.id IN (SELECT user_id FROM module_access WHERE module='members' AND enabled=1) OR lower(u.email) IN (SELECT lower(email) FROM members_people WHERE active=1))"):recipients.add(r['id'])
-        elif t_sector=='ministries':
-            for r in c.execute("SELECT u.id FROM users u WHERE u.active=1 AND (u.id IN (SELECT user_id FROM module_access WHERE module='ministries' AND enabled=1) OR lower(u.email) IN (SELECT lower(p.email) FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1))"):recipients.add(r['id'])
-        elif t_sector=='finance':
-            for r in c.execute("SELECT user_id FROM module_access WHERE module='finance' AND enabled=1"):recipients.add(r['user_id'])
-
-        c.execute('UPDATE platform_announcements SET target_scope=? WHERE id=?',(target_scope,aid))
-        audience={'target_sector':t_sector,'target_scope':target_scope}
-        recipients={uid for uid in recipients if visible_announcement(c,dict(c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()),audience)}
+        candidates=announcement_people(c,user,t_sector)
+        permitted={p['id'] for p in candidates}
+        if data.audience=='people':
+            recipients=set(data.recipient_ids)
+            if not recipients:fail('recipient_ids','Selecione pelo menos uma pessoa.')
+            if not recipients.issubset(permitted):fail('recipient_ids','Há destinatários fora do setor ou da sua permissão.',403)
+        elif data.audience=='leaders':
+            recipients={p['id'] for p in candidates if p['leader']}
+        else:
+            recipients=permitted
+        selected=json.dumps(sorted(recipients)) if data.audience!='sector' else ''
+        c.execute('UPDATE platform_announcements SET target_scope=?,target_user_ids=? WHERE id=?',(target_scope,selected,aid))
         n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
         n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
         for uid in recipients:
@@ -185,7 +210,7 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now))
 
         s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
-        return {'id':aid,'ok':True,'message':'Comunicado / Evento publicado com sucesso para os membros!'}
+        return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']})}
 
 @router.delete('/announcements/{aid}')
 def remove_announcement(aid:str,user=Depends(session)):

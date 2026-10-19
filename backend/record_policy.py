@@ -1,4 +1,5 @@
 """Server-side sector authority and immutable ownership of business records."""
+import json
 from .platform_access import allowed,platform_admin,is_pastor
 from .app import fail
 
@@ -38,7 +39,12 @@ def personal_records(c,user,module,archived=False):
 
 def visible_announcement(c,user,row):
  target=row.get('target_sector','all')
- if global_manager(c,user):return True
+ if global_manager(c,user) or row.get('author_id')==user['id']:return True
+ selected=row.get('target_user_ids','')
+ if selected:
+  try:
+   if user['id'] not in json.loads(selected):return False
+  except (ValueError,TypeError):return False
  if target!='all' and not allowed(c,user,target):return False
  scope=row.get('target_scope','')
  if not scope:return True

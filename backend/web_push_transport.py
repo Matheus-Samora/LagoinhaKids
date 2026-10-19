@@ -21,7 +21,7 @@ def send(subscription,notification_id):
         with s.db() as c:
             notice = c.execute('SELECT kind FROM notifications WHERE id=?',(notification_id,)).fetchone()
 
-        is_sector = bool(notice and notice['kind'] in ('sector_application','ministry_approved','gc_approved'))
+        is_sector = bool(notice and notice['kind'] in ('sector_application','ministry_approved','gc_approved','announcement'))
         is_urgent = bool(notice and notice['kind'] == 'urgent_call')
         # Lock-screen payloads must never contain child names, health details or pickup codes.
         payload = {

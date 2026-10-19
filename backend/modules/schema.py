@@ -142,6 +142,7 @@ def migrate(c):
             c.execute(f'CREATE INDEX IF NOT EXISTS {table}_owner_active ON {table}(created_by,active)')
     ensure_column(c,'members_self_registrations','owner_id','BIGINT REFERENCES users(id)')
     ensure_column(c,'platform_announcements','target_scope',"TEXT NOT NULL DEFAULT ''")
+    ensure_column(c,'platform_announcements','target_user_ids',"TEXT NOT NULL DEFAULT ''")
     if not c.execute("SELECT 1 FROM platform_migrations WHERE name='record_ownership_v243'").fetchone():
         for module,tables in owned_tables.items():
             for table in tables:

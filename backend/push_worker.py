@@ -19,7 +19,7 @@ def deliver_batch(limit=50):
         try:
             from .platform_access import allowed
             with s.db() as c:
-                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved')
+                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved','announcement')
                 if not sector_notice and not allowed(c,{'id':row['user_id']},'kids'):
                     c.execute('UPDATE outbox SET next_attempt=?,last_error=? WHERE id=?',(int(time.time())+3600,'Acesso ao módulo Kids suspenso.',row['id']))
                     continue
