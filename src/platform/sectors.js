@@ -1,3 +1,4 @@
+import {uiIcon} from '../ui/icons.js';
 import {ministryEmblem,MINISTRY_META} from './emblems.js';
 import {t, translateDOM} from './i18n.js';
 
@@ -458,7 +459,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
    invoices:['Nota / Fornecedor','Emissão','Valor']
   }[kind];
   const filterSuffix=['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'';
-  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${edit()?button('edit','Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):'<span>Consulta</span>'}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
+  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${edit()?button('edit','Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):'<span>Consulta</span>'}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
  }
 
  function paint(message=''){
@@ -742,7 +743,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     </article>
    </div>
    <div style="display:flex;gap:10px;justify-content:flex-end;">
-    <button type="button" id="print-member-doc-btn">Imprimir / PDF</button>
+    <button type="button" id="print-member-doc-btn">${uiIcon('printer',16)} Imprimir / PDF</button>
    </div>`;
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
   dialog.querySelector('#print-member-doc-btn').onclick=()=>window.print();

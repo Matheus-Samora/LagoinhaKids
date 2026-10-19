@@ -1,3 +1,4 @@
+import {uiIcon} from '../ui/icons.js';
 import {recoveryScreen} from './recovery.js';
 if(location.pathname==='/'&&['overview','children','rooms','attendance','events','lessons','notifications','settings','users','team'].includes(location.hash.slice(1)))location.replace('/kids'+location.hash);
 import './style.css';
@@ -32,36 +33,36 @@ const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0
 
 const AREA_TABS={
  membro:[
-  {id:'all',label:'Início',icon:'🏠'},
-  {id:'announcements',label:'Comunicados',icon:'📢'},
-  {id:'gcs',label:'GCs',icon:'📍'},
-  {id:'ministries',label:'Ministérios',icon:'🙌'}
+  {id:'all',label:'Início',icon:'home'},
+  {id:'announcements',label:'Comunicados',icon:'announcements'},
+  {id:'gcs',label:'GCs',icon:'groups'},
+  {id:'ministries',label:'Ministérios',icon:'ministries'}
  ],
  systems:[
-  {id:'all',label:'Visão Geral',icon:'⚡'},
-  {id:'permissions',label:'Acessos',icon:'🔐'},
-  {id:'audit',label:'Auditoria',icon:'🛡️'}
+  {id:'all',label:'Visão Geral',icon:'home'},
+  {id:'permissions',label:'Acessos',icon:'permissions'},
+  {id:'audit',label:'Auditoria',icon:'systems'}
  ],
  members:[
-  {id:'all',label:'Visão Geral',icon:'📊'},
-  {id:'people',label:'Membros',icon:'👥'},
-  {id:'families',label:'Famílias',icon:'🏠'},
-  {id:'cells',label:'GCs',icon:'📍'}
+  {id:'all',label:'Visão Geral',icon:'home'},
+  {id:'people',label:'Membros',icon:'identity'},
+  {id:'families',label:'Famílias',icon:'family'},
+  {id:'cells',label:'GCs',icon:'groups'}
  ],
  ministries:[
-  {id:'all',label:'Visão Geral',icon:'📊'},
-  {id:'worship',label:'Louvor',icon:'🎵'},
-  {id:'schedules',label:'Cultos',icon:'📅'},
-  {id:'assignments',label:'Equipes',icon:'🙌'},
-  {id:'resources',label:'Materiais',icon:'📁'}
+  {id:'all',label:'Visão Geral',icon:'home'},
+  {id:'worship',label:'Louvor',icon:'worship'},
+  {id:'schedules',label:'Cultos',icon:'schedules'},
+  {id:'assignments',label:'Equipes',icon:'volunteers'},
+  {id:'resources',label:'Materiais',icon:'resources'}
  ],
  finance:[
-  {id:'all',label:'Visão Geral',icon:'📊'},
-  {id:'entries',label:'Lançamentos',icon:'💸'},
-  {id:'closings',label:'Fechamento do culto',icon:'📋'},
-  {id:'accounts',label:'Contas',icon:'🏦'},
-  {id:'cost-centers',label:'Centros',icon:'🏷️'},
-  {id:'invoices',label:'Faturas',icon:'🧾'}
+  {id:'all',label:'Visão Geral',icon:'home'},
+  {id:'entries',label:'Lançamentos',icon:'transactions'},
+  {id:'closings',label:'Fechamento do culto',icon:'closing'},
+  {id:'accounts',label:'Contas',icon:'bank'},
+  {id:'cost-centers',label:'Centros',icon:'costs'},
+  {id:'invoices',label:'Faturas',icon:'invoice'}
  ]
 };
 
@@ -206,7 +207,7 @@ function notificationsBanner(){
     <h2 class="notif-panel-title">Notificações (${unread.length})</h2>
    </div>
    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <button type="button" class="secondary" data-enable-push="1" style="min-height:34px;padding:5px 11px;font-size:12px;">🔔 ${t("nav.enable_notices", "Ativar avisos")}</button>
+    <button type="button" class="secondary" data-enable-push="1" style="min-height:34px;padding:5px 11px;font-size:12px;">${uiIcon('notifications',18)} ${t("nav.enable_notices", "Ativar avisos")}</button>
     ${unread.length?`<button type="button" class="secondary" id="mark-all-notifs-read" style="min-height:34px;padding:5px 11px;font-size:12px;">Marcar lidas</button>`:''}
    </div>
   </div>
@@ -275,11 +276,11 @@ function memberCommunityPortal(tab='all'){
          <span class="announcement-badge-sector" style="background:${sCol};color:#ffffff;">
           ${e(sectorLabels[a.target_sector]||a.target_sector)}
          </span>
-         ${a.event_date?`<span class="badge" style="background:#fef3c7;color:#92400e;">📅 ${e(a.event_date)}</span>`:''}
+         ${a.event_date?`<span class="badge" style="background:#fef3c7;color:#92400e;">${uiIcon('schedules',14)} ${e(a.event_date)}</span>`:''}
         </div>
         <h3 style="margin:10px 0 6px;">${e(a.title)}</h3>
         <p class="announcement-body">${e(a.message)}</p>
-        ${a.location?`<div class="announcement-meta-item" style="margin-top:8px;">📍 <span>${e(a.location)}</span></div>`:''}
+        ${a.location?`<div class="announcement-meta-item" style="margin-top:8px;">${uiIcon('groups',16)} <span>${e(a.location)}</span></div>`:''}
        </div>
        <div class="announcement-footer">
         <span><strong>${e(a.author_name||'Liderança')}</strong> · ${e(new Date(a.created_at).toLocaleDateString('pt-BR'))}</span>
@@ -447,11 +448,11 @@ function openPublishAnnouncementModal(){
    <div class="form-grid-2">
     <label>Setor
      <select name="target_sector" required>
-      ${isRoot?`<option value="all">🌐 Todos os Setores</option>`:''}
-      ${(isRoot||leaderModules.some(m=>m.id==='kids'))?`<option value="kids">🧒 Kids</option>`:''}
-      ${(isRoot||leaderModules.some(m=>m.id==='members'))?`<option value="members">🏠 Membros &amp; GCs</option>`:''}
-      ${(isRoot||leaderModules.some(m=>m.id==='ministries'))?`<option value="ministries">🎵 Ministérios</option>`:''}
-      ${(isRoot||leaderModules.some(m=>m.id==='finance'))?`<option value="finance">💼 Financeiro</option>`:''}
+      ${isRoot?`<option value="all">Todos os Setores</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='kids'))?`<option value="kids">Kids</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='members'))?`<option value="members">Membros &amp; GCs</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='ministries'))?`<option value="ministries">Ministérios</option>`:''}
+      ${(isRoot||leaderModules.some(m=>m.id==='finance'))?`<option value="finance">Financeiro</option>`:''}
       ${(!isRoot&&!leaderModules.length)?`<option value="all">Todos os Setores</option>`:''}
      </select>
     </label>
@@ -517,20 +518,20 @@ function render(message=''){
 
  const sidebarTabsHtml=tabs.map(tItem=>`
   <button type="button" class="platform-nav-btn ${activeSectionTab===tItem.id?'active':''}" data-switch-tab="${e(tItem.id)}">
-   <span class="nav-btn-icon" aria-hidden="true">${tItem.icon}</span>
+   <span class="nav-btn-icon" aria-hidden="true">${uiIcon(tItem.icon,22)}</span>
    <span>${e(tItem.label)}</span>
   </button>
  `).join('');
 
  const sectorLinksHtml=`
-  ${identity.platform_admin?`<a class="platform-nav-link ${!module&&!isMemberPortal?'active':''}" href="/systems"><span class="nav-btn-icon">⚙️</span><span>${t("nav.systems", "Painel TI")}</span></a>`:''}
-  <a class="platform-nav-link ${isMemberPortal?'active':''}" href="/membro"><span class="nav-btn-icon">👤</span><span>${t("nav.member", "Área do Membro")}</span></a>
-  ${identity.modules.filter(m=>m.enabled).map(m=>`<a class="platform-nav-link ${module?.id===m.id?'active':''}" href="${m.url}"><span class="nav-btn-icon">${m.id==='kids'?'🧒':m.id==='members'?'🏠':m.id==='ministries'?'🎵':'💼'}</span><span>${e(m.name.replace('Lagoinha ',''))}</span></a>`).join('')}
+  ${identity.platform_admin?`<a class="platform-nav-link ${!module&&!isMemberPortal?'active':''}" href="/systems"><span class="nav-btn-icon">${uiIcon('systems')}</span><span>${t("nav.systems", "Painel TI")}</span></a>`:''}
+  <a class="platform-nav-link ${isMemberPortal?'active':''}" href="/membro"><span class="nav-btn-icon">${uiIcon('identity')}</span><span>${t("nav.member", "Área do Membro")}</span></a>
+  ${identity.modules.filter(m=>m.enabled).map(m=>`<a class="platform-nav-link ${module?.id===m.id?'active':''}" href="${m.url}"><span class="nav-btn-icon">${uiIcon(m.id)}</span><span>${e(m.name.replace('Lagoinha ',''))}</span></a>`).join('')}
  `;
 
  const bottomNavHtml=tabs.map(tItem=>`
   <button type="button" class="platform-bnav-item ${activeSectionTab===tItem.id?'active':''}" data-switch-tab="${e(tItem.id)}">
-   <span class="bnav-emoji" aria-hidden="true">${tItem.icon}</span>
+   <span class="bnav-emoji" aria-hidden="true">${uiIcon(tItem.icon,22)}</span>
    <span>${e(tItem.label)}</span>
   </button>
  `).join('');
@@ -561,11 +562,11 @@ function render(message=''){
       <strong>${e(identity.user.name)}</strong>
       <small>${identity.platform_admin?'Admin TI':identity.pastor?'Pastor(a)':'Membro'}</small>
      </div>
-     <button type="button" class="quiet topbar-btn-compact" id="sidebar-logout" title="Sair">${t("nav.sign_out", "Sair")}</button>
+     <button type="button" class="quiet topbar-btn-compact" id="sidebar-logout" title="Sair">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
     <div class="aux-controls-bar" aria-label="Preferências">
-     <button type="button" class="aux-btn" id="enable-push">${t("nav.enable_notices", "Avisos")}</button>
-     <button type="button" class="aux-btn" id="topbar-qr-btn" title="QR Code">QR</button>
+     <button type="button" class="aux-btn" id="enable-push">${uiIcon('notifications',16)} ${t("nav.enable_notices", "Avisos")}</button>
+     <button type="button" class="aux-btn" id="topbar-qr-btn" title="QR Code" aria-label="QR Code para instalar o aplicativo">${uiIcon('qr',18)}</button>
      <button type="button" class="aux-btn" id="topbar-theme-btn" title="Tema">${getTheme()==='dark' ? '☀️' : '🌙'}</button>
      <select id="topbar-lang-select" class="aux-lang-select" aria-label="Idioma">
       ${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}
@@ -584,8 +585,8 @@ function render(message=''){
      </div>
     </div>
     <div class="topbar-user-area">
-     <button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">🔔 ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
-     <button type="button" class="quiet topbar-btn-compact" id="logout">${t("nav.sign_out", "Sair")}</button>
+     <button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
+     <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
    </header>
    <div class="mobile-sector-switcher" aria-label="Atalhos de setores">

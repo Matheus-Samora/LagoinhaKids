@@ -1,0 +1,152 @@
+[
+  {
+    "name": "systems",
+    "label": "TI e segurança",
+    "file": "/icons/lagoinha/systems.svg"
+  },
+  {
+    "name": "identity",
+    "label": "Área do membro",
+    "file": "/icons/lagoinha/identity.svg"
+  },
+  {
+    "name": "kids",
+    "label": "Lagoinha Kids",
+    "file": "/icons/lagoinha/kids.svg"
+  },
+  {
+    "name": "community",
+    "label": "Membros e comunidade",
+    "file": "/icons/lagoinha/community.svg"
+  },
+  {
+    "name": "ministries",
+    "label": "Ministérios",
+    "file": "/icons/lagoinha/ministries.svg"
+  },
+  {
+    "name": "finance",
+    "label": "Financeiro",
+    "file": "/icons/lagoinha/finance.svg"
+  },
+  {
+    "name": "home",
+    "label": "Início",
+    "file": "/icons/lagoinha/home.svg"
+  },
+  {
+    "name": "announcements",
+    "label": "Comunicados",
+    "file": "/icons/lagoinha/announcements.svg"
+  },
+  {
+    "name": "groups",
+    "label": "GCs",
+    "file": "/icons/lagoinha/groups.svg"
+  },
+  {
+    "name": "family",
+    "label": "Famílias",
+    "file": "/icons/lagoinha/family.svg"
+  },
+  {
+    "name": "worship",
+    "label": "Louvor",
+    "file": "/icons/lagoinha/worship.svg"
+  },
+  {
+    "name": "schedules",
+    "label": "Escalas e eventos",
+    "file": "/icons/lagoinha/schedules.svg"
+  },
+  {
+    "name": "volunteers",
+    "label": "Voluntários e equipes",
+    "file": "/icons/lagoinha/volunteers.svg"
+  },
+  {
+    "name": "resources",
+    "label": "Materiais",
+    "file": "/icons/lagoinha/resources.svg"
+  },
+  {
+    "name": "transactions",
+    "label": "Lançamentos",
+    "file": "/icons/lagoinha/transactions.svg"
+  },
+  {
+    "name": "closing",
+    "label": "Fechamento do culto",
+    "file": "/icons/lagoinha/closing.svg"
+  },
+  {
+    "name": "bank",
+    "label": "Contas bancárias",
+    "file": "/icons/lagoinha/bank.svg"
+  },
+  {
+    "name": "costs",
+    "label": "Centros de custo",
+    "file": "/icons/lagoinha/costs.svg"
+  },
+  {
+    "name": "invoice",
+    "label": "Notas fiscais",
+    "file": "/icons/lagoinha/invoice.svg"
+  },
+  {
+    "name": "permissions",
+    "label": "Permissões",
+    "file": "/icons/lagoinha/permissions.svg"
+  },
+  {
+    "name": "classrooms",
+    "label": "Turmas",
+    "file": "/icons/lagoinha/classrooms.svg"
+  },
+  {
+    "name": "lessons",
+    "label": "Aulinhas",
+    "file": "/icons/lagoinha/lessons.svg"
+  },
+  {
+    "name": "notifications",
+    "label": "Notificações",
+    "file": "/icons/lagoinha/notifications.svg"
+  },
+  {
+    "name": "qr",
+    "label": "Leitor QR",
+    "file": "/icons/lagoinha/qr.svg"
+  },
+  {
+    "name": "printer",
+    "label": "Etiqueta térmica",
+    "file": "/icons/lagoinha/printer.svg"
+  },
+  {
+    "name": "kiosk",
+    "label": "Totem",
+    "file": "/icons/lagoinha/kiosk.svg"
+  },
+  {
+    "name": "health",
+    "label": "Saúde e alergias",
+    "file": "/icons/lagoinha/health.svg"
+  },
+  {
+    "name": "camera",
+    "label": "Câmera",
+    "file": "/icons/lagoinha/camera.svg"
+  },
+  {
+    "name": "attachment",
+    "label": "Anexos",
+    "file": "/icons/lagoinha/attachment.svg"
+  },
+  {
+    "name": "exit",
+    "label": "Sair",
+    "file": "/icons/lagoinha/exit.svg"
+  }
+]

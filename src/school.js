@@ -27,7 +27,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
        <strong style="display:block;font-size:13px;color:#ffffff;margin-bottom:4px;">Foto de Perfil</strong>
        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
          <label class="btn secondary btn-sm media-upload-btn" tabindex="0" style="padding:6px 12px;font-size:12px;cursor:pointer;">
-           <span>📷 Enviar foto</span>
+           <span>${icon('camera',16)} Enviar foto</span>
            <input type="file" id="child-avatar-form-file-input" accept="image/jpeg,image/png,image/webp" hidden/>
          </label>
          <button type="button" class="mini-button danger-button" id="clear-child-avatar-form-btn" data-action="clear-child-form-avatar" ${avatarUrl ? '' : 'hidden'}>Remover</button>
@@ -39,7 +39,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    <label>Data de nascimento<input name="birthday" type="date" value="${e(ch?.birthday||'')}" required max="${day(new Date())}"/></label>
    ${parent?'':`<label>Turma<select name="room_id" required>${roomOptions(targetRoom)}</select></label>`}
    ${S.user.role==='admin'?`<label>Responsável<select name="parent_id">${parents(ch?.parent_id)}</select></label>`:''}
-   <fieldset style="border:1px solid #27272a;border-radius:8px;padding:12px;margin:12px 0;"><legend style="font-size:12px;font-weight:700;padding:0 6px;">🩺 SAÚDE E CUIDADOS</legend>
+   <fieldset style="border:1px solid #27272a;border-radius:8px;padding:12px;margin:12px 0;"><legend style="font-size:12px;font-weight:700;padding:0 6px;">${icon('health',16)} SAÚDE E CUIDADOS</legend>
      <label>Alergias<input name="allergies" value="${e(ch?.allergies||'')}" placeholder="Ex.: Amendoim, Lactose, Glúten"/></label>
      <label>Cuidados especiais<input name="medical_conditions" value="${e(ch?.medical_conditions||'')}" placeholder="Ex.: Asma, TEA, TDAH"/></label>
      <label>Medicação de emergência<input name="emergency_medication" value="${e(ch?.emergency_medication||'')}" placeholder="Opcional"/></label>
@@ -96,7 +96,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
           </div>
           <div class="media-actions-toolbar">
             <label class="btn secondary media-upload-btn" tabindex="0">
-              <span>📷 Enviar foto</span>
+              <span>${icon('camera',16)} Enviar foto</span>
               <input type="file" id="room-cover-file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden/>
             </label>
             <button type="button" class="btn secondary" data-action="toggle-room-presets">🎨 Sugestões</button>
@@ -215,7 +215,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
           <div class="lesson-material-input-wrap">
             <input type="text" name="materials_url" id="lesson-materials-url-input" value="${e(materialsUrl)}" placeholder="https://..."/>
             <label class="btn secondary media-upload-btn" tabindex="0">
-              <span>📎 Anexar</span>
+              <span>${icon('attachment',16)} Anexar</span>
               <input type="file" id="lesson-material-file-input" accept=".pdf,application/pdf,image/*" hidden/>
             </label>
           </div>
@@ -356,7 +356,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const activeCurriculum = S.lessons.find(l=>l.theme&&l.theme.trim());
   const devCard = activeCurriculum?`<section class="devotional-card"><div class="devotional-header"><span class="devotional-tag">📖 DISCIPULADO FAMILIAR</span><span style="font-size:11px;color:#a1a1aa;">${e(activeCurriculum.room_name||'Salinha')}</span></div><div class="devotional-theme">${e(activeCurriculum.theme)}</div>${activeCurriculum.memory_verse?`<div class="devotional-verse-box"><div class="devotional-verse-text">"${e(activeCurriculum.memory_verse)}"</div></div>`:''}${activeCurriculum.family_question?`<div class="devotional-question-box"><strong>💬 Em família:</strong><p style="margin:4px 0 0 0;">${e(activeCurriculum.family_question)}</p></div>`:''}</section>`:'';
   const eventsCarousel = renderParentEventsCarousel();
-  return `${title('Meus filhos','',`<button class="btn primary" data-action="new-child">${icon('plus',17)} Adicionar filho</button>`)}${eventsCarousel}${devCard}${S.children.length?`<div class="simple-family-grid">${S.children.map(ch=>`<article class="simple-child-card"><div class="person">${kidAvatar ? kidAvatar(ch,'big') : `<span class="kid-avatar big">${initials(ch.name)}</span>`}<div><h2>${childName(ch)}</h2><p>${age(ch.birthday)} anos${ch.status==='present'?' · Na salinha':''}</p>${ch.claim_code&&ch.status==='present'?`<div style="margin-top:6px;"><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${ch.allergies?`<div style="margin-top:4px;"><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div style="margin-top:4px;"><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div>${ch.status==='present'?`<div class="pickup-receipt"><span>Código de retirada</span><strong>${e(ch.claim_code||'Procure a equipe')}</strong></div>`:''}<div class="simple-child-actions"><button class="btn primary" data-action="child-lessons" data-id="${ch.id}">Aulinhas ${icon('arrow',16)}</button><button class="btn secondary" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',16)} Carteirinha</button><button class="btn secondary" data-action="edit-child" data-id="${ch.id}">Editar</button></div><details class="child-extra"><summary>Mais opções</summary><button class="text-link" data-action="edit-child-avatar" data-id="${ch.id}">📷 Alterar foto</button><button class="text-link" data-action="family" data-id="${ch.id}">Responsáveis e autorizações</button><button class="text-link" data-action="child-history" data-id="${ch.id}">Histórico de presença</button><button class="text-link" data-action="notify" data-kind="pickup_ready" data-id="${ch.id}">Avisar que cheguei</button><button class="text-link danger-link" data-action="archive-child" data-id="${ch.id}">Arquivar</button></details></article>`).join('')}</div>`:empty('Nenhum filho cadastrado','')}`;
+  return `${title('Meus filhos','',`<button class="btn primary" data-action="new-child">${icon('plus',17)} Adicionar filho</button>`)}${eventsCarousel}${devCard}${S.children.length?`<div class="simple-family-grid">${S.children.map(ch=>`<article class="simple-child-card"><div class="person">${kidAvatar ? kidAvatar(ch,'big') : `<span class="kid-avatar big">${initials(ch.name)}</span>`}<div><h2>${childName(ch)}</h2><p>${age(ch.birthday)} anos${ch.status==='present'?' · Na salinha':''}</p>${ch.claim_code&&ch.status==='present'?`<div style="margin-top:6px;"><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${ch.allergies?`<div style="margin-top:4px;"><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div style="margin-top:4px;"><span class="allergy-badge">${icon('health',14)} ${e(ch.medical_conditions)}</span></div>`:''}</div></div>${ch.status==='present'?`<div class="pickup-receipt"><span>Código de retirada</span><strong>${e(ch.claim_code||'Procure a equipe')}</strong></div>`:''}<div class="simple-child-actions"><button class="btn primary" data-action="child-lessons" data-id="${ch.id}">Aulinhas ${icon('arrow',16)}</button><button class="btn secondary" data-action="digital-id" data-id="${ch.id}">${icon('qrcode',16)} Carteirinha</button><button class="btn secondary" data-action="edit-child" data-id="${ch.id}">Editar</button></div><details class="child-extra"><summary>Mais opções</summary><button class="text-link" data-action="edit-child-avatar" data-id="${ch.id}">📷 Alterar foto</button><button class="text-link" data-action="family" data-id="${ch.id}">Responsáveis e autorizações</button><button class="text-link" data-action="child-history" data-id="${ch.id}">Histórico de presença</button><button class="text-link" data-action="notify" data-kind="pickup_ready" data-id="${ch.id}">Avisar que cheguei</button><button class="text-link danger-link" data-action="archive-child" data-id="${ch.id}">Arquivar</button></details></article>`).join('')}</div>`:empty('Nenhum filho cadastrado','')}`;
  }
  function parentLessons(){
   const ch=selectedChild();
@@ -435,7 +435,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
  }
  function rosterRows(children,lesson){
    const today=day(new Date());
-    return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{const p=S.activePaging?.find(x=>x.child_id===ch.id);const pagingBadge=p?(p.status==='on_my_way'?`<div style="margin-top:3px;"><span style="display:inline-block;background:#22c55e;color:#000000;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</span></div>`:`<div style="margin-top:3px;"><span style="display:inline-block;background:#ef4444;color:#ffffff;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">📢 Telão Ativo</span></div>`):'';return `<tr><td><div class="person">${kidAvatar?kidAvatar(ch):`<span class="kid-avatar">${initials(ch.name)}</span>`}<div><strong>${childName(ch)}</strong><small>${age(ch.birthday)} anos</small>${ch.claim_code&&ch.status==='present'?`<div><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${pagingBadge}${ch.allergies?`<div><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div><span class="allergy-badge">🩺 ${e(ch.medical_conditions)}</span></div>`:''}</div></div></td><td><span class="status ${ch.status}">${lesson&&lesson.starts_at.slice(0,10)!==today?'Confirmado':statusName[ch.status]}</span></td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}" ${lesson&&lesson.starts_at.slice(0,10)!==today?'disabled':''}>${ch.status==='present'?'Registrar saída':'Marcar chegada'}</button><button class="mini-button" data-action="digital-id" data-id="${ch.id}" title="Carteirinha">🪪</button><button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Telão">📢 Telão</button><button class="mini-button" data-action="student-options" data-id="${ch.id}">Opções</button></div></td></tr>`;}).join('')}</tbody></table></div>`:empty('Nenhum aluno confirmado','');
+    return children.length?`<div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${children.map(ch=>{const p=S.activePaging?.find(x=>x.child_id===ch.id);const pagingBadge=p?(p.status==='on_my_way'?`<div style="margin-top:3px;"><span style="display:inline-block;background:#22c55e;color:#000000;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</span></div>`:`<div style="margin-top:3px;"><span style="display:inline-block;background:#ef4444;color:#ffffff;font-weight:700;font-size:10px;padding:2px 7px;border-radius:9999px;">${icon('announcements',16)} Telão Ativo</span></div>`):'';return `<tr><td><div class="person">${kidAvatar?kidAvatar(ch):`<span class="kid-avatar">${initials(ch.name)}</span>`}<div><strong>${childName(ch)}</strong><small>${age(ch.birthday)} anos</small>${ch.claim_code&&ch.status==='present'?`<div><span class="claim-tag-badge">TAG: ${e(ch.claim_code)}</span></div>`:''}${pagingBadge}${ch.allergies?`<div><span class="allergy-badge">⚠️ ${e(ch.allergies)}</span></div>`:''}${ch.medical_conditions?`<div><span class="allergy-badge">${icon('health',14)} ${e(ch.medical_conditions)}</span></div>`:''}</div></div></td><td><span class="status ${ch.status}">${lesson&&lesson.starts_at.slice(0,10)!==today?'Confirmado':statusName[ch.status]}</span></td><td><div class="row-actions"><button class="mini-button" data-action="attendance" data-id="${ch.id}" ${lesson&&lesson.starts_at.slice(0,10)!==today?'disabled':''}>${ch.status==='present'?'Registrar saída':'Marcar chegada'}</button><button class="mini-button" data-action="digital-id" data-id="${ch.id}" title="Carteirinha">${icon('identity',17)}</button><button class="mini-button" data-action="paging-call" data-id="${ch.id}" title="Telão">${icon('announcements',16)} Telão</button><button class="mini-button" data-action="student-options" data-id="${ch.id}">Opções</button></div></td></tr>`;}).join('')}</tbody></table></div>`:empty('Nenhum aluno confirmado','');
  }
  function attendancePage(){
   const lesson=S.lessons.find(l=>l.id===S.selectedLesson);
@@ -458,7 +458,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     </div>
   ` : '';
   const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<a href="https://wa.me/55${g.guardian_phone.replace(/\\D/g,'')}" target="_blank" style="color:#22c55e;">WhatsApp: ${e(g.guardian_phone)}</a>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
-  return `${title('Chamada','',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} 📷 Ler QR Code</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Visitante</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
+  return `${title('Chamada','',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} Ler QR Code</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Visitante</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
   <div class="scanner-desk-bar">
     <div class="scanner-desk-info">
       <span class="scanner-desk-icon">⚡</span>
@@ -508,7 +508,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
         const pagingBadge = p ? (
           p.status==='on_my_way'
             ? `<div class="student-paging-status green">🏃 Pais a caminho (${e(p.ack_user_name||'Confirmado')})</div>`
-            : `<div class="student-paging-status red">📢 Telão Ativo no Auditório</div>`
+            : `<div class="student-paging-status red">${icon('announcements',16)} Telão Ativo no Auditório</div>`
         ) : '';
         const parentPhone = ch.parent_phone || '';
 
@@ -534,7 +534,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
             ${(ch.allergies || ch.medical_conditions || ch.emergency_medication || ch.special_needs || ch.authorized_pickups) ? `
               <div class="student-health-box">
                 ${ch.allergies ? `<span class="allergy-badge warning">⚠️ <strong>ALERGIA:</strong> ${e(ch.allergies)}</span>` : ''}
-                ${ch.medical_conditions ? `<span class="allergy-badge medical">🩺 <strong>SAÚDE:</strong> ${e(ch.medical_conditions)}</span>` : ''}
+                ${ch.medical_conditions ? `<span class="allergy-badge medical">${icon('health',14)} <strong>SAÚDE:</strong> ${e(ch.medical_conditions)}</span>` : ''}
                 ${ch.emergency_medication ? `<span class="allergy-badge med">💊 <strong>MEDICAÇÃO:</strong> ${e(ch.emergency_medication)}</span>` : ''}
                 ${ch.special_needs ? `<span class="allergy-badge special">♿ <strong>CUIDADO:</strong> ${e(ch.special_needs)}</span>` : ''}
                 ${ch.authorized_pickups ? `<div class="pickup-text"><span>👥 Autorizados para buscar:</span> <strong>${e(ch.authorized_pickups)}</strong></div>` : ''}
@@ -781,7 +781,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='student-options'){
    showModal(childName(ch),'O que você precisa fazer?',`<div class="student-menu">
      <button class="btn secondary full" data-action="edit-child" data-id="${id}">${icon('settings',16)} Editar cadastro completo</button>
-     <button class="btn secondary full" data-action="edit-child-avatar" data-id="${id}">📷 Alterar foto do aluno</button>
+     <button class="btn secondary full" data-action="edit-child-avatar" data-id="${id}">${icon('camera',16)} Alterar foto do aluno</button>
      <button class="btn secondary full" data-action="transfer-child" data-id="${id}">🔄 Mudar de turma (Transferir)</button>
      <button class="btn secondary full" data-action="digital-id" data-id="${id}">${icon('qrcode',16)} Carteirinha Digital</button>
      <button class="btn secondary full" data-action="paging-call" data-id="${id}">${icon('speaker',16)} Chamar no Telão / Celular</button>

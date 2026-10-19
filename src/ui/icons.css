@@ -1,0 +1,18 @@
+/* Monoline icon system: inherit foreground for dark mode and inverse buttons. */
+.ls-icon{display:inline-block;flex:none;vertical-align:middle;overflow:visible;pointer-events:none;color:inherit}
+.ls-icon-accent{stroke:#f59e0b}
+.nav-btn-icon,.bnav-emoji{display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.nav-btn-icon>.ls-icon,.bnav-emoji>.ls-icon{width:22px;height:22px}
+.custom-emblem.ls-sector-emblem{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;background:transparent;box-shadow:none;color:var(--ink,#09090b)}
+.custom-emblem.ls-sector-emblem>.ls-icon{width:36px;height:36px}
+.ls-inline-icon{display:inline-flex;align-items:center;gap:8px}
+button>.ls-icon,a>.ls-icon{vertical-align:middle}
+.sector-section h2>.ls-icon{margin-inline-end:8px}
+@media(prefers-reduced-motion:reduce){.ls-icon{animation:none;transition:none}}
+/* Leave room for 22px symbols and two-line labels above the mobile safe area. */
+@media(max-width:768px){
+ #systems .platform-bottom-nav{height:calc(76px + env(safe-area-inset-bottom,0px));align-items:stretch}
+ #systems .platform-bnav-item{min-height:56px;line-height:12px}
+ .platform-bottom-nav:has(.platform-bnav-item:nth-child(6)) .platform-bnav-item{font-size:9.5px}
+ .platform-bnav-item>span:last-child{max-width:100%;overflow-wrap:normal}
+}

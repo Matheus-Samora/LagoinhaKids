@@ -1,46 +1,8 @@
 import QRCode from 'qrcode';
 
-export const SECTOR_EMBLEMS = {
-  systems: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="custom-emblem">
-    <defs><linearGradient id="g-sys" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#18181b"/><stop offset="100%" stop-color="#3f3f46"/></linearGradient></defs>
-    <rect width="48" height="48" rx="14" fill="url(#g-sys)"/>
-    <path d="M24 9L36 14V23C36 31.5 30.8 37.8 24 40C17.2 37.8 12 31.5 12 23V14L24 9Z" stroke="#fafafa" stroke-width="2.2" fill="rgba(255,255,255,0.08)"/>
-    <circle cx="24" cy="24" r="4" fill="#fbbf24"/>
-    <path d="M24 15V18M24 30V33M16 24H19M29 24H32" stroke="#fafafa" stroke-width="2" stroke-linecap="round"/>
-  </svg>`,
-  access: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="custom-emblem">
-    <defs><linearGradient id="g-acc" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#09090b"/><stop offset="100%" stop-color="#27272a"/></linearGradient></defs>
-    <rect width="48" height="48" rx="14" fill="url(#g-acc)"/>
-    <rect x="11" y="11" width="11" height="11" rx="3" stroke="#fbbf24" stroke-width="2.2" fill="rgba(251,191,36,0.15)"/>
-    <rect x="26" y="11" width="11" height="11" rx="3" stroke="#fafafa" stroke-width="2"/>
-    <rect x="11" y="26" width="11" height="11" rx="3" stroke="#fafafa" stroke-width="2"/>
-    <circle cx="31.5" cy="31.5" r="5.5" stroke="#fbbf24" stroke-width="2.2"/>
-  </svg>`,
-  members: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="custom-emblem">
-    <defs><linearGradient id="g-mem" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#064e3b"/><stop offset="100%" stop-color="#047857"/></linearGradient></defs>
-    <rect width="48" height="48" rx="14" fill="url(#g-mem)"/>
-    <circle cx="19" cy="18" r="4.5" stroke="#ecfdf5" stroke-width="2.2" fill="rgba(255,255,255,0.12)"/>
-    <circle cx="30" cy="19.5" r="3.5" stroke="#6ee7b7" stroke-width="2"/>
-    <path d="M11 35C11 29.8 14.6 26.5 19 26.5C23.4 26.5 27 29.8 27 35" stroke="#ecfdf5" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M26.5 34.5C27.2 30.8 29.8 28.5 33 28.5C35.8 28.5 38 30.4 38.5 34.5" stroke="#6ee7b7" stroke-width="2.2" stroke-linecap="round"/>
-  </svg>`,
-  ministries: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="custom-emblem">
-    <defs><linearGradient id="g-min" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#311042"/><stop offset="100%" stop-color="#6b21a8"/></linearGradient></defs>
-    <rect width="48" height="48" rx="14" fill="url(#g-min)"/>
-    <path d="M24 10C27.5 16 33 19.5 33 26.5C33 31.8 28.9 36 24 36C19.1 36 15 31.8 15 26.5C15 19.5 20.5 16 24 10Z" stroke="#f3e8ff" stroke-width="2.2" fill="rgba(233,213,255,0.14)"/>
-    <path d="M24 19L25.8 23.8L30.5 25.5L25.8 27.2L24 32L22.2 27.2L17.5 25.5L22.2 23.8L24 19Z" fill="#facc15"/>
-  </svg>`,
-  finance: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="custom-emblem">
-    <defs><linearGradient id="g-fin" x1="0" y1="0" x2="48" y2="48"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#1e3a8a"/></linearGradient></defs>
-    <rect width="48" height="48" rx="14" fill="url(#g-fin)"/>
-    <path d="M12 34H36" stroke="#93c5fd" stroke-width="2.2" stroke-linecap="round"/>
-    <rect x="14" y="24" width="4.5" height="10" rx="1.5" fill="#60a5fa"/>
-    <rect x="21.75" y="19" width="4.5" height="15" rx="1.5" fill="#93c5fd"/>
-    <rect x="29.5" y="13" width="4.5" height="21" rx="1.5" fill="#fbbf24"/>
-    <path d="M14 20L22 15L28 17L35 11" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`,
-  kids: `<span class="kids-native-badge" aria-hidden="true">🧒</span>`
-};
+import {uiIcon} from '../ui/icons.js';
+
+export const SECTOR_EMBLEMS = Object.fromEntries(['systems','access','members','ministries','finance','kids'].map(key=>[key,`<span class="custom-emblem ls-sector-emblem">${uiIcon(key,36)}</span>`]));
 
 export const MINISTRY_META = {
   'Music': {
