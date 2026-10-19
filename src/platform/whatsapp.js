@@ -31,6 +31,8 @@ export function whatsappDispatchUI({ api, e }) {
     dlg.style.width = 'min(95vw, 720px)';
     document.body.append(dlg);
     let qrPollTimer = null;
+    let qrRequestBusy = false;
+    let qrLastFetch = 0;
     dlg.addEventListener('close', () => {
       if (qrPollTimer) clearInterval(qrPollTimer);
       dlg.remove();
@@ -158,47 +160,67 @@ export function whatsappDispatchUI({ api, e }) {
       render();
     }
 
-    async function requestQrCode() {
+    async function requestQrCode(background = false) {
+      if (qrRequestBusy || !dlg.isConnected) return;
+      qrRequestBusy = true;
       state.qrModalOpen = true;
-      state.qrLoading = true;
+      state.qrLoading = !state.qrBase64;
       state.error = '';
-      render();
+      if (!background) render();
       try {
         const res = await api('/platform/whatsapp/instance/connect', { method: 'POST' });
-        state.qrLoading = false;
-        if (res.state === 'qrcode' && res.base64) {
-          state.qrBase64 = res.base64;
-          state.qrCode = res.code || '';
-          startQrPolling();
-        } else if (res.state === 'open') {
+        if (!state.qrModalOpen || !dlg.isConnected) return;
+        qrLastFetch = Date.now();
+        const image = res.base64 || res.qrcode?.base64 || '';
+        if (res.state === 'open') {
           state.connectionState = 'open';
           state.qrModalOpen = false;
-          state.statusMsg = '✅ WhatsApp já conectado com sucesso!';
+          state.statusMsg = 'WhatsApp conectado com sucesso!';
+        } else if (image) {
+          const normalized = image.startsWith('data:image/png;base64,')
+            ? image : `data:image/png;base64,${image}`;
+          if (!/^data:image\/png;base64,[A-Za-z0-9+/=\s]+$/.test(normalized)) {
+            throw new Error('Imagem do QR Code inválida. Tente novamente.');
+          }
+          state.qrBase64 = normalized;
+          state.connectionState = 'qrcode';
         } else {
-          state.qrLoading = false;
           state.connectionState = res.state || 'connecting';
         }
+        if (state.qrModalOpen) startQrPolling();
       } catch (err) {
+        if (state.qrModalOpen) state.error = 'Erro ao solicitar QR Code: ' + (err.message || 'Tente novamente');
+      } finally {
+        qrRequestBusy = false;
         state.qrLoading = false;
-        state.error = 'Erro ao solicitar QR Code: ' + (err.message || 'Tente novamente');
+        if (dlg.isConnected) render();
       }
-      render();
     }
 
     function startQrPolling() {
-      if (qrPollTimer) clearInterval(qrPollTimer);
+      if (qrPollTimer) return;
+      let polling = false;
       qrPollTimer = setInterval(async () => {
+        if (polling || !state.qrModalOpen || !dlg.isConnected) return;
+        polling = true;
         try {
           const st = await api('/platform/whatsapp/instance/status');
+          if (!state.qrModalOpen || !dlg.isConnected) return;
           if (st.state === 'open') {
             clearInterval(qrPollTimer);
             qrPollTimer = null;
             state.connectionState = 'open';
             state.qrModalOpen = false;
-            state.statusMsg = '🎉 Celular da igreja conectado com sucesso ao WhatsApp!';
+            state.statusMsg = 'Celular da igreja conectado com sucesso ao WhatsApp!';
             render();
+          } else if (!state.qrBase64 || Date.now() - qrLastFetch >= 15000) {
+            await requestQrCode(true);
           }
-        } catch {}
+        } catch {
+          // Retry transient network failures on the next poll.
+        } finally {
+          polling = false;
+        }
       }, 3000);
     }
 
@@ -230,8 +252,8 @@ export function whatsappDispatchUI({ api, e }) {
                 state.qrLoading
                   ? '<div style="padding:40px;color:var(--muted);"><span class="spinner" style="display:inline-block;margin-bottom:8px;">⏳</span><br>Gerando QR Code no servidor...</div>'
                   : state.qrBase64
-                  ? `<img src="${state.qrBase64}" alt="QR Code WhatsApp" style="width:230px;height:230px;display:block;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.08);" />`
-                  : '<div style="padding:30px;color:#dc2626;">Não foi possível carregar o QR Code. Tente novamente.</div>'
+                  ? `<img src="${e(state.qrBase64)}" alt="QR Code WhatsApp" style="width:min(230px,100%);height:auto;aspect-ratio:1;display:block;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.08);" />`
+                  : '<div style="padding:30px;color:#dc2626;">Aguardando o servidor gerar o QR Code. A imagem aparecerá automaticamente.</div>'
               }
             </div>
             <ol style="text-align:left;max-width:390px;margin:12px auto 8px;padding-left:22px;font-size:13px;color:var(--text);line-height:1.5;">
