@@ -197,6 +197,21 @@ export function whatsappDispatchUI({ api, e }) {
               </div>
             </div>
           </form>
+
+          ${cfg.provider === 'evolution' ? `
+            <div id="wa-qr-box" style="margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface, #ffffff);text-align:center;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+                <strong style="font-size:13px;">📱 Conexão do Aparelho (WhatsApp Web)</strong>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn primary btn-sm" id="wa-get-qr-btn" style="padding:4px 10px;font-size:12px;">📷 Gerar QR Code</button>
+                  <button type="button" class="secondary btn-sm" id="wa-check-status-btn" style="padding:4px 10px;font-size:12px;">Verificar Status</button>
+                </div>
+              </div>
+              <div id="wa-qr-display" style="min-height:40px;display:grid;place-items:center;font-size:13px;color:var(--muted);">
+                Clique em "Gerar QR Code" para ler com a câmera do celular da igreja.
+              </div>
+            </div>
+          ` : ''}
         </div>
       `;
     }
@@ -388,6 +403,62 @@ export function whatsappDispatchUI({ api, e }) {
         } catch (err) {
           state.error = err.message;
           render();
+        }
+      });
+
+      let qrPollTimer = null;
+      dlg.querySelector('#wa-get-qr-btn')?.addEventListener('click', async () => {
+        const display = dlg.querySelector('#wa-qr-display');
+        if (!display) return;
+        display.innerHTML = '<span style="color:var(--muted);">Solicitando QR Code à Evolution API…</span>';
+        try {
+          const res = await api('/platform/whatsapp/instance/connect', { method: 'POST' });
+          if (res.state === 'qrcode' && res.base64) {
+            display.innerHTML = `
+              <div style="display:inline-block;padding:12px;background:#ffffff;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.12);margin-top:6px;">
+                <img src="${res.base64}" alt="QR Code WhatsApp" style="width:200px;height:200px;display:block;" />
+              </div>
+              <p style="font-size:12px;margin:10px 0 0;line-height:1.4;">
+                1. Abra o WhatsApp no celular da igreja.<br>
+                2. Toque em <strong>Aparelhos conectados → Conectar aparelho</strong>.<br>
+                3. Aponte a câmera para o QR Code acima.
+              </p>
+            `;
+            if (qrPollTimer) clearInterval(qrPollTimer);
+            qrPollTimer = setInterval(async () => {
+              try {
+                const st = await api('/platform/whatsapp/instance/status');
+                if (st.state === 'open') {
+                  clearInterval(qrPollTimer);
+                  display.innerHTML = '<strong style="color:#16a34a;font-size:14px;">✅ WhatsApp conectado com sucesso!</strong>';
+                  await fetchRecipients(true);
+                }
+              } catch {}
+            }, 3000);
+          } else if (res.state === 'open') {
+            display.innerHTML = '<strong style="color:#16a34a;font-size:14px;">✅ WhatsApp já conectado e pronto para envios!</strong>';
+          } else {
+            display.innerHTML = `<span style="color:var(--muted);">Status da instância: ${res.state}</span>`;
+          }
+        } catch (err) {
+          display.innerHTML = `<span style="color:#dc2626;">Erro ao obter QR Code: ${e(err.message)}</span>`;
+        }
+      });
+
+      dlg.querySelector('#wa-check-status-btn')?.addEventListener('click', async () => {
+        const display = dlg.querySelector('#wa-qr-display');
+        if (!display) return;
+        try {
+          const st = await api('/platform/whatsapp/instance/status');
+          if (st.state === 'open') {
+            display.innerHTML = '<strong style="color:#16a34a;">✅ Conexão ativa! O WhatsApp da igreja está online.</strong>';
+          } else if (st.state === 'close' || st.state === 'not_created') {
+            display.innerHTML = '<span style="color:#dc2626;">⚠️ Aparelho desconectado. Clique em "Gerar QR Code" para reconectar.</span>';
+          } else {
+            display.innerHTML = `<span>Status atual: <strong>${st.state}</strong> (${st.detail || ''})</span>`;
+          }
+        } catch (err) {
+          display.innerHTML = `<span style="color:#dc2626;">Erro ao consultar: ${e(err.message)}</span>`;
         }
       });
 

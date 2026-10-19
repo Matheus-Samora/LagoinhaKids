@@ -694,3 +694,86 @@ def send_whatsapp_batch(data: WhatsAppDispatchInput, user=Depends(session)):
             'message': summary_msg,
             'results': results,
         }
+
+
+@router.get('/instance/status')
+def get_instance_status(user=Depends(session)):
+    with s.db() as c:
+        if not (platform_admin(c, user['id']) or is_pastor(c, user['id'])):
+            fail('forbidden', 'Apenas Pastores e Admin TI podem consultar o status da conexão.', 403)
+        cfg = load_whatsapp_config(c)
+        if not is_provider_configured(cfg):
+            return {'state': 'unconfigured', 'message': 'API não configurada.'}
+
+        provider = cfg.get('provider', 'evolution')
+        if provider != 'evolution':
+            return {'state': 'external', 'provider': provider, 'message': 'Provedor externo configurado.'}
+
+        api_url = (cfg.get('api_url') or '').rstrip('/')
+        instance_id = (cfg.get('instance_id') or 'lagoinha-systems').strip()
+        api_token = (cfg.get('api_token') or '').strip()
+
+        try:
+            with httpx.Client(timeout=8.0) as http:
+                resp = http.get(f"{api_url}/instance/connectionState/{instance_id}", headers={'apikey': api_token})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    st = data.get('instance', {}).get('state') or data.get('state') or 'unknown'
+                    return {'state': st, 'instance': instance_id, 'configured': True}
+                if resp.status_code == 404:
+                    return {'state': 'not_created', 'instance': instance_id, 'configured': True}
+                return {'state': 'error', 'detail': f"HTTP {resp.status_code}", 'configured': True}
+        except Exception as exc:
+            return {'state': 'offline', 'detail': str(exc)[:120], 'configured': True}
+
+
+@router.post('/instance/connect')
+def connect_instance(user=Depends(session)):
+    with s.db() as c:
+        if not (platform_admin(c, user['id']) or is_pastor(c, user['id'])):
+            fail('forbidden', 'Apenas Pastores e Admin TI podem conectar a instância.', 403)
+        cfg = load_whatsapp_config(c)
+        if not is_provider_configured(cfg):
+            fail('config', 'Configure primeiro a URL e o Token da Evolution API.')
+
+        api_url = (cfg.get('api_url') or '').rstrip('/')
+        instance_id = (cfg.get('instance_id') or 'lagoinha-systems').strip()
+        api_token = (cfg.get('api_token') or '').strip()
+
+        with httpx.Client(timeout=15.0) as http:
+            # 1. Try to fetch existing connection / QR code
+            conn_resp = http.get(f"{api_url}/instance/connect/{instance_id}", headers={'apikey': api_token})
+            if conn_resp.status_code == 404:
+                # 2. Instance does not exist -> create it
+                create_payload = {
+                    'instanceName': instance_id,
+                    'token': api_token,
+                    'qrcode': True,
+                    'integration': 'WHATSAPP-BAILEYS',
+                }
+                http.post(f"{api_url}/instance/create", headers={'apikey': api_token, 'Content-Type': 'application/json'}, json=create_payload)
+                conn_resp = http.get(f"{api_url}/instance/connect/{instance_id}", headers={'apikey': api_token})
+
+            if 200 <= conn_resp.status_code < 300:
+                data = conn_resp.json()
+                if data.get('base64'):
+                    return {'state': 'qrcode', 'base64': data['base64'], 'code': data.get('code'), 'pairingCode': data.get('pairingCode')}
+                if data.get('instance', {}).get('state') == 'open' or data.get('state') == 'open':
+                    return {'state': 'open', 'message': 'WhatsApp já conectado com sucesso!'}
+                return {'state': 'connecting', 'raw': data}
+            fail('evolution_api', f"Erro ao solicitar QR Code: {conn_resp.text[:160]}", 502)
+
+
+@router.post('/instance/logout')
+def logout_instance(user=Depends(session)):
+    with s.db() as c:
+        if not (platform_admin(c, user['id']) or is_pastor(c, user['id'])):
+            fail('forbidden', 'Apenas Pastores e Admin TI podem desconectar a instância.', 403)
+        cfg = load_whatsapp_config(c)
+        api_url = (cfg.get('api_url') or '').rstrip('/')
+        instance_id = (cfg.get('instance_id') or 'lagoinha-systems').strip()
+        api_token = (cfg.get('api_token') or '').strip()
+        with httpx.Client(timeout=10.0) as http:
+            http.delete(f"{api_url}/instance/logout/{instance_id}", headers={'apikey': api_token})
+        return {'ok': True, 'message': 'Sessão do WhatsApp desconectada.'}
+
