@@ -42,6 +42,9 @@ def ensure_official_gcs(c):
 
 def migrate(c):
     statements = [
+        "CREATE TABLE IF NOT EXISTS notification_deliveries(notification_id BIGINT NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,channel TEXT NOT NULL,destination_hash TEXT NOT NULL,accepted_at TEXT NOT NULL,PRIMARY KEY(notification_id,channel,destination_hash))",
+        "CREATE TABLE IF NOT EXISTS notification_preferences(user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,settings TEXT NOT NULL,updated_at TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS notifications_unread_page ON notifications(user_id,read_at,id)",
         '''CREATE TABLE IF NOT EXISTS members_cells(id TEXT PRIMARY KEY,name TEXT NOT NULL,leader_name TEXT NOT NULL DEFAULT '',neighborhood TEXT NOT NULL DEFAULT '',meeting_day TEXT NOT NULL DEFAULT '',banner_url TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_families(id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_on TEXT,active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS members_people(id TEXT PRIMARY KEY,name TEXT NOT NULL,family_id TEXT REFERENCES members_families(id),relationship TEXT NOT NULL DEFAULT '',birthday TEXT,joined_on TEXT,phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',active BIGINT NOT NULL DEFAULT 1,version BIGINT NOT NULL DEFAULT 1,created_at TEXT NOT NULL)''',
@@ -142,6 +145,7 @@ def migrate(c):
             c.execute(f'CREATE INDEX IF NOT EXISTS {table}_owner_active ON {table}(created_by,active)')
     ensure_column(c,'members_self_registrations','owner_id','BIGINT REFERENCES users(id)')
     ensure_column(c,'platform_announcements','target_scope',"TEXT NOT NULL DEFAULT ''")
+    ensure_column(c,'notifications','sector',"TEXT NOT NULL DEFAULT ''")
     ensure_column(c,'platform_announcements','target_user_ids',"TEXT NOT NULL DEFAULT ''")
     if not c.execute("SELECT 1 FROM platform_migrations WHERE name='record_ownership_v243'").fetchone():
         for module,tables in owned_tables.items():

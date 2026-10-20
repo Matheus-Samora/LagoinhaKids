@@ -73,11 +73,14 @@ def test_real_web_push_encryption_without_network(monkeypatch):
         captured.update(kwargs)
         response=requests.Response();response.status_code=201;response._content=b'';return response
     monkeypatch.setattr(requests.sessions.Session,'request',request)
+    with s.db() as c:c.execute('INSERT INTO notifications(id,user_id,kind,title,message,created_at,sector) VALUES(123,3,?,?,?,?,?)',('announcement','Aviso privado','Conteúdo que não deve aparecer no push',s.now(),'finance'))
     assert web_push_transport.send({'endpoint':data['endpoint'],'keys_json':json.dumps(data['keys'])},123)
     payload=http_ece.decrypt(captured['data'],private_key=receiver,auth_secret=auth,version='aes128gcm')
     decoded=json.loads(payload)
-    assert decoded['id']==123 and decoded['url']=='/kids#notifications'
-    assert decoded['body']=='Você recebeu um novo aviso. Abra o aplicativo para conferir.'
+    assert decoded['id']==123 and decoded['url']=='/finance?notice=123'
+    assert decoded['body']=='Há um novo comunicado para você.'
+    assert 'privado' not in payload.decode() and 'Conteúdo' not in payload.decode()
+    assert decoded['category']=='announcements'
     assert 'authorization' in {k.lower() for k in captured['headers']}
 
 def test_push_test_throttled_without_duplicate_notice(monkeypatch):

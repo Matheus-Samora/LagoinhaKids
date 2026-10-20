@@ -1,3 +1,4 @@
+import {notificationCenterUI} from './notification-center.js';
 import {uiIcon,hasIcon} from './ui/icons.js';
 import {subscribeWebPush} from './web-push.js';
 import {createSchoolUI} from './school.js';
@@ -141,6 +142,12 @@ function canGoBack(){
  return (navHistory.length>0)||(S.user&&S.page!==initialPage());
 }
 
+let kidsNoticeCenter;
+function getKidsNoticeCenter(){
+ return kidsNoticeCenter??=notificationCenterUI({api,e:escape,subscribe:async()=>{if(NATIVE){await enablePush();if(!hasPushPermission())throw new Error('Aguarde o registro ou confira as permissões deste aparelho.');}else await subscribeWebPush(api);},onChange:count=>{
+  document.querySelectorAll('.bell-badge,.notification-count').forEach(badge=>{badge.textContent=count>99?'99+':String(count);badge.hidden=!count;});
+ }});
+}
 function navigateTo(page,replace=false,keepRoom=false){
  if(!allowDiscard())return;
  if(!replace&&S.page&&S.page!==page){
@@ -212,6 +219,12 @@ window.addEventListener('popstate',()=>{
     app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">${t('brand.our_space', 'NOSSO ESPAÇO')}</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">Lagoinha <strong>Kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">${t('brand.our_space', 'NOSSO ESPAÇO')}</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions"><a class="topbar-action-pill secondary" href="/access" title="Ir para Área de Membros e Setores" aria-label="Meus acessos">${icon('rooms',15)}<span>${t('nav.access', 'Acessos')}</span></a>${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>${t('nav.checkin_qr', 'Check-in QR')}</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>${t('nav.download_app', 'Baixar App')}</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">${t('nav.download_app', 'Baixar App')}</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer"><span>Lagoinha Kids · Cuidado que conecta — Igreja Batista da Lagoinha</span><div class="aux-controls-bar"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="kids-lang-select" class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
     app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
     translateDOM(app);
+    const inboxHost=app.querySelector('#kids-notification-center');
+    if(inboxHost){
+     const pushed=new URLSearchParams(location.search).get('notice');
+     getKidsNoticeCenter().mount(inboxHost,{noticeId:pushed&&/^\d+$/.test(pushed)?Number(pushed):null});
+     if(pushed){const url=new URL(location.href);url.searchParams.delete('notice');history.replaceState(null,'',url);}
+    }
   }
 function title(title,subtitle='',button=''){return `<div class="page-heading"><div><span class="eyebrow">LAGOINHA KIDS</span><h1>${title}</h1>${subtitle?`<p>${subtitle}</p>`:''}</div>${button}</div>`;}
 function stat(label,value,helper,i,color){return `<article class="stat"><div><span>${label}</span><strong>${value}</strong>${helper?`<small>${helper}</small>`:''}</div><span class="stat-icon" style="background:${color}">${icon(i,23)}</span></article>`;}
@@ -432,37 +445,8 @@ function renderInnerPage(){
  }
  if(S.page==='events')return eventsPage();
  if(S.page==='team'&&S.user.role!=='parent')return teamPage();
- if(S.page==='notifications'){
-  const unread=S.notifications.filter(n=>!n.read_at).length;
-  const markAllBtn = unread ? `<button class="btn secondary" data-action="mark-all-read">${icon('check',16)} Marcar lidas</button>` : '';
-  const pushActive = hasPushPermission();
-  const pushBanner = pushActive ? `
-    <div class="push-status-card enabled">
-      <div class="push-card-content">
-        <div class="push-icon-bubble active">${icon('check', 20)}</div>
-        <div>
-          <strong>Notificações ativadas ✓</strong>
-        </div>
-      </div>
-      <div class="push-card-actions">
-        <button class="mini-button secondary" data-action="test-push-notification">${icon('bell', 14)} Testar</button>
-      </div>
-    </div>
-  ` : `
-    <div class="push-status-card">
-      <div class="push-card-content">
-        <div class="push-icon-bubble">${icon('bell', 22)}</div>
-        <div>
-          <strong>Notificações no celular</strong>
-        </div>
-      </div>
-      <div class="push-card-actions">
-        <button class="btn primary push-action-btn" data-action="open-push-modal">${icon('bell', 16)} Ativar</button>
-      </div>
-    </div>
-  `;
-  return `${title('Avisos','', markAllBtn)}${pushBanner}<section class="panel notifications">${S.notifications.length?S.notifications.map(n=>`<article class="notification ${n.read_at?'read':'unread'}"><span class="notification-icon">${icon(n.kind==='attendance'?'check':'bell',22)}</span><div><div class="notification-meta"><span class="notification-tag">${escape(n.child_name||'Lagoinha Kids')}</span> · ${new Date(n.created_at).toLocaleDateString('pt-BR')} às ${time(n.created_at)}</div><h3>${escape(n.title)}</h3><p>${escape(n.message)}</p><small>De ${escape(n.sender_name||'Equipe')}</small></div>${!n.read_at?`<button class="mini-button" data-action="read" data-id="${n.id}">Lida</button>`:'<span class="read-label">Lida ✓</span>'}</article>`).join(''):empty('Sem avisos','')}</section>`;
- }if(S.page==='users'&&S.user.role==='admin')return `${title('Usuários','',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'—':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
+ if(S.page==='notifications')return '<div id="kids-notification-center"></div>';
+if(S.page==='users'&&S.user.role==='admin')return `${title('Usuários','',`<button class="btn primary" data-action="new-user">${icon('plus',17)} Novo usuário</button>`)}<section class="panel"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Turmas</th><th>Acesso</th><th>Ações</th></tr></thead><tbody>${S.users.map(u=>`<tr><td><div class="person"><span class="avatar">${initials(u.name)}</span><span><strong>${escape(u.name)}</strong><small>${escape(u.email)}</small></span></div></td><td>${roles[u.role]}</td><td>${u.role==='teacher'?u.rooms.map(id=>escape(S.rooms.find(r=>r.id===id)?.name)).join(', ')||'—':'—'}</td><td><span class="status ${u.active?'present':'departed'}">${u.active?'Ativo':'Desativado'}</span></td><td><button class="mini-button" data-action="edit-user" data-id="${u.id}">Gerenciar</button></td></tr>`).join('')}</tbody></table></div></section>`;
  if(S.page==='settings')return settingsPage();
  return '';
 }
@@ -1475,7 +1459,7 @@ async function syncLive(){
   const newNotices=notifications.filter(n=>!n.read_at&&!previous.has(n.id));
   const changed=JSON.stringify([notifications,lessons,rooms,children,events,activePaging,activeGuests])!==JSON.stringify([S.notifications,S.lessons,S.rooms,S.children,S.events,S.activePaging,S.activeGuests]);
   Object.assign(S,{notifications,lessons,rooms,children,events,activePaging,activeGuests});
-  const editing=modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
+  const editing=S.page==='notifications'||modal.open||app.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select');
   if(!editing){liveRevision=revision;if(changed)render();}
   if(newNotices.length > 0){
     const arrivingNotice = newNotices.find(n=>n.kind==='arriving');
@@ -1541,7 +1525,7 @@ async function enablePush(){
   await PushNotifications.addListener('registration',async ({value})=>{try{await api('/devices/token',{method:'POST',body:{token:value,platform:Capacitor.getPlatform()}});localStorage.setItem('lagoinha_push_enabled','true');toast('Notificações registradas neste aparelho.');}catch(err){toast(err.message,true);}});
   await PushNotifications.addListener('registrationError',()=>toast('Não foi possível ativar notificações. Tente novamente.',true));
   await PushNotifications.addListener('pushNotificationReceived',()=>void syncLive());
-  await PushNotifications.addListener('pushNotificationActionPerformed',()=>{S.page='notifications';void load();});
+  await PushNotifications.addListener('pushNotificationActionPerformed',event=>{const nid=Number(event.notification?.data?.notification_id);getKidsNoticeCenter().open({noticeId:nid||null});});
   pushListening=true;
  }
  let permission=await PushNotifications.checkPermissions();
@@ -1797,6 +1781,9 @@ async function initNativeNotifications(){
       visibility:1,
       vibration:true
     });
+    for(const [id,name,importance] of [['urgent','Chamados da salinha',4],['tasks','Solicitações e respostas',3],['announcements','Comunicados',2],['activity','Presenças e atualizações',2],['system','Conta e sistema',3]]){
+      await LocalNotifications.createChannel({id:'lagoinha_'+id,name,importance,visibility:0,vibration:id==='urgent'});
+    }
     await LocalNotifications.registerActionTypes({
       types:[
         {
@@ -1837,16 +1824,15 @@ async function initNativeNotifications(){
       });
       void syncLive();
     });
-    await PushNotifications.addListener('pushNotificationActionPerformed',()=>{
-      S.page='notifications';
-      void load();
-    });
+    await PushNotifications.addListener('pushNotificationActionPerformed',event=>{const nid=Number(event.notification?.data?.notification_id);getKidsNoticeCenter().open({noticeId:nid||null});});
   }catch(err){
     console.warn('Falha ao inicializar notificações nativas:',err);
   }
 }
 
-async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging }){
+async function sendSystemNotification({ title, message, tag, url, id, child_id, paging_id, kind, isPaging, isTest=false }){
+  // Background delivery belongs to the server push channel; never duplicate it locally.
+  if(!isTest)return;
   const urgent=kind==='urgent_call'||isPaging;
   const notifTitle=urgent?'Lagoinha Kids — chamado da salinha':'Lagoinha Kids';
   const notifBody=urgent?'A equipe precisa falar com você. Abra o aplicativo.':'Você recebeu um novo aviso. Abra o aplicativo para conferir.';
@@ -1856,7 +1842,7 @@ async function sendSystemNotification({ title, message, tag, url, id, child_id, 
     try{
       const perm=await LocalNotifications.checkPermissions();
       if(perm.display!=='granted'){
-        await LocalNotifications.requestPermissions();
+        return;
       }
       const notifId=Math.abs(Number(id||Date.now()) % 100000);
       await LocalNotifications.schedule({
@@ -1975,23 +1961,11 @@ async function requestNotificationPermission(explicit=true){
 
 async function testSystemNotification(){
  if(!NATIVE){try{const result=await api('/web-push/test',{method:'POST'});toast(result.message);}catch(error){toast(error.message,true);}return;}
- await sendSystemNotification({title:'Lagoinha Kids',message:'Teste de notificações',tag:'test-'+Date.now()});
+ await sendSystemNotification({title:'Lagoinha Kids',message:'Teste de notificações',tag:'test-'+Date.now(),isTest:true});
  toast('Teste local solicitado ao celular.');
 }
 
-function checkAutoPromptPush(){
-  if(!S.user)return;
-  if(hasPushPermission())return;
-  const dismissedUntil=Number(localStorage.getItem('lagoinha_push_dismissed_until')||0);
-  if(Date.now()<dismissedUntil)return;
-  if(sessionStorage.getItem('lagoinha_push_session_dismissed'))return;
-
-  setTimeout(()=>{
-    if(S.user&&!modal.open&&!hasPushPermission()){
-      promptPushPermissionModal();
-    }
-  },1800);
-}
+function checkAutoPromptPush(){/* Permission is requested only after an explicit user action. */}
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message',(event)=>{

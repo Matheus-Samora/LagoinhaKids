@@ -23,5 +23,13 @@ def apns_jwt():
     return (message+b'.'+signature).decode()
 def send_apns(token,notification_id):
     host='api.sandbox.push.apple.com' if os.getenv('KIDS_APNS_SANDBOX','true')=='true' else 'api.push.apple.com'
+    from . import store as s
+    from .notification_center import metadata
+    with s.db() as c:row=c.execute('SELECT * FROM notifications WHERE id=?',(notification_id,)).fetchone()
+    meta=metadata(dict(row)) if row else {'url':'/membro','category':'system'}
+    base=meta['url'].split('#')[0]
+    target=f'{base}?notice={notification_id}'+('#notifications' if base=='/kids' else '')
+    aps={'alert':{'title':'Lagoinha Systems','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'}}
+    if meta['category'] not in ('activity','announcements'):aps['sound']='default'
     with httpx.Client(http2=True,timeout=15) as client:
-        return client.post(f'https://{host}/3/device/{token}',headers={'authorization':'bearer '+apns_jwt(),'apns-topic':os.getenv('KIDS_APNS_TOPIC','com.lagoinha.kids'),'apns-push-type':'alert','apns-priority':'10'},json={'aps':{'alert':{'title':'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'sound':'default'},'notification_id':str(notification_id)})
+        return client.post(f'https://{host}/3/device/{token}',headers={'authorization':'bearer '+apns_jwt(),'apns-topic':os.getenv('KIDS_APNS_TOPIC','com.lagoinha.kids'),'apns-push-type':'alert','apns-priority':'10','apns-collapse-id':f'notice-{notification_id}'},json={'aps':aps,'notification_id':str(notification_id),'category':meta['category'],'url':target})

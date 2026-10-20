@@ -31,6 +31,7 @@ def me(request:Request,user=Depends(session)):
             'pastor':pastor,
             'encryption':'AES-128-Fernet-HMAC-SHA256',
             'notifications':notifs,
+            'notification_unread_count':c.execute('SELECT count(*) n FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()['n'],
             'modules':[{
                 'id':key,'name':name,'url':module_url(key),
                 'enabled':allowed(c,user,key),
@@ -96,14 +97,10 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
             c.execute('UPDATE users SET phone=? WHERE id=?',(phone,user['id']))
         # Determine responsible leaders to notify
         leaders=set()
-        for r in c.execute('SELECT user_id FROM platform_admins'):leaders.add(r['user_id'])
-        for r in c.execute('SELECT user_id FROM pastoral_users'):leaders.add(r['user_id'])
         if data.target_type=='ministry':
             for r in c.execute("SELECT ma.user_id, coalesce(ms.scope,'') scope FROM module_access ma LEFT JOIN module_scopes ms ON ms.user_id=ma.user_id AND ms.module='ministries' WHERE ma.module='ministries' AND ma.enabled=1 AND ma.role IN ('admin','pastor','editor')"):
                 if not r['scope'] or r['scope'].lower()==t_name.lower():
                     leaders.add(r['user_id'])
-            for r in c.execute("SELECT u.id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id JOIN users u ON (lower(u.email)=lower(p.email) OR lower(u.name)=lower(p.name)) WHERE a.ministry=? AND a.is_leader=1 AND a.active=1 AND u.active=1",(t_name,)):
-                leaders.add(r['id'])
             n_title=f'🙌 Nova Candidatura · Ministério {t_name}'
             n_msg=f"{user['name']} ({phone or user['email']}) candidatou-se ao ministério {t_name} na função '{role_des}'. Entre em contato para preparar e aprovar!"
         else:
@@ -111,8 +108,14 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
                 leaders.add(r['user_id'])
             n_title=f'🏠 Novo Pedido de GC · {t_name}'
             n_msg=f"{user['name']} ({phone or user['email']}) deseja participar do {t_name}. Entre em contato para acolher e integrar ao grupo!"
+        leaders={lid for lid in leaders if c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(lid,)).fetchone()}
+        # Notify the responsible team first. Pastoral/TI is an escalation fallback.
+        if not leaders:
+            leaders.update(r['id'] for r in c.execute("SELECT u.id FROM users u WHERE u.active=1 AND (lower(u.staff_role) IN ('pastor','pastora') OR u.id IN (SELECT user_id FROM pastoral_users) OR u.id IN (SELECT user_id FROM module_access WHERE role='pastor' AND enabled=1))"))
+        if not leaders:leaders.update(r['user_id'] for r in c.execute('SELECT user_id FROM platform_admins'))
+        leaders={lid for lid in leaders if c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(lid,)).fetchone()}
         for lid in leaders:
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(lid,None,'sector_application',n_title,n_msg,user['id'],now))
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(lid,None,'sector_application',n_title,n_msg,user['id'],now,'ministries' if data.target_type=='ministry' else 'members'))
         s.audit(c,user['id'],f'sector_apply:{data.target_type}:{t_name}')
     return {'id':rid,'ok':True,'message':f'Inscrição enviada! O responsável por {t_name} foi notificado e entrará em contato.'}
 
@@ -200,14 +203,16 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
         elif data.audience=='leaders':
             recipients={p['id'] for p in candidates if p['leader']}
         else:
-            recipients=permitted
+            # Global oversight does not imply subscribing to every sector's push.
+            sector_users={r['user_id'] for r in c.execute('SELECT user_id FROM module_access WHERE module=? AND enabled=1',(t_sector,))} if t_sector!='all' else permitted
+            recipients=permitted & sector_users
         selected=json.dumps(sorted(recipients)) if data.audience!='sector' else ''
         c.execute('UPDATE platform_announcements SET target_scope=?,target_user_ids=? WHERE id=?',(target_scope,selected,aid))
         n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
         n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
         for uid in recipients:
             if uid==user['id']:continue
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now))
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now,t_sector))
 
         s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
         return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']})}

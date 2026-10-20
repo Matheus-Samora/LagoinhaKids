@@ -13,7 +13,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Systems',version='2.4.5')
+app=FastAPI(title='Lagoinha Systems',version='2.4.6')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -791,6 +791,9 @@ app.include_router(integrity_router)
 def whatsapp_removed(path:str):
     fail('removed','Envios por WhatsApp foram removidos. Use os comunicados do aplicativo.',410)
 
+from .notification_center import router as notification_center_router
+app.include_router(notification_center_router)
+
 WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 
 def get_build_id():
@@ -803,7 +806,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.4.5',
+        'version': '2.4.6',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

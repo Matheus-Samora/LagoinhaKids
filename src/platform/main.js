@@ -1,3 +1,4 @@
+import {notificationCenterUI} from '../notification-center.js';
 import {personalDataUI} from './personal.js';
 import {uiIcon} from '../ui/icons.js';
 import {recoveryScreen} from './recovery.js';
@@ -8,6 +9,12 @@ import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
 import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS,translateDOM} from './i18n.js';
 
+const noticeCenter=notificationCenterUI({api,e:x=>e(x),subscribe:()=>subscribeWebPush(api),onChange:count=>{
+ if(identity)identity.notification_unread_count=count;
+ const button=root.querySelector('#topbar-notif-btn');if(!button)return;
+ button.querySelector('.notif-count-badge')?.remove();
+ if(count){const badge=document.createElement('span');badge.className='badge notif-count-badge';badge.textContent=count>99?'99+':String(count);button.append(badge);}
+}});
 const root=document.getElementById('systems');
 const names={kids:'Lagoinha Kids',finance:'Lagoinha Finance',members:'Lagoinha Members',ministries:'Lagoinha Ministries'};
 const descriptions={kids:'Turmas, presença e comunicação com as famílias.',finance:'Contas, lançamentos e relatórios.',members:'Membros, famílias e GCs.',ministries:'Equipes, escalas e materiais.'};
@@ -199,34 +206,7 @@ function portalHero(module,selected){
  return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${ti?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>':'<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button>'}</div></section>`;
 }
 
-function notificationsBanner(){
- const notifs=identity?.notifications||[];
- const unread=notifs.filter(n=>!n.read_at);
- if(!unread.length&&!notifDrawerOpen)return '';
- return `<section class="panel notif-panel">
-  <div class="section-title" style="margin-bottom:10px;">
-   <div>
-    <h2 class="notif-panel-title">Notificações (${unread.length})</h2>
-   </div>
-   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <button type="button" class="secondary" data-enable-push="1" style="min-height:34px;padding:5px 11px;font-size:12px;">${uiIcon('notifications',18)} ${t("nav.enable_notices", "Ativar avisos")}</button>
-    ${unread.length?`<button type="button" class="secondary" id="mark-all-notifs-read" style="min-height:34px;padding:5px 11px;font-size:12px;">Marcar lidas</button>`:''}
-   </div>
-  </div>
-  <div class="insight-list" style="max-height:240px;overflow-y:auto;">
-   ${notifs.slice(0,12).map(n=>`<div class="insight-item ${n.read_at?'is-read':'is-unread'}">
-    <div>
-     <strong>${e(n.title)}</strong>
-     <small style="font-size:12.5px;">${e(n.message)}</small>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-     <small>${e(new Date(n.created_at).toLocaleDateString('pt-BR'))}</small>
-     ${!n.read_at?`<button type="button" class="secondary" data-read-notif="${n.id}" style="min-height:30px;padding:4px 10px;font-size:11px;">Lida</button>`:'<span class="badge">Lida</span>'}
-    </div>
-   </div>`).join('')||'<p class="subtle">Sem notificações.</p>'}
-  </div>
- </section>`;
-}
+function notificationsBanner(){return '';}
 
 function memberCommunityPortal(tab='all'){
  const cells=communityData?.cells||[];
@@ -536,7 +516,7 @@ function render(message=''){
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
- const unreadCount=(identity?.notifications||[]).filter(n=>!n.read_at).length;
+ const unreadCount=identity?.notification_unread_count??(identity?.notifications||[]).filter(n=>!n.read_at).length;
 
  const visibleModules=identity.platform_admin&&!isMemberPortal
   ?identity.modules
@@ -591,7 +571,6 @@ function render(message=''){
      <button type="button" class="quiet topbar-btn-compact" id="sidebar-logout" title="Sair">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
     <div class="aux-controls-bar" aria-label="Preferências">
-     <button type="button" class="aux-btn" id="enable-push">${uiIcon('notifications',16)} ${t("nav.enable_notices", "Avisos")}</button>
      <button type="button" class="aux-btn" id="topbar-qr-btn" title="QR Code" aria-label="QR Code para instalar o aplicativo">${uiIcon('qr',18)}</button>
      <button type="button" class="aux-btn" id="topbar-theme-btn" title="Tema">${getTheme()==='dark' ? '☀️' : '🌙'}</button>
      <select id="topbar-lang-select" class="aux-lang-select" aria-label="Idioma">
@@ -686,7 +665,13 @@ function render(message=''){
  translateDOM(root);
  root.querySelector('#topbar-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
  root.querySelectorAll('[data-open-qr]').forEach(b=>b.addEventListener('click',()=>openAppDownloadQrModal()));
- root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>{notifDrawerOpen=!notifDrawerOpen;render(message);});
+ root.querySelector('#topbar-notif-btn')?.addEventListener('click',()=>noticeCenter.open());
+ const pushedNotice=new URLSearchParams(location.search).get('notice');
+ if(pushedNotice&&/^\d+$/.test(pushedNotice)){
+  const url=new URL(location.href);url.searchParams.delete('notice');history.replaceState(null,'',url);
+  noticeCenter.open({noticeId:Number(pushedNotice)});
+ }
+
  root.querySelector('#open-new-announcement-btn')?.addEventListener('click',()=>openPublishAnnouncementModal());
  root.querySelectorAll('[data-del-ann]').forEach(btn=>btn.addEventListener('click',async()=>{
   if(!confirm('Arquivar este comunicado?'))return;
@@ -826,4 +811,17 @@ else {try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}}
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
-setInterval(async()=>{if(!identity||document.hidden||document.querySelector('dialog[open]'))return;try{const next=await api('/platform/me');const changed=JSON.stringify(next.notifications)!==JSON.stringify(identity.notifications);identity.notifications=next.notifications;if(changed){const existing=root.querySelector('.notif-panel');const html=notificationsBanner();if(existing)existing.outerHTML=html;else if(html)root.querySelector('main .status')?.insertAdjacentHTML('afterend',html);const all=root.querySelector('#mark-all-notifs-read');if(all)all.onclick=async()=>{all.disabled=true;try{for(const n of identity.notifications.filter(n=>!n.read_at))await api(`/platform/notifications/${n.id}/read`,{method:'POST'});identity=await api('/platform/me');all.textContent='Avisos lidos';}catch(error){all.disabled=false;root.querySelector('main .status').textContent=error.message;}};root.querySelectorAll('[data-read-notif]').forEach(b=>b.onclick=async()=>{await api(`/platform/notifications/${b.dataset.readNotif}/read`,{method:'POST'});identity=await api('/platform/me');b.textContent='Lida';b.disabled=true;});}}catch{}},15000);
+async function refreshNoticeBadge(){
+ if(!identity||document.hidden)return;
+ try{
+  const next=await api('/notification-center/summary');identity.notification_unread_count=next.unread_count;
+  const button=root.querySelector('#topbar-notif-btn');if(!button)return;
+  button.querySelector('.notif-count-badge')?.remove();
+  if(next.unread_count){const badge=document.createElement('span');badge.className='badge notif-count-badge';badge.textContent=next.unread_count>99?'99+':String(next.unread_count);button.append(badge);}
+ }catch{}
+}
+setInterval(()=>void refreshNoticeBadge(),60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshNoticeBadge();});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',event=>{
+ if(event.data?.type==='NEW_NOTICE'){void refreshNoticeBadge();noticeCenter.notify();}
+});
