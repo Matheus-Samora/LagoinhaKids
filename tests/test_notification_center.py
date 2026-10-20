@@ -134,3 +134,12 @@ def test_urgent_push_is_processed_before_older_announcements(records,monkeypatch
     monkeypatch.setattr(push_worker.web_push,'send',lambda subscription,nid:sent.append(nid) or True)
     assert push_worker.deliver_batch(limit=1)['sent']==1
     assert sent==[urgent]
+
+
+def test_push_worker_starts_without_importing_http_application(tmp_path):
+    import os,sys,subprocess
+    env=dict(os.environ);env.pop('KIDS_DATABASE_URL',None);env['KIDS_DATA_DIR']=str(tmp_path)
+    code="import sys; import backend.push_worker; from backend.notification_policy import push_policy; assert 'backend.app' not in sys.modules; print('independent-worker-ok')"
+    result=subprocess.run([sys.executable,'-c',code],env=env,capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stderr
+    assert 'independent-worker-ok' in result.stdout

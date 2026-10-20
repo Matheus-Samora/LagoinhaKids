@@ -24,7 +24,7 @@ def apns_jwt():
 def send_apns(token,notification_id):
     host='api.sandbox.push.apple.com' if os.getenv('KIDS_APNS_SANDBOX','true')=='true' else 'api.push.apple.com'
     from . import store as s
-    from .notification_center import metadata
+    from .notification_policy import metadata
     with s.db() as c:row=c.execute('SELECT * FROM notifications WHERE id=?',(notification_id,)).fetchone()
     meta=metadata(dict(row)) if row else {'url':'/membro','category':'system'}
     base=meta['url'].split('#')[0]

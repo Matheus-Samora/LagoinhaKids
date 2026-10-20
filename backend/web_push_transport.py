@@ -17,7 +17,7 @@ def send(subscription,notification_id):
     from pywebpush import webpush,WebPushException
     from py_vapid import Vapid
     try:
-        from .notification_center import metadata
+        from .notification_policy import metadata
         with s.db() as c:
             row=c.execute('SELECT * FROM notifications WHERE id=?',(notification_id,)).fetchone()
         if not row:return False
