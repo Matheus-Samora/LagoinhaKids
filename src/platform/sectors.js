@@ -412,9 +412,9 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
       return `<td><strong>${e(r.name)}</strong><small>${e(r.phone||r.email||'')}</small></td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
   }
   if(kind==='schedules')return `<td><strong>${e(r.title)}</strong><small>${date(r.service_date)} às ${e(r.service_time||'18:00')}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.person_name)} ${r.role_notes?`· <strong>${e(r.role_notes)}</strong>`:''}</small></td><td><span class="badge">${e(scheduleStatusLabels[r.status]||r.status)}</span></td>`;
-  if(kind==='assignments')return `<td><strong>${e(r.person_name)}</strong>${r.is_leader?' <span class="badge">⭐ Líder</span>':''}</td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.position)}</small></td><td>${date(r.started_on)}<small>${e(trainingLabels[r.training_status||'certified']||r.training_status)}</small></td>`;
+  if(kind==='assignments')return `<td><strong>${e(r.person_name)}</strong>${r.is_leader?' <span class="badge">⭐ Líder</span>':''}</td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.position)}</small></td><td><span class="badge" style="background:#09090b;color:#fff;">${r.is_leader?'Líder':'Equipe'}</span></td>`;
   if(kind==='resources')return `<td><strong>${e(r.title)}</strong><small>${e(resourceCatLabels[r.category]||r.category)}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.notes||'')}</small></td><td>${r.resource_url?`<a class="badge" href="${e(r.resource_url)}" target="_blank" rel="noopener">Abrir</a>`:'<span class="subtle">Interno</span>'}</td>`;
-  if(kind==='closings')return `<td><strong>${e(r.service_name)}</strong><small>${date(r.service_date)} · ${e(r.account_name)}</small></td><td><small>Dízimos: ${cash(r.tithes_cents)} · Espécie: ${cash(r.offerings_cash_cents)} · PIX: ${cash(r.offerings_pix_cents)}</small></td><td><strong class="money income">${cash(r.total_cents)}</strong><small>${e(r.counted_by)} &amp; ${e(r.verified_by)}</small></td>`;
+  if(kind==='closings')return `<td><strong>${e(r.service_name)}</strong><small>${date(r.service_date)} · ${e(r.account_name)}</small></td><td><small>Dízimos: ${cash(r.tithes_cents)} · Espécie: ${cash(r.offerings_cash_cents)} · PIX: ${cash(r.offerings_pix_cents)}</small></td><td><strong class="money income">${cash(r.total_cents)}</strong><small>${e(r.counted_by)}${r.verified_by&&r.verified_by!==r.counted_by?` &amp; ${e(r.verified_by)}`:''}</small></td>`;
   if(kind==='cost-centers')return `<td><strong>${e(r.name)}</strong><small>${e(r.ministry||'Geral')}</small></td><td>${cash(r.budget_cents)}</td><td><span class="money expense">${cash(r.spent_cents)}</span></td>`;
   if(kind==='accounts')return `<td><strong>${e(r.name)}</strong><small>${e(r.bank||'Caixa Interno')}</small></td><td>${cash(r.opening_cents)}</td><td><strong>${cash(r.balance_cents)}</strong></td>`;
   if(kind==='entries'){
@@ -440,7 +440,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
    families:['Família','Integrantes','Entrada'],
    people:['Membro','Família / GC','Datas'],
    schedules:['Culto / Evento','Ministério / Função','Status'],
-   assignments:['Pessoa','Ministério / Função','Início'],
+   assignments:['Pessoa','Ministério / Função','Papel'],
    resources:['Material','Ministério','Acesso'],
    closings:['Culto / Conta','Resumo','Total'],
    'cost-centers':['Centro de Custo','Orçamento','Gasto'],
@@ -746,14 +746,11 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
    <div class="section-title"><h2>Ficha de Cadastro</h2>${button('close','Fechar','class="secondary"')}</div>
    <form class="record-form" id="self-reg-form">
     ${field('name','Nome completo', '', 'text', true)}
-    ${field('family_name','Família', '')}
-    ${field('cell_id','GC','', 'text', false, [['','Escolher depois'],...opt(data.cells)])}
-    ${field('integration_stage','Perfil','visitor','text',true,[['visitor','Visitante'],['new_convert','Novo Convertido'],['baptized','Batizado(a)'],['active_member','Membro']])}
-    ${field('birthday','Data de nascimento','','date')}
     ${field('phone','Telefone','','tel')}
     ${field('email','E-mail','','email')}
-    ${field('marital_status','Estado Civil','','text',false,[['','Selecione...'],['Solteiro(a)','Solteiro(a)'],['Casado(a)','Casado(a)'],['Viúvo(a)','Viúvo(a)'],['Divorciado(a)','Divorciado(a)']])}
-    ${field('profession','Profissão','')}
+    ${field('birthday','Data de nascimento','','date')}
+    ${field('integration_stage','Perfil','visitor','text',true,[['visitor','Visitante'],['new_convert','Novo Convertido'],['baptized','Batizado(a)'],['active_member','Membro']])}
+    ${field('cell_id','GC (opcional)','', 'text', false, [['','Escolher depois'],...opt(data.cells)])}
     ${field('address','Endereço / Bairro','')}
     <p class="error" role="alert"></p>
     <button type="submit">Enviar</button>
@@ -801,20 +798,13 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   }
   if(kind==='people'){
    html=field('name','Nome completo',r.name,'text',true)
-    +field('family_id','Família',r.family_id,'text',false,[['','Sem família'],...opt(data.families,r.family_id,r.family_name)])
-    +field('cell_id','GC',r.cell_id,'text',false,[['','Sem GC'],...opt(data.cells,r.cell_id,r.cell_name)])
-    +field('relationship','Parentesco',r.relationship)
-    +field('integration_stage','Jornada',r.integration_stage||'active_member','text',true,Object.entries(stageLabels))
-    +field('birthday','Data de nascimento',r.birthday,'date')
-    +field('joined_on','Entrada na igreja',r.joined_on,'date')
-    +field('baptism_date','Data de batismo',r.baptism_date,'date')
-    +field('marital_status','Estado civil',r.marital_status,'text',false,[['','Não informado'],['Solteiro(a)','Solteiro(a)'],['Casado(a)','Casado(a)'],['Viúvo(a)','Viúvo(a)'],['Divorciado(a)','Divorciado(a)']])
-    +field('profession','Profissão',r.profession)
     +field('phone','Telefone',r.phone,'tel')
     +field('email','E-mail',r.email,'email')
-    +field('origin_church','Igreja de origem',r.origin_church)
-    +field('address','Endereço',r.address)
-    +(data.pastoral_notes_allowed?field('pastoral_notes','Observações pastorais',r.pastoral_notes):'');
+    +field('birthday','Data de nascimento',r.birthday,'date')
+    +field('integration_stage','Jornada',r.integration_stage||'active_member','text',true,Object.entries(stageLabels))
+    +field('family_id','Família (opcional)',r.family_id,'text',false,[['','Sem família'],...opt(data.families,r.family_id,r.family_name)])
+    +field('cell_id','GC (opcional)',r.cell_id,'text',false,[['','Sem GC'],...opt(data.cells,r.cell_id,r.cell_name)])
+    +field('address','Bairro / Endereço',r.address);
   }
   if(kind==='assignments'){
    directory=await api('/ministries/people');
@@ -827,9 +817,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
       <input name="position" list="ministry-role-suggestions" value="${e(r.position||(defaultMin==='Music'?'Tecladista':'Integrante'))}" required maxlength="80">
       <datalist id="ministry-role-suggestions">${[...new Set([...WORSHIP_ROLES,...rolePresets])].map(rp=>`<option value="${e(rp)}"></option>`).join('')}</datalist>
      </label>`
-    +field('is_leader','Liderança',r.is_leader?'true':'false','text',true,[['false','Voluntário / Equipe'],['true','⭐ Líder / Coordenador']])
-    +field('training_status','Capacitação',r.training_status||'certified','text',true,Object.entries(trainingLabels))
-    +field('started_on','Início',r.started_on,'date');
+    +field('is_leader','Liderança',r.is_leader?'true':'false','text',true,[['false','Voluntário / Equipe'],['true','⭐ Líder / Coordenador']]);
   }
   if(kind==='schedules'){
    directory=await api('/ministries/people');
@@ -868,8 +856,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     +field('description','Descrição',r.description,'text',true)
     +field('occurred_on','Data',r.occurred_on||today(),'date',true)
     +field('due_date','Vencimento',r.due_date,'date',false,null,true)
-    +field('amount','Valor (R$)',r.amount_cents!==undefined?(r.amount_cents/100).toFixed(2):'','text',true)
-    +field('category','Categoria',r.category);
+    +field('amount','Valor (R$)',r.amount_cents!==undefined?(r.amount_cents/100).toFixed(2):'','text',true);
   }
   if(kind==='closings'){
    html=field('service_name','Culto',r.service_name,'text',true)
@@ -880,8 +867,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     +field('offerings_pix','Ofertas PIX (R$)',r.offerings_pix_cents!==undefined?(r.offerings_pix_cents/100).toFixed(2):'0','text',true)
     +field('offerings_card','Ofertas Cartão (R$)',r.offerings_card_cents!==undefined?(r.offerings_card_cents/100).toFixed(2):'0','text',true)
     +field('counted_by','1º Conferente',r.counted_by,'text',true)
-    +field('verified_by','2º Conferente',r.verified_by,'text',true)
-    +field('notes','Observações',r.notes);
+    +field('verified_by','2º Conferente (opcional)',r.verified_by,'text',false)
+    +field('notes','Observações (opcional)',r.notes);
   }
   if(kind==='invoices'){
    html=field('number','Número da nota',r.number,'text',true)

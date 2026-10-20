@@ -366,11 +366,7 @@ function openApplyModal(targetType,targetId,targetName,extra={}){
    <label>Nome
     <input value="${e(identity?.user?.name||'')}" disabled>
    </label>
-   <label>Função
-    <select name="role_desired" required>
-     ${roles.map(r=>`<option value="${e(r)}">${e(r)}</option>`).join('')}
-    </select>
-   </label>
+   ${targetType==='gc' ? '<input type="hidden" name="role_desired" value="Participante">' : `<label>Função<select name="role_desired" required>${roles.map(r=>`<option value="${e(r)}">${e(r)}</option>`).join('')}</select></label>`}
    <label>Telefone
     <input name="phone" type="tel" required placeholder="(33) 99999-0000" value="${e(identity?.user?.phone||'')}" maxlength="40">
    </label>

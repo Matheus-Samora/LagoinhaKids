@@ -39,12 +39,10 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
    <label>Data de nascimento<input name="birthday" type="date" value="${e(ch?.birthday||'')}" required max="${day(new Date())}"/></label>
    ${parent?'':`<label>Turma<select name="room_id" required>${roomOptions(targetRoom)}</select></label>`}
    ${S.user.role==='admin'?`<label>Responsável<select name="parent_id">${parents(ch?.parent_id)}</select></label>`:''}
-   <fieldset style="border:1px solid #27272a;border-radius:8px;padding:12px;margin:12px 0;"><legend style="font-size:12px;font-weight:700;padding:0 6px;">${icon('health',16)} SAÚDE E CUIDADOS</legend>
-     <label>Alergias<input name="allergies" value="${e(ch?.allergies||'')}" placeholder="Ex.: Amendoim, Lactose, Glúten"/></label>
-     <label>Cuidados especiais<input name="medical_conditions" value="${e(ch?.medical_conditions||'')}" placeholder="Ex.: Asma, TEA, TDAH"/></label>
-     <label>Medicação de emergência<input name="emergency_medication" value="${e(ch?.emergency_medication||'')}" placeholder="Opcional"/></label>
-     <label>Autorizados a buscar<input name="authorized_pickups" value="${e(ch?.authorized_pickups||'')}" placeholder="Ex.: Vovó Maria, Tio Lucas"/></label>
-   </fieldset>
+   <fieldset style="border:1px solid #27272a;border-radius:8px;padding:12px;margin:12px 0;"><legend style="font-size:12px;font-weight:700;padding:0 6px;">${icon('health',16)} SAÚDE E CUIDADOS (OPCIONAL)</legend>
+      <label>Alergias ou Cuidados Especiais<input name="allergies" value="${e(ch?.allergies||[ch?.medical_conditions,ch?.emergency_medication].filter(Boolean).join(' · ')||'')}" placeholder="Ex.: Alergia alimentar, asma, etc. (opcional)" autocomplete="off"/></label>
+      <label>Autorizados a buscar<input name="authorized_pickups" value="${e(ch?.authorized_pickups||'')}" placeholder="Ex.: Vovó Maria, Tio Lucas"/></label>
+    </fieldset>
    ${errorSlot}<button class="btn primary full" type="submit">${ch?'Salvar':'Cadastrar'} ${icon('check',17)}</button></form>`);
  }
 
@@ -100,7 +98,6 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
               <input type="file" id="room-cover-file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden/>
             </label>
             <button type="button" class="btn secondary" data-action="toggle-room-presets">🎨 Sugestões</button>
-            <button type="button" class="btn secondary" data-action="toggle-room-url">🔗 Link</button>
           </div>
           <div class="media-presets-drawer" id="room-presets-drawer" hidden>
             <div class="media-presets-grid">
@@ -110,12 +107,6 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
                   <span>${e(p.name)}</span>
                 </button>
               `).join('')}
-            </div>
-          </div>
-          <div class="media-url-drawer" id="room-url-drawer" hidden>
-            <div class="media-url-input-wrap">
-              <input type="text" inputmode="url" id="room-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${e(coverUrl.startsWith('http')?coverUrl:'')}"/>
-              <button type="button" class="btn primary" data-action="apply-room-url">Aplicar</button>
             </div>
           </div>
           <input type="hidden" name="cover_url" id="room-cover-url-input" value="${e(coverUrl)}"/>
@@ -142,9 +133,9 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
             ${teachers.map(u=>`<option value="${u.id}" ${u.id===currentTeacher?'selected':''}>${e(u.name)}</option>`).join('')}
           </select>
         </label>
-        <label>Monitor(a)
+        <label>Monitor(a) (opcional)
           <select name="monitor_id">
-            <option value="">Nenhum</option>
+            <option value="">Nenhum (somente professor)</option>
             ${monitors.map(u=>`<option value="${u.id}" ${u.id===currentMonitor?'selected':''}>${e(u.name)}</option>`).join('')}
           </select>
         </label>
@@ -202,9 +193,9 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
             ${teachers.map(u => `<option value="${u.id}" ${u.id === selectedTeacher ? 'selected' : ''}>${e(u.name)}</option>`).join('')}
           </select>
         </label>
-        <label>Monitor(a)
+        <label>Monitor(a) (opcional)
           <select name="monitor_id">
-            <option value="">Nenhum</option>
+            <option value="">Nenhum (somente professor)</option>
             ${monitors.map(u => `<option value="${u.id}" ${u.id === selectedMonitor ? 'selected' : ''}>${e(u.name)}</option>`).join('')}
           </select>
         </label>

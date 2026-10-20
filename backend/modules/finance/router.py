@@ -51,7 +51,7 @@ class ServiceClosing(Record):
     offerings_pix:str=Field(default='0',max_length=30)
     offerings_card:str=Field(default='0',max_length=30)
     counted_by:str=Field(min_length=2,max_length=120)
-    verified_by:str=Field(min_length=2,max_length=120)
+    verified_by:str=Field(default='',max_length=120)
     notes:str=Field(default='',max_length=400)
 
 class Invoice(Record):
@@ -199,7 +199,7 @@ def persist(kind,data,user,rid=None):
                 if existing:
                     rid=existing['id']
                     old=current(c,'finance_service_closings',rid)
-                    if any(old[k]!=v for k,v in {'account_id':data.account_id,'service_name':data.service_name.strip(),'service_date':str(data.service_date),'tithes_cents':money(data.tithes),'offerings_cash_cents':money(data.offerings_cash),'offerings_pix_cents':money(data.offerings_pix),'offerings_card_cents':money(data.offerings_card),'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),'notes':data.notes.strip()}.items() if k!='notes') or decrypt_text(old['notes'])!=data.notes.strip():fail('duplicate','Solicitação já utilizada.',409)
+                    if any(old[k]!=v for k,v in {'account_id':data.account_id,'service_name':data.service_name.strip(),'service_date':str(data.service_date),'tithes_cents':money(data.tithes),'offerings_cash_cents':money(data.offerings_cash),'offerings_pix_cents':money(data.offerings_pix),'offerings_card_cents':money(data.offerings_card),'counted_by':data.counted_by.strip(),'verified_by':(data.verified_by.strip() if data.verified_by else data.counted_by.strip()),'notes':data.notes.strip()}.items() if k!='notes') or decrypt_text(old['notes'])!=data.notes.strip():fail('duplicate','Solicitação já utilizada.',409)
                     return {'ok':True,'id':rid}
             current(c,'finance_accounts',data.account_id)
             check_date(data.service_date)
@@ -232,7 +232,7 @@ def persist(kind,data,user,rid=None):
             values={
                 'service_name':data.service_name.strip(),'service_date':str(data.service_date),'account_id':data.account_id,
                 'tithes_cents':t_cents,'offerings_cash_cents':c_cents,'offerings_pix_cents':p_cents,'offerings_card_cents':k_cents,
-                'total_cents':tot_cents,'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),
+                'total_cents':tot_cents,'counted_by':data.counted_by.strip(),'verified_by':(data.verified_by.strip() if data.verified_by else data.counted_by.strip()),
                 'notes':encrypt_text(data.notes.strip()),'entry_id':entry_id
             }
         else:

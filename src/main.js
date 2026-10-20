@@ -893,27 +893,7 @@ function eventFormModal(ev=null){
       <input type="file" id="event-banner-file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden/>
      </label>
      <button type="button" class="btn secondary" data-action="toggle-event-presets">🎨 Sugestões prontas</button>
-     <button type="button" class="btn secondary" data-action="toggle-event-url">🔗 Link externo</button>
-    </div>
-    <div class="media-presets-drawer" id="event-presets-drawer" hidden>
-     <div class="media-presets-header">
-      <small>Toque em uma sugestão para aplicar como banner:</small>
      </div>
-     <div class="media-presets-grid">
-      ${EVENT_PRESETS.map(p=>`
-        <button type="button" class="media-preset-card" data-action="pick-event-preset" data-url="${escape(p.url)}" title="${escape(p.title)}">
-         <img src="${escape(p.url)}" alt="${escape(p.title)}" loading="lazy"/>
-         <span>${escape(p.title)}</span>
-        </button>
-      `).join('')}
-     </div>
-    </div>
-    <div class="media-url-drawer" id="event-url-drawer" hidden>
-     <div class="media-url-input-wrap">
-      <input type="text" inputmode="url" id="event-url-input-field" placeholder="https://exemplo.com/imagem.jpg" value="${escape(bannerUrl.startsWith('http')?bannerUrl:'')}"/>
-      <button type="button" class="btn primary" data-action="apply-event-url">Aplicar</button>
-     </div>
-    </div>
     <input type="hidden" name="banner_url" id="event-banner-url-input" value="${escape(bannerUrl)}"/>
    </div>
   </div>
