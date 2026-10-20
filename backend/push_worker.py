@@ -23,7 +23,7 @@ def deliver_batch(limit=50):
         credentials.refresh(Request());project=credentials.project_id
     sent=0
     with s.db() as c:
-        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id,n.kind,n.child_id,n.created_at,n.read_at,n.sector FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY o.id LIMIT ?',(int(time.time()),limit)).fetchall()
+        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id,n.kind,n.child_id,n.created_at,n.read_at,n.sector FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY CASE WHEN n.kind IN ("urgent_call","please_pickup","pickup_ready") THEN 0 WHEN n.kind IN ("sector_application","arriving") THEN 1 ELSE 2 END,o.id LIMIT ?',(int(time.time()),limit)).fetchall()
     for row in rows:
         try:
             from .notification_center import push_policy,metadata

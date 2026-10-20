@@ -124,3 +124,13 @@ def test_sector_broadcast_does_not_push_to_unsubscribed_global_overseers(records
         assert ids=={3}
     # TI retains oversight of the underlying announcement without unsolicited push copies.
     assert any(a['id']==result.json()['id'] for a in client(1).get('/api/platform/announcements').json())
+
+
+def test_urgent_push_is_processed_before_older_announcements(records,monkeypatch):
+    from backend import push_worker
+    older=notice();urgent=notice(kind='please_pickup');sent=[]
+    with s.db() as c:c.execute('INSERT INTO web_subscriptions(user_id,endpoint,keys_json,session_token,updated_at) VALUES(?,?,?,?,?)',(3,'https://fcm.googleapis.com/priority','{}','test',s.now()))
+    monkeypatch.setattr(push_worker,'fcm_ready',lambda:False);monkeypatch.setattr(push_worker,'apns_ready',lambda:False);monkeypatch.setattr(push_worker.web_push,'ready',lambda:True)
+    monkeypatch.setattr(push_worker.web_push,'send',lambda subscription,nid:sent.append(nid) or True)
+    assert push_worker.deliver_batch(limit=1)['sent']==1
+    assert sent==[urgent]
