@@ -82,7 +82,6 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   return digits.startsWith('55')?digits:'55'+digits;
  }
 
- function whatsAppUrl(){return '';}
 
  function statCard(label,value,helper='',symbol=''){
   return `<article class="stat"><div><span>${label}</span><strong>${value}</strong>${helper?`<small>${helper}</small>`:''}</div>${symbol?`<span class="stat-icon" aria-hidden="true">${symbol}</span>`:''}</article>`;
@@ -112,9 +111,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
       <thead><tr><th>Candidato</th><th>GC</th><th>Notas</th><th>Ações</th></tr></thead>
       <tbody>
        ${gcApps.map(a=>{
-        const wUrl=whatsAppUrl(a.phone,`Olá, ${a.member_name.split(' ')[0]}! Paz! Recebemos sua inscrição no ${a.target_name} na Lagoinha!`);
-        return `<tr>
-         <td><strong>${e(a.member_name)}</strong><small>${e(a.phone||a.email||'Sem telefone')}</small>${wUrl?`<span>WhatsApp</span>`:''}</td>
+                return `<tr>
+         <td><strong>${e(a.member_name)}</strong><small>${e(a.phone||a.email||'Sem telefone')}</small></td>
          <td><span class="badge" style="background:#0f766e;color:#fff;">${e(a.target_name)}</span><small>${e(a.role_desired||'Participante')}</small></td>
          <td><small>${e(a.notes||'—')}</small></td>
          <td class="row-buttons">${edit()?`${button('approve-gc-app','Aprovar',`data-id="${e(a.id)}"`)}${button('reject-gc-app','Recusar',`class="secondary" data-id="${e(a.id)}"`)}`:'<span>Aguardando</span>'}</td>
@@ -140,9 +138,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
      <thead><tr><th>Candidato</th><th>Ministério / Função</th><th>Notas</th><th>Ações</th></tr></thead>
      <tbody>
       ${apps.map(a=>{
-       const wUrl=whatsAppUrl(a.phone,`Olá, ${a.member_name.split(' ')[0]}! Paz! Recebemos sua candidatura para o Ministério ${a.target_name}.`);
-       return `<tr>
-        <td><strong>${e(a.member_name)}</strong><small>${e(a.phone||a.email||'Sem contato')}</small>${wUrl?`<span>WhatsApp</span>`:''}</td>
+              return `<tr>
+        <td><strong>${e(a.member_name)}</strong><small>${e(a.phone||a.email||'Sem contato')}</small></td>
         <td><span class="badge" style="background:#4338ca;color:#fff;">${e(a.target_name)}</span><small>${e(a.role_desired||'Voluntário')}</small></td>
         <td><small>${e(a.notes||'—')}</small></td>
         <td class="row-buttons">${edit()?`${button('approve-min-app','Aprovar',`data-id="${e(a.id)}"`)}${button('reject-min-app','Recusar',`class="secondary" data-id="${e(a.id)}"`)}`:'<span>Aguardando</span>'}</td>
@@ -308,12 +305,10 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
      <div class="insight-head"><h3>Aniversariantes</h3><span class="badge">Mês atual</span></div>
      <div class="insight-list">
       ${birthdaysMonth.slice(0,3).map(p=>{
-       const wUrl=whatsAppUrl(p.phone,`Olá, ${p.name.split(' ')[0]}! A família Lagoinha celebra a sua vida neste mês!`);
-       return `<div class="insight-item"><div><strong>${e(p.name)}</strong><small>${date(p.birthday)}</small></div><div>${wUrl?`<span>Parabéns</span>`:''}</div></div>`;
+              return `<div class="insight-item"><div><strong>${e(p.name)}</strong><small>${date(p.birthday)}</small></div><div><span class="badge">Parabéns</span></div></div>`;
       }).join('')}
       ${visitors.slice(0,2).map(p=>{
-       const wUrl=whatsAppUrl(p.phone,`Olá, ${p.name.split(' ')[0]}! Que alegria receber você na Lagoinha!`);
-       return `<div class="insight-item"><div><strong>${e(p.name)}</strong><small>${e(stageLabels[p.integration_stage]||'Visitante')}</small></div><div>${wUrl?`<span>Acolher</span>`:''}</div></div>`;
+              return `<div class="insight-item"><div><strong>${e(p.name)}</strong><small>${e(stageLabels[p.integration_stage]||'Visitante')}</small></div><div><span class="badge">Acolher</span></div></div>`;
       }).join('')}
       ${!birthdaysMonth.length&&!visitors.length?'<p class="subtle" style="margin:0;">Nenhum registro neste mês.</p>':''}
      </div>
@@ -414,8 +409,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   if(kind==='cells')return `<td><strong>${e(r.name)}</strong><small>${e(r.address||r.neighborhood||'—')}</small></td><td>${e(r.leader_name||'Liderança GC')}<small>${e(r.meeting_day||'')}</small></td><td><span class="badge">${r.member_count||0} membro(s)</span></td>`;
   if(kind==='families')return `<td><strong>${e(r.name)}</strong><small>${e(r.neighborhood||'')}</small></td><td><span class="badge">${r.member_count} integrante(s)</span>${r.cell_name?`<small>GC: ${e(r.cell_name)}</small>`:''}</td><td>${date(r.joined_on)}</td>`;
   if(kind==='people'){
-   const wUrl=whatsAppUrl(r.phone,`Olá, ${r.name.split(' ')[0]}! Paz seja contigo!`);
-   return `<td><strong>${e(r.name)}</strong><small>${e(r.phone||r.email||'')}</small>${wUrl?`<span>WhatsApp</span>`:''}</td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
+      return `<td><strong>${e(r.name)}</strong><small>${e(r.phone||r.email||'')}</small></td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
   }
   if(kind==='schedules')return `<td><strong>${e(r.title)}</strong><small>${date(r.service_date)} às ${e(r.service_time||'18:00')}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.person_name)} ${r.role_notes?`· <strong>${e(r.role_notes)}</strong>`:''}</small></td><td><span class="badge">${e(scheduleStatusLabels[r.status]||r.status)}</span></td>`;
   if(kind==='assignments')return `<td><strong>${e(r.person_name)}</strong>${r.is_leader?' <span class="badge">⭐ Líder</span>':''}</td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.position)}</small></td><td>${date(r.started_on)}<small>${e(trainingLabels[r.training_status||'certified']||r.training_status)}</small></td>`;

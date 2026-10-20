@@ -458,17 +458,17 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     </div>
   ` : '';
   const guestsSection=S.activeGuests&&S.activeGuests.length?`<section class="panel" style="margin-top:16px;"><h3>Visitantes (${S.activeGuests.length})</h3><div class="table-wrap"><table><thead><tr><th>Criança</th><th>Responsável</th><th>Saída</th><th>Status</th></tr></thead><tbody>${S.activeGuests.map(g=>`<tr><td><strong>${e(g.child_name)}</strong><br><small>${g.child_age} anos${g.allergies?` · ⚠️ ${e(g.allergies)}`:''}</small></td><td>${e(g.guardian_name)}<br><small>${g.guardian_phone?`<span>Telefone: ${e(g.guardian_phone)}</span>`:''}</small></td><td><button class="mini-button" data-action="guest-checkout" data-id="${g.id}">Registrar saída</button></td><td><span class="status present">Na Salinha</span></td></tr>`).join('')}</tbody></table></div></section>`:'';
-  return `${title('Chamada','',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="open-scanner" style="display:inline-flex;align-items:center;gap:6px;">${icon('qrcode',17)} Ler QR Code</button><button class="btn secondary" data-action="guest-checkin">${icon('plus',16)} Visitante</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
+  return `${title('Chamada','',`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn primary" data-action="guest-checkin">${icon('plus',16)} Check-in Visitante</button>${lesson?`<button class="btn secondary" data-action="add-lesson-student" data-id="${lesson.id}">${icon('plus',16)} Adicionar aluno</button>`:''}</div>`)}
   <div class="scanner-desk-bar">
     <div class="scanner-desk-info">
-      <span class="scanner-desk-icon">⚡</span>
+      <span class="scanner-desk-icon">🔍</span>
       <div>
-        <strong>Check-in por código:</strong>
+        <strong>Buscar ou check-in rápido:</strong>
       </div>
     </div>
     <div class="scanner-desk-action">
-      <input id="desk-barcode-input" aria-label="Código da carteirinha ou nome da criança" type="text" placeholder="Código (ex: LK-0007) ou nome..." autocomplete="off" />
-      <button type="button" class="btn primary" data-action="desk-barcode-search">Check-in</button>
+      <input id="desk-barcode-input" aria-label="Código da carteirinha ou nome da criança" type="text" placeholder="Digite o nome ou código da criança..." autocomplete="off" />
+      <button type="button" class="btn primary" data-action="desk-barcode-search">Buscar / Check-in</button>
     </div>
   </div>
   ${lessonDetails}
@@ -543,7 +543,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
 
             <div class="student-family-info">
               <span>Responsável: <strong>${e(ch.parent_name || 'Aguardando vínculo')}</strong></span>
-              ${parentPhone ? `<span>${icon('whatsapp',14)} WhatsApp</span>` : ''}
+              ${parentPhone ? `<span>📞 ${e(parentPhone)}</span>` : ''}
             </div>
 
             <div class="student-actions-bar">
@@ -716,7 +716,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   }
   if(action==='join-waitlist'||action==='leave-waitlist'){await api(action==='join-waitlist'?`/lessons/${id}/waitlist`:`/lessons/${id}/waitlist/${el.dataset.child}`,{method:action==='join-waitlist'?'POST':'DELETE',...(action==='join-waitlist'?{body:{child_id:Number(el.dataset.child)}}:{})});await changed(action==='join-waitlist'?'Você entrou na lista de espera.':'Você saiu da lista.');return true;}
   if(action==='refresh-school'){await changed('Horários atualizados.');return true;}
-  if(action==='open-scanner'){if(openScanner)openScanner();return true;}
+  if(action==='open-scanner'){return true;}
   if(action==='desk-barcode-search'){
    const inp=document.getElementById('desk-barcode-input');
    const val=inp?inp.value.trim():'';

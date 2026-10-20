@@ -216,7 +216,7 @@ window.addEventListener('popstate',()=>{
   const pageLabel = S.user.role==='parent'&&S.page==='overview'?'Meus filhos':(paths[S.page]||'Aulinhas');
   const formattedDate = new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date());
 
-    app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">${t('brand.our_space', 'NOSSO ESPAÇO')}</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">Lagoinha <strong>Kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">${t('brand.our_space', 'NOSSO ESPAÇO')}</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions"><a class="topbar-action-pill secondary" href="/access" title="Ir para Área de Membros e Setores" aria-label="Meus acessos">${icon('rooms',15)}<span>${t('nav.access', 'Acessos')}</span></a>${S.user.role!=='parent'?`<button type="button" class="topbar-action-pill primary" data-action="open-scanner" title="Escanear Carteirinha QR">${icon('qrcode',16)}<span>${t('nav.checkin_qr', 'Check-in QR')}</span></button>`:''}<button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>${t('nav.download_app', 'Baixar App')}</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">${t('nav.download_app', 'Baixar App')}</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer"><span>Lagoinha Kids · Cuidado que conecta — Igreja Batista da Lagoinha</span><div class="aux-controls-bar"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="kids-lang-select" class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
+    app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">${t('brand.our_space', 'NOSSO ESPAÇO')}</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">Lagoinha <strong>Kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">${t('brand.our_space', 'NOSSO ESPAÇO')}</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions"><a class="topbar-action-pill secondary" href="/access" title="Ir para Área de Membros e Setores" aria-label="Meus acessos">${icon('rooms',15)}<span>${t('nav.access', 'Acessos')}</span></a><button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>${t('nav.download_app', 'Baixar App')}</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">${t('nav.download_app', 'Baixar App')}</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer"><span>Lagoinha Kids · Cuidado que conecta — Igreja Batista da Lagoinha</span><div class="aux-controls-bar"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="kids-lang-select" class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
     app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
     translateDOM(app);
     const inboxHost=app.querySelector('#kids-notification-center');
@@ -302,8 +302,7 @@ function teamPage(){
   const roleLabel=m.role==='admin'?'🛡️ Coordenação':m.staff_role==='monitor'?'🤝 Monitor(a)':'👨‍🏫 Professor(a)';
   const rolePillClass=m.role==='admin'?'admin':m.staff_role==='monitor'?'monitor':'teacher';
   const cleanPhone=(m.phone||'').replace(/\D/g,'');
-  const waLink='';
-  const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
+    const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
   const canEdit=Boolean(S.user.platform_admin);
 
   return `<article class="team-member-card">
@@ -325,7 +324,7 @@ function teamPage(){
       ${cleanPhone?`
         <div class="team-contact-row">
           <span>
-            ${icon('whatsapp',14)} <span>${escape(m.phone)}</span>
+            📞 <span>${escape(m.phone)}</span>
           </span>
         </div>
       `:''}
@@ -1007,8 +1006,7 @@ function eventParticipantsModal(evId){
    ${list.length?`<div class="participants-list">
     ${list.map(p=>{
      const cleanPhone=(p.guardian_phone||'').replace(/\D/g,'');
-     const waLink='';
-     return `<article class="participant-item-card">
+          return `<article class="participant-item-card">
       <div class="participant-info-col">
        <div class="participant-avatar-row">
         ${p.child_avatar_url?`<img src="${escape(p.child_avatar_url)}" alt="${escape(p.child_name)}" class="kid-avatar-img"/>`:`<span class="kid-avatar" style="background:#09090b;">${initials(p.child_name)}</span>`}
@@ -1024,7 +1022,7 @@ function eventParticipantsModal(evId){
        </div>`:''}
        <div class="participant-guardian-info">
         <span>Responsável: <strong>${escape(p.guardian_name||'Cadastrado')}</strong></span>
-        ${p.guardian_phone?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><small style="color:#a1a1aa;">${escape(p.guardian_phone)}</small>${waLink?`<span>${icon('whatsapp',13)} WhatsApp</span>`:''}</div>`:''}
+        ${p.guardian_phone?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><small style="color:#a1a1aa;">${escape(p.guardian_phone)}</small></div>`:''}
        </div>
        ${p.notes?`<div class="participant-notes"><small>Obs: ${escape(p.notes)}</small></div>`:''}
       </div>
@@ -1043,18 +1041,7 @@ function eventParticipantsModal(evId){
 }
 
 const school=createSchoolUI({S,api,escape,icon,title,showModal,toast,refresh:load,render,age,statusName,time,navigateTo,uploadImage:uploadImageFile,uploadAvatar:uploadAvatarFile,kidAvatar,roomPresets:ROOM_PRESETS,openScanner:()=>openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal})});
-initUSBScannerListener(S, (child, code) => {
- if (S.user && S.user.role !== 'parent') {
-  openScannerModal({ S, api, load, toast, showModal, modal, escape, icon, age, attendanceModal });
-  setTimeout(() => {
-   const inp = document.getElementById('scanner-usb-input');
-   if (inp) {
-    inp.value = code;
-    document.getElementById('scanner-usb-submit')?.click();
-   }
-  }, 100);
- }
-});
+// USB scanner disabled
 document.addEventListener('change',event=>school.change(event));
 document.addEventListener('click',async e=>{
  const el=e.target.closest('[data-page],[data-action]');if(!el)return;
@@ -1076,7 +1063,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(action==='guest-checkout'){showModal('Saída do visitante','Confira o responsável e o código entregue na chegada.',`<form data-form="guest-checkout" data-id="${Number(el.dataset.id)}"><label>Código de retirada<input name="claim_code" autocomplete="off" required maxlength="30"/></label><label class="checkbox-label"><input type="checkbox" name="confirmed" required/>Conferi presencialmente o responsável.</label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar saída</button></form>`);return;}
- if(action==='open-scanner'){openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal});return;}
+ if(action==='open-scanner'){return;}
  if(action==='clear-event-banner'){setEventBannerPreview('');toast('Banner removido.');return;}
  if(action==='toggle-event-presets'){const d=document.getElementById('event-presets-drawer');if(d)d.hidden=!d.hidden;return;}
  if(action==='toggle-event-url'){const d=document.getElementById('event-url-drawer');if(d)d.hidden=!d.hidden;return;}
