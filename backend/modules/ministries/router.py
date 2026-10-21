@@ -6,7 +6,7 @@ from ...module_security import module_access
 from ...platform_access import platform_admin,is_pastor
 from ... import store as s
 from ...app import fail
-from ..common import Record,save,archive,current,check_date,encrypt_text,decrypt_text
+from ..common import merge_existing,Record,save,archive,current,check_date,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/ministries',tags=['Ministries'])
 CATALOG=('Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA')
 WORSHIP_ROLES=('Ministrante','Backing Vocal','Tecladista','Guitarrista','Baixista','Baterista','Cordas / Sopros','Diretor Musical','VS / Tracks')
@@ -102,6 +102,7 @@ def persist(data,user,rid=None):
     check_date(data.started_on)
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        data=merge_existing(c,'ministries_assignments',data,user,rid)
         check_ministry_scope(c,user,data.ministry)
         if rid:check_ministry_scope(c,user,current(c,'ministries_assignments',rid)['ministry'])
         current(c,'members_people',data.person_id)
@@ -128,6 +129,7 @@ def persist_schedule(data:Schedule,user,rid=None):
     if data.status not in SCHEDULE_STATUSES:fail('status','Status de escala inválido.')
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        data=merge_existing(c,'ministries_schedules',data,user,rid)
         check_ministry_scope(c,user,data.ministry)
         if rid:check_ministry_scope(c,user,current(c,'ministries_schedules',rid)['ministry'])
         current(c,'members_people',data.person_id)
@@ -264,9 +266,10 @@ def persist_resource(data:Resource,user,rid=None):
     if data.ministry not in CATALOG:fail('ministry','Selecione um ministério disponível.')
     if not data.title.strip():fail('title','Informe o título do material ou repertório.')
     if data.resource_url and urlsplit(data.resource_url).scheme not in ('https','http'):fail('url','Use um link HTTP ou HTTPS.')
-    cat=data.category if data.category in RESOURCE_CATEGORIES else 'roteiro'
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        data=merge_existing(c,'ministries_resources',data,user,rid)
+        cat=data.category if data.category in RESOURCE_CATEGORIES else 'roteiro'
         check_ministry_scope(c,user,data.ministry)
         if rid:check_ministry_scope(c,user,current(c,'ministries_resources',rid)['ministry'])
         vals={

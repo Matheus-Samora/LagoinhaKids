@@ -72,7 +72,7 @@ class EventCreate(BaseModel):
         if banner and not (banner.startswith('https://') or banner.startswith('http://') or banner.startswith('/api/media/') or banner.startswith('/')):
             raise ValueError('A imagem deve usar um link válido (HTTPS) ou ser enviada pelo app.')
         self.starts_at=start.isoformat(timespec='seconds');self.ends_at=end.isoformat(timespec='seconds')
-        self.banner_url=banner
+        object.__setattr__(self,'banner_url',banner)
         return self
 
 class EventRegisterIn(BaseModel):
@@ -180,18 +180,19 @@ def create_event(data: EventCreate, user=Depends(staff)):
 
 @router.patch('/events/{event_id}')
 def update_event(event_id: int, data: EventCreate, user=Depends(staff)):
-    if data.max_age < data.min_age:
-        fail('event', 'Faixa etária inválida: idade máxima menor que idade mínima.')
-
-    audience = data.target_audience.lower()
-    if audience not in ('all', 'kids', 'teens'):
-        audience = 'all'
-
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         ev = c.execute('SELECT * FROM events WHERE id = ? AND active = 1', (event_id,)).fetchone()
         if not ev:
             fail('event_not_found', 'Evento não encontrado ou inativo.', 404)
+        from .modules.common import preserve_omitted
+        data=preserve_omitted(data,ev)
+        if data.max_age < data.min_age:
+            fail('event', 'Faixa etária inválida: idade máxima menor que idade mínima.')
+        audience = data.target_audience.lower()
+        if audience not in ('all', 'kids', 'teens'):
+            audience = 'all'
+
 
         booked=c.execute('SELECT count(*) FROM event_registrations WHERE event_id=?',(event_id,)).fetchone()[0]
         if data.max_capacity<booked:fail('capacity','A capacidade não pode ser menor que as inscrições existentes.',409)

@@ -5,7 +5,7 @@ from pydantic import BaseModel,Field
 from ...module_security import module_access
 from ... import store as s
 from ...app import fail,session
-from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text
+from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text,merge_existing
 router=APIRouter(prefix='/api/members',tags=['Members'])
 read=module_access('members',('admin','editor'));write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
 STAGES=('visitor','new_convert','baptized','in_training','active_member','leader')
@@ -108,9 +108,11 @@ def persist(kind,data,user,rid=None):
         if getattr(data,'cell_id',None):current(c,'members_cells',data.cell_id)
         if isinstance(data,Person) and data.family_id:current(c,'members_families',data.family_id)
         from ...record_policy import global_manager
+        provided=set(data.model_fields_set)
+        data=merge_existing(c,'members_'+kind,data,user,rid)
         payload=values(data)
         if isinstance(data,Person) and not global_manager(c,user):
-            if data.pastoral_notes.strip():fail('pastoral_notes','Anotações pastorais são exclusivas de TI e Pastores.',403)
+            if 'pastoral_notes' in provided and data.pastoral_notes.strip():fail('pastoral_notes','Anotações pastorais são exclusivas de TI e Pastores.',403)
             payload.pop('pastoral_notes',None)
         return save(c,'members_'+kind,'members',data,payload,user,rid)
 
@@ -148,6 +150,10 @@ def submit_self_registration(data:SelfRegister,user=Depends(session)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         existing=c.execute("SELECT * FROM members_self_registrations WHERE owner_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1",(user['id'],)).fetchone()
+        if existing:
+            from ..common import preserve_omitted
+            data=preserve_omitted(data,existing)
+            stage=data.integration_stage if data.integration_stage in STAGES else 'visitor'
         fields={'name':data.name.strip(),'family_name':data.family_name.strip(),'birthday':data.birthday.isoformat() if data.birthday else None,'phone':data.phone.strip(),'email':data.email.strip(),'marital_status':data.marital_status.strip(),'profession':data.profession.strip(),'address':encrypt_text(data.address),'integration_stage':stage}
         if existing:
             rid=existing['id']
@@ -173,6 +179,7 @@ def approve_self_registration(rid:str,user=Depends(write)):
         c.execute('BEGIN IMMEDIATE')
         reg=c.execute("SELECT * FROM members_self_registrations WHERE id=? AND status='pending'",(rid,)).fetchone()
         if not reg:fail('missing','Solicitação pendente não encontrada.',404)
+        if reg['owner_id'] is not None and c.execute('SELECT 1 FROM members_people WHERE account_user_id=? AND active=1',(reg['owner_id'],)).fetchone():fail('duplicate','Esta conta já possui um cadastro pessoal aprovado.',409)
         fam_id=None
         fam_name=(reg['family_name'] or '').strip()
         if fam_name:
@@ -190,8 +197,8 @@ def approve_self_registration(rid:str,user=Depends(write)):
         }
         p_res=save(c,'members_people','members',Person(name=reg['name']),person_vals,user)
         if reg['owner_id'] is not None:
-            c.execute('UPDATE members_people SET created_by=? WHERE id=?',(reg['owner_id'],p_res['id']))
-        c.execute("UPDATE members_self_registrations SET status='approved' WHERE id=?",(rid,))
+            c.execute('UPDATE members_people SET created_by=?,account_user_id=? WHERE id=?',(reg['owner_id'],reg['owner_id'],p_res['id']))
+        c.execute("UPDATE members_self_registrations SET status='approved',person_id=? WHERE id=?",(p_res['id'],rid))
         s.audit(c,user['id'],'members:self_reg_approved:'+rid)
         return {'ok':True,'person_id':p_res['id'],'family_id':fam_id}
 

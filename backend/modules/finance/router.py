@@ -6,7 +6,7 @@ from pydantic import Field
 from ...module_security import module_access
 from ... import store as s
 from ...app import fail
-from ..common import Record,money,save,archive,current,check_date,change,encrypt_text,decrypt_text
+from ..common import Record,money,save,archive,current,check_date,change,encrypt_text,decrypt_text,merge_existing
 router=APIRouter(prefix='/api/finance',tags=['Finance'])
 read=module_access('finance',('admin','editor'));write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
 
@@ -175,6 +175,7 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('f
 def persist(kind,data,user,rid=None):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        data=merge_existing(c,'finance_'+kind,data,user,rid)
         if kind=='cost_centers':
             if not data.name.strip():fail('name','Informe o nome do centro de custo.')
             values={'name':data.name.strip(),'ministry':data.ministry.strip(),'budget_cents':money(data.budget_value)}
@@ -199,12 +200,12 @@ def persist(kind,data,user,rid=None):
                 if existing:
                     rid=existing['id']
                     old=current(c,'finance_service_closings',rid)
-                    if any(old[k]!=v for k,v in {'account_id':data.account_id,'service_name':data.service_name.strip(),'service_date':str(data.service_date),'tithes_cents':money(data.tithes),'offerings_cash_cents':money(data.offerings_cash),'offerings_pix_cents':money(data.offerings_pix),'offerings_card_cents':money(data.offerings_card),'counted_by':data.counted_by.strip(),'verified_by':(data.verified_by.strip() if data.verified_by else data.counted_by.strip()),'notes':data.notes.strip()}.items() if k!='notes') or decrypt_text(old['notes'])!=data.notes.strip():fail('duplicate','Solicitação já utilizada.',409)
+                    if any(old[k]!=v for k,v in {'account_id':data.account_id,'service_name':data.service_name.strip(),'service_date':str(data.service_date),'tithes_cents':money(data.tithes),'offerings_cash_cents':money(data.offerings_cash),'offerings_pix_cents':money(data.offerings_pix),'offerings_card_cents':money(data.offerings_card),'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),'notes':data.notes.strip()}.items() if k!='notes') or decrypt_text(old['notes'])!=data.notes.strip():fail('duplicate','Solicitação já utilizada.',409)
                     return {'ok':True,'id':rid}
             current(c,'finance_accounts',data.account_id)
             check_date(data.service_date)
             if not data.service_name.strip():fail('service_name','Informe o nome do culto/celebração.')
-            if not data.counted_by.strip() or not data.verified_by.strip():fail('conference','Informe os dois responsáveis pela dupla conferência.')
+            if not data.counted_by.strip():fail('conference','Informe o responsável pela conferência.')
             t_cents=money(data.tithes)
             c_cents=money(data.offerings_cash)
             p_cents=money(data.offerings_pix)
@@ -212,7 +213,7 @@ def persist(kind,data,user,rid=None):
             if any(v<0 for v in (t_cents,c_cents,p_cents,k_cents)):fail('amount','Valores não podem ser negativos.')
             tot_cents=t_cents+c_cents+p_cents+k_cents
             if tot_cents<=0:fail('amount','O total do borderô deve ser maior que zero.')
-            if data.counted_by.strip().casefold()==data.verified_by.strip().casefold():fail('conference','Informe dois responsáveis diferentes.')
+            if data.verified_by.strip() and data.counted_by.strip().casefold()==data.verified_by.strip().casefold():fail('conference','Informe dois responsáveis diferentes.')
             entry_desc=f"Borderô: {data.service_name.strip()} ({data.service_date})"
             existing_entry_id=None
             if rid:
@@ -232,7 +233,7 @@ def persist(kind,data,user,rid=None):
             values={
                 'service_name':data.service_name.strip(),'service_date':str(data.service_date),'account_id':data.account_id,
                 'tithes_cents':t_cents,'offerings_cash_cents':c_cents,'offerings_pix_cents':p_cents,'offerings_card_cents':k_cents,
-                'total_cents':tot_cents,'counted_by':data.counted_by.strip(),'verified_by':(data.verified_by.strip() if data.verified_by else data.counted_by.strip()),
+                'total_cents':tot_cents,'counted_by':data.counted_by.strip(),'verified_by':data.verified_by.strip(),
                 'notes':encrypt_text(data.notes.strip()),'entry_id':entry_id
             }
         else:

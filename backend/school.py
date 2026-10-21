@@ -90,6 +90,8 @@ def edit_room(rid:int,data:RoomIn,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         existing=room_for_edit(c,user,rid)
+        from .modules.common import preserve_omitted
+        data=preserve_omitted(data,existing)
         if data.version is not None and data.version!=existing['version']:fail('conflict','Esta turma foi alterada. Atualize a tela e confira antes de salvar.',409)
         if user['role']!='admin':
             owner=existing['teacher_id'] or existing['created_by'] or user['id']
@@ -123,7 +125,7 @@ class ChildIn(BaseModel):
     birthday:date
     room_id:int|None=None
     parent_id:int|None=None
-    avatar_url:str|None=Field(default='',max_length=500)
+    avatar_url:str|None=Field(default=None,max_length=500)
     allergies:str|None=Field(default='',max_length=250)
     medical_conditions:str|None=Field(default='',max_length=250)
     emergency_medication:str|None=Field(default='',max_length=250)
@@ -168,6 +170,7 @@ def create_child(data:ChildIn,user=Depends(session)):
 @router.patch('/children/{cid}')
 def edit_child(cid:int,data:ChildIn,user=Depends(session)):
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         old=child_allowed(c,user,cid)
         health_fields=('allergies','medical_conditions','emergency_medication','special_needs','authorized_pickups')
         for key in health_fields:
@@ -295,6 +298,8 @@ def edit_lesson(lid:int,data:LessonIn,user=Depends(staff)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE');old=c.execute('SELECT * FROM lessons WHERE id=? AND active=1',(lid,)).fetchone()
         if not old:fail('missing','Aula não encontrada.',404)
+        from .modules.common import preserve_omitted
+        data=preserve_omitted(data,old)
         room_for_edit(c,user,old['room_id']);start,end=normalize_lesson(c,data,user,lid)
         booked=c.execute('SELECT ch.* FROM reservations b JOIN children ch ON ch.id=b.child_id WHERE b.lesson_id=? AND b.confirmed=1',(lid,)).fetchall()
         if booked and data.room_id!=old['room_id']:fail('room','Cancele as confirmações antes de trocar a turma.',409)

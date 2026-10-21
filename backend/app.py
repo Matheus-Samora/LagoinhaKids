@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import os, time, secrets, hashlib, hmac, json, sqlite3, io
 from pathlib import Path
 from urllib.parse import urlencode
@@ -13,7 +14,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Systems',version='2.4.7')
+app=FastAPI(title='Lagoinha Systems',version='2.4.8')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -45,6 +46,7 @@ def public_user(row):
         'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in keys else False,
         'phone': row['phone'] if 'phone' in keys else '',
         'avatar_url': row['avatar_url'] if 'avatar_url' in keys else '',
+        'profile_version':row['profile_version'] if 'profile_version' in keys else 1,
         'google_linked': bool(row['google_sub'])
     }
 
@@ -63,7 +65,7 @@ async def protection(request:Request,call_next):
             if origin and not is_allowed_origin(origin, request):
                 return JSONResponse({'detail':{'code':'origin','message':'Origem não permitida.'}},403)
             if request.headers.get('content-length','').isdigit() and int(request.headers['content-length'])>MAX_UPLOAD+65536:
-                return JSONResponse({'detail':{'code':'size','message':'Arquivo excede o limite de 8 MB.'}},413)
+                return JSONResponse({'detail':{'code':'size','message':'Arquivo excede o limite de 10 MB.'}},413)
             parts=[];length=0
             async for chunk in request.stream():
                 length+=len(chunk)
@@ -87,7 +89,7 @@ def session(request:Request):
     if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/')) or request.url.path=='/api/me'
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/'))
     if not shared:
         requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
         requested=requested if requested in PLATFORM_MODULES else 'kids'
@@ -460,7 +462,7 @@ def update_user(uid:int,data:UserUpdate,user=Depends(identity_admin)):
         s_role=data.staff_role if data.staff_role is not None else (row['staff_role'] if 'staff_role' in row.keys() else '')
         if row['role']=='parent' and role!='parent' and c.execute('SELECT 1 FROM children WHERE parent_id=? AND archived=0',(uid,)).fetchone():fail('parent','Este responsável tem filhos vinculados. Ajuste os vínculos antes de mudar o perfil.',409)
         if any(not c.execute('SELECT 1 FROM rooms WHERE id=? AND active=1',(rid,)).fetchone() for rid in data.rooms):fail('room','Turma inválida.')
-        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=?,avatar_url=?,staff_role=? WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,target_avatar,s_role,uid))
+        try:c.execute('UPDATE users SET active=?,role=?,name=?,email=?,avatar_url=?,staff_role=?,profile_version=profile_version+1 WHERE id=?',(int(data.active),role,(data.name or row['name']).strip(),target_email,target_avatar,s_role,uid))
         except sqlite3.IntegrityError:fail('email','E-mail já cadastrado.',409)
         if target_email!=row['email']:c.execute('UPDATE users SET google_sub=NULL WHERE id=?',(uid,))
         owned=[r[0] for r in c.execute('SELECT id FROM rooms WHERE created_by=?',(uid,))]
@@ -605,7 +607,7 @@ def update_team_member(uid: int, data: TeamMemberUpdate, user=Depends(identity_a
         email_val = email(data.email) if data.email is not None else target['email']
         active_val = int(data.active) if data.active is not None else target['active']
         try:
-            c.execute('UPDATE users SET name=?, email=?, role=?, staff_role=?, active=? WHERE id=?',
+            c.execute('UPDATE users SET name=?, email=?, role=?, staff_role=?, active=?,profile_version=profile_version+1 WHERE id=?',
                       (name_val, email_val, target_role, s_role, active_val, uid))
         except sqlite3.IntegrityError:
             fail('email', 'E-mail já cadastrado.', 409)
@@ -634,10 +636,14 @@ class AvatarIn(BaseModel):
 @app.post('/api/me/avatar')
 def update_my_avatar(data:AvatarIn,user=Depends(session)):
     url=data.avatar_url.strip()
-    if url and not (url.startswith('https://') or url.startswith('http://') or url.startswith('/api/media/') or url.startswith('/')):
+    if url and not (url.startswith('https://') or url.startswith('/api/media/')):
         fail('invalid_url','URL de foto de perfil inválida.')
     with s.db() as c:
-        c.execute('UPDATE users SET avatar_url=? WHERE id=?',(url,user['id']))
+        c.execute('BEGIN IMMEDIATE')
+        if url.startswith('/api/media/'):
+            media=c.execute('SELECT content_type,created_by FROM media WHERE id=?',(url.rsplit('/',1)[-1],)).fetchone()
+            if not media or media['created_by']!=user['id'] or not media['content_type'].startswith('image/'):fail('image','Selecione uma foto enviada pela sua conta.')
+        c.execute('UPDATE users SET avatar_url=?,profile_version=profile_version+1 WHERE id=?',(url,user['id']))
         s.audit(c,user['id'],'user_avatar_updated')
     return {'ok':True,'avatar_url':url}
 @app.get('/api/audit')
@@ -696,41 +702,33 @@ def download_apk():
             return FileResponse(p, media_type='application/vnd.android.package-archive', filename='lagoinha-kids.apk')
     fail('not_found', 'APK em compilação ou indisponível.', 404)
 
-def _save_uploaded_image(raw: bytes, filename: str, user_id: int):
-    if not raw or len(raw) > 10 * 1024 * 1024:
-        fail('size', 'Arquivo muito grande. O limite é 10 MB.', 400)
-    if raw.startswith(b'%PDF') or (filename and filename.lower().endswith('.pdf')):
-        media_id = f"doc_{secrets.token_hex(10)}.pdf"
-        with s.db() as c:
-            c.execute('INSERT INTO media(id, filename, content_type, data, created_by, created_at) VALUES(?,?,?,?,?,?)',
-                      (media_id, filename or 'material.pdf', 'application/pdf', raw, user_id, s.now()))
-            c.commit()
-        return {'url': f'/api/media/{media_id}', 'id': media_id, 'size': len(raw), 'filename': filename or 'material.pdf'}
+def _prepare_upload(raw:bytes,filename:str):
+    if not raw or len(raw)>MAX_UPLOAD:fail('size','Arquivo vazio ou maior que 10 MB.')
+    if raw.startswith(b'%PDF'):
+        return {'id':f'doc_{secrets.token_hex(10)}.pdf','filename':filename or 'material.pdf','content_type':'application/pdf','data':raw}
+    if (filename or '').lower().endswith('.pdf'):fail('pdf','O arquivo não contém um PDF válido.')
     try:
-        from PIL import Image
-        img = Image.open(io.BytesIO(raw))
-        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-            img = img.convert('RGBA')
-            save_format = 'WEBP'
-            content_type = 'image/webp'
-        else:
-            img = img.convert('RGB')
-            save_format = 'WEBP'
-            content_type = 'image/webp'
-        
-        img.thumbnail((1200, 800), Image.Resampling.LANCZOS)
-        out = io.BytesIO()
-        img.save(out, format=save_format, quality=82, optimize=True)
-        compressed = out.getvalue()
-    except Exception as exc:
-        fail('invalid_image', f'Formato de imagem inválido: {str(exc)}', 400)
-    
-    media_id = f"img_{secrets.token_hex(10)}.webp"
-    with s.db() as c:
-        c.execute('INSERT INTO media(id, filename, content_type, data, created_by, created_at) VALUES(?,?,?,?,?,?)',
-                  (media_id, filename or 'upload.webp', content_type, compressed, user_id, s.now()))
-        c.commit()
-    return {'url': f'/api/media/{media_id}', 'id': media_id, 'size': len(compressed)}
+        from PIL import Image,ImageOps
+        with Image.open(io.BytesIO(raw)) as source:
+            if source.width*source.height>25000000:fail('image_size','Use uma imagem com até 25 megapixels.')
+            img=ImageOps.exif_transpose(source)
+            img=img.convert('RGBA' if img.mode in ('RGBA','LA') or (img.mode=='P' and 'transparency' in img.info) else 'RGB')
+            img.thumbnail((1200,1200),Image.Resampling.LANCZOS)
+            out=io.BytesIO();img.save(out,format='WEBP',quality=82,optimize=True)
+            compressed=out.getvalue()
+    except HTTPException:raise
+    except Exception:fail('invalid_image','Não foi possível ler esta imagem. Use JPG, PNG ou WebP.')
+    return {'id':f'img_{secrets.token_hex(10)}.webp','filename':filename or 'foto.webp','content_type':'image/webp','data':compressed}
+
+
+def _insert_upload(c,prepared,user_id):
+    c.execute('INSERT INTO media(id,filename,content_type,data,created_by,created_at) VALUES(?,?,?,?,?,?)',(prepared['id'],prepared['filename'],prepared['content_type'],prepared['data'],user_id,s.now()))
+    return {'id':prepared['id'],'url':'/api/media/'+prepared['id'],'size':len(prepared['data']),'filename':prepared['filename']}
+
+
+def _save_uploaded_image(raw:bytes,filename:str,user_id:int,connection=None):
+    prepared=_prepare_upload(raw,filename)
+    with (nullcontext(connection) if connection is not None else s.db()) as c:return _insert_upload(c,prepared,user_id)
 
 @app.post('/api/upload')
 async def upload_media(file: UploadFile = File(...), user = Depends(staff)):
@@ -747,7 +745,10 @@ async def upload_avatar(file: UploadFile = File(...), user = Depends(session)):
 @app.api_route('/api/media/{media_id}', methods=['GET', 'HEAD'])
 def get_media(media_id: str, user=Depends(session)):
     with s.db() as c:
-        row = c.execute('SELECT content_type, data FROM media WHERE id = ?', (media_id,)).fetchone()
+        row = c.execute('SELECT content_type,data,created_by FROM media WHERE id = ?', (media_id,)).fetchone()
+        from .platform_access import allowed
+        if row and row['created_by']!=user['id'] and not allowed(c,user,'kids'):
+            if not c.execute('SELECT 1 FROM users WHERE active=1 AND avatar_url=?',('/api/media/'+media_id,)).fetchone():fail('not_found','Imagem não encontrada.',404)
     if not row or not row['data']:
         fail('not_found', 'Imagem não encontrada.', 404)
     return Response(
@@ -759,6 +760,9 @@ def get_media(media_id: str, user=Depends(session)):
             'Content-Disposition': 'inline'
         }
     )
+
+from .profile import router as profile_router
+app.include_router(profile_router)
 
 from .security import router as security_router
 app.include_router(security_router)
@@ -806,7 +810,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.4.7',
+        'version': '2.4.8',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

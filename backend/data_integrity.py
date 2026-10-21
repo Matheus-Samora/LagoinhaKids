@@ -17,7 +17,7 @@ def my_data(module:str='members',user=Depends(session)):
   result['registrations']=[dict(r) for r in c.execute('SELECT id,name,family_name,birthday,phone,email,marital_status,profession,address,status,created_at,version FROM members_self_registrations WHERE owner_id=? ORDER BY created_at DESC LIMIT 50',(user['id'],))] if module=='members' else []
   for r in result['registrations']:r['address']=decrypt_text(r.get('address',''))
   result['applications']=[{'id':r['id'],'name':r['target_name'],'status':r['status']} for r in c.execute("SELECT id,target_name,status FROM sector_applications WHERE user_id=? AND target_type=? ORDER BY created_at DESC LIMIT 50",(user['id'],'gc' if module=='members' else 'ministry'))] if module in ('members','ministries') else []
-  result['profile']=[{k:(decrypt_text(r[k]) if k=='address' else r[k]) for k in ('id','name','phone','birthday','address','profession','marital_status','version')} for r in c.execute('SELECT * FROM members_people WHERE created_by=? AND active=1 ORDER BY created_at LIMIT 1',(user['id'],))] if module=='members' else []
+  result['profile']=[{k:(decrypt_text(r[k]) if k=='address' else r[k]) for k in ('id','name','phone','birthday','address','profession','marital_status','version')} for r in c.execute('SELECT * FROM members_people WHERE account_user_id=? AND active=1',(user['id'],))] if module=='members' else []
   return result
 
 @router.post('/my-registration')
@@ -32,7 +32,9 @@ def own_profile(rid:str,data:SelfRegister,version:int=Query(ge=1),user=Depends(s
   old=c.execute('SELECT * FROM members_people WHERE id=? AND active=1',(rid,)).fetchone()
   if not old:fail('missing','Cadastro não encontrado.',404)
   can_change(c,user,'members',dict(old))
-  if old['created_by']!=user['id'] and not global_manager(c,user):fail('owner','Este não é seu cadastro pessoal.',403)
+  if old['account_user_id']!=user['id'] and not global_manager(c,user):fail('owner','Este não é seu cadastro pessoal.',403)
+  from .modules.common import preserve_omitted
+  data=preserve_omitted(data,old)
   check_date(data.birthday)
   if not data.name.strip():fail('name','Informe seu nome.')
   return save(c,'members_people','members',Record(version=version),{'name':data.name.strip(),'birthday':data.birthday.isoformat() if data.birthday else None,'phone':data.phone.strip(),'address':encrypt_text(data.address),'profession':data.profession.strip(),'marital_status':data.marital_status.strip()},user,rid)
@@ -66,6 +68,7 @@ def table_for(module,kind):
 def validate_links(c,module,kind,row,restoring=False):
  rid=row['id']
  if restoring:
+  if module=='members' and kind=='people' and row.get('account_user_id') and c.execute('SELECT 1 FROM members_people WHERE account_user_id=? AND active=1',(row['account_user_id'],)).fetchone():fail('duplicate','Esta conta já possui outro cadastro pessoal ativo.',409)
   links={'members':{'people':(('family_id','members_families'),('cell_id','members_cells')),'families':(('cell_id','members_cells'),)},'ministries':{'assignments':(('person_id','members_people'),),'schedules':(('person_id','members_people'),)},'finance':{'entries':(('account_id','finance_accounts'),('cost_center_id','finance_cost_centers')),'closings':(('account_id','finance_accounts'),),'invoices':(('entry_id','finance_entries'),)}}
   for field,parent in links.get(module,{}).get(kind,()):
    if row.get(field) and not c.execute(f'SELECT 1 FROM {parent} WHERE id=? AND active=1',(row[field],)).fetchone():fail('reference','Restaure primeiro o cadastro relacionado.',409)

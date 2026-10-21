@@ -82,3 +82,31 @@ def archive(c,table,module,rid,version,user):
     if updated.rowcount!=1:fail('conflict','Registro alterado. Atualize a tela.',409)
     change(c,module,rid,'archived',user,old,dict(old,active=0,version=old['version']+1))
     return {'ok':True}
+
+
+# Full-form APIs also accept edits from simplified forms. Omitted fields retain
+# their stored values; an explicit empty value still clears an optional field.
+def preserve_omitted(data,old):
+    old=dict(old)
+    values=data.model_dump()
+    for key in type(data).model_fields:
+        if key not in data.model_fields_set and key not in ('version','request_id') and key in old:values[key]=decrypt_text(old[key]) if isinstance(old[key],str) else old[key]
+    return type(data).model_validate(values)
+
+def merge_existing(c,table,data,user,rid):
+    if not rid:return data
+    old=current(c,table,rid)
+    from ..record_policy import can_change
+    can_change(c,user,table.split('_',1)[0],old)
+    if data.version is None or old['version']!=data.version:fail('conflict','Este registro mudou. Reabra a edição antes de salvar.',409)
+    aliases={'opening_value':'opening_cents','budget_value':'budget_cents','amount':'amount_cents','tithes':'tithes_cents','offerings_cash':'offerings_cash_cents','offerings_pix':'offerings_pix_cents','offerings_card':'offerings_card_cents'}
+    payload=data.model_dump()
+    for field in type(data).model_fields:
+        if field in data.model_fields_set or field in ('version','request_id'):continue
+        column=aliases.get(field,field)
+        if column not in old:continue
+        value=old[column]
+        if column!=field:value=format(Decimal(value)/100,'.2f')
+        elif isinstance(value,str):value=decrypt_text(value)
+        payload[field]=value
+    return type(data).model_validate(payload)

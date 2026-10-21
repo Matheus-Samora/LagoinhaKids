@@ -1,3 +1,4 @@
+import {accountProfileUI} from '../account-profile.js';
 import {notificationCenterUI} from '../notification-center.js';
 import {personalDataUI} from './personal.js';
 import {uiIcon} from '../ui/icons.js';
@@ -105,8 +106,9 @@ function welcome(areaKey=currentAreaKey()){
 }
 
 async function api(path,options={}){
- const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{...(!options.raw?{'Content-Type':'application/json'}:{}),'X-CSRF-Token':csrf,...options.headers},body:options.raw?options.body:(options.body?JSON.stringify(options.body):undefined)});
- const data=await response.json();if(!response.ok)throw new Error(data.detail?.message||'Não foi possível concluir. Tente novamente.');return data;
+ const raw=options.raw||options.body instanceof FormData;
+ let response;try{response=await fetch('/api'+path,{credentials:'same-origin',...options,signal:AbortSignal.timeout(45000),headers:{...(!raw?{'Content-Type':'application/json'}:{}),'X-CSRF-Token':csrf,...options.headers},body:raw?options.body:(options.body?JSON.stringify(options.body):undefined)});}catch{throw new Error('Conexão interrompida. Reabra os dados para conferir se foram salvos antes de tentar novamente.');}
+ const data=await response.json();if(!response.ok){const err=new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir. Tente novamente.');err.code=data.detail?.code;throw err;}return data;
 }
 
 const personal=personalDataUI({api,e});
@@ -559,7 +561,7 @@ function render(message=''){
    </div>
    <div class="platform-sidebar-bottom">
     <div class="sidebar-user-card">
-     <span class="avatar mini">${e(initials(identity.user.name))}</span>
+     <button type="button" id="account-profile" class="quiet" aria-label="Meu perfil">${identity.user.avatar_url?`<img src="${e(identity.user.avatar_url)}" alt="Sua foto" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:`<span class="avatar mini">${e(initials(identity.user.name))}</span>`}</button>
      <div class="sidebar-user-info">
       <strong>${e(identity.user.name)}</strong>
       <small>${identity.platform_admin?'Admin TI':identity.pastor?'Pastor(a)':'Membro'}</small>
@@ -586,7 +588,7 @@ function render(message=''){
      </div>
     </div>
     <div class="topbar-user-area">
-     <button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
+     <button type="button" class="quiet topbar-btn-compact" id="topbar-profile-btn" aria-label="Meu perfil">${uiIcon('identity',18)}</button><button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
      <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
    </header>
@@ -655,6 +657,8 @@ function render(message=''){
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
  const handleLogout=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
+ root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
+ root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
  root.querySelector('#sidebar-logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-theme-btn')?.addEventListener('click',()=>{toggleTheme();render(message);});
  root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});

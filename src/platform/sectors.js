@@ -1,3 +1,4 @@
+import {guardForm} from '../form-lifecycle.js';
 import {uiIcon} from '../ui/icons.js';
 import {ministryEmblem,MINISTRY_META} from './emblems.js';
 import {t, translateDOM} from './i18n.js';
@@ -467,7 +468,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
 
  async function refresh(message=''){
   const n=++generation;
-  try{const result=await api('/'+key+'?q='+encodeURIComponent(query));if(n!==generation)return;data=result;paint(message);}catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
+  try{const result=await api('/'+key+'?q='+encodeURIComponent(query));if(n!==generation)return;data=result;paint(message);}catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
  }
 
  async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';if(host)await refresh();}
@@ -608,9 +609,10 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
 
   addExtraBtn.onclick=()=>addExtraMusicianRow();
 
+  const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
   dialog.querySelector('#worship-scale-form').onsubmit=async ev=>{
-   ev.preventDefault();
+   ev.preventDefault();if(lifecycle.busy)return;lifecycle.setBusy(true);
    const f=ev.currentTarget,b=f.querySelector('button[type=submit]');
    b.disabled=true;
    try{
@@ -654,12 +656,12 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
       members
      }
     });
-    dialog.close();
+    lifecycle.complete();dialog.close();
     await refresh(`Escala criada (${res.created} integrantes).`);
    }catch(err){
     f.querySelector('.error').textContent=err.message;
    }finally{
-    b.disabled=false;
+    lifecycle.setBusy(false);b.disabled=false;
    }
   };
   dialog.showModal();
@@ -755,18 +757,19 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     <p class="error" role="alert"></p>
     <button type="submit">Enviar</button>
    </form>`;
+  const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
   dialog.querySelector('#self-reg-form').onsubmit=async ev=>{
-   ev.preventDefault();
+   ev.preventDefault();if(lifecycle.busy)return;lifecycle.setBusy(true);
    const f=ev.currentTarget,b=f.querySelector('button[type=submit]');b.disabled=true;
    try{
     const body=Object.fromEntries(new FormData(f));
     if(!body.birthday)body.birthday=null;
     if(!body.cell_id)body.cell_id=null;
     const res=await api('/members/self-register',{method:'POST',body});
-    dialog.close();
+    lifecycle.complete();dialog.close();
     await refresh(res.message||'Cadastro registrado.');
-   }catch(err){f.querySelector('.error').textContent=err.message;}finally{b.disabled=false;}
+   }catch(err){f.querySelector('.error').textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;}
   };
   dialog.showModal();
  }
@@ -881,6 +884,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
 
   const dialog=host.querySelector('dialog');
   dialog.querySelector('.sector-modal').innerHTML=`<div class="section-title"><h2>${record?'Editar':'Adicionar'} · ${labels[kind]}</h2>${button('close','Fechar','class="secondary"')}</div><form class="record-form"><input name="request_id" type="hidden" value="${id()}">${html}<p class="error" role="alert"></p><button type="submit">Salvar</button></form>`;
+  const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
   dialog.querySelector('[data-sector-action="lookup"]')?.addEventListener('click',async()=>{
    try{
@@ -891,11 +895,11 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   dialog.querySelector('#invoice-file')?.addEventListener('change',async event=>{
    const file=event.target.files[0];if(!file)return;const b=dialog.querySelector('button[type=submit]'),status=dialog.querySelector('#invoice-status');
    if(file.size>10*1024*1024){status.textContent='O limite é 10 MB.';return;}
-   b.disabled=true;status.textContent='Enviando…';
-   try{const body=new FormData();body.append('file',file);const res=await api('/finance/files',{method:'POST',body,raw:true});dialog.querySelector('[name=file_id]').value=res.id;status.innerHTML=`<a href="${e(res.url)}" target="_blank" rel="noopener">Anexo enviado ✓</a>`;}catch(err){status.textContent=err.message;}finally{b.disabled=false;event.target.value='';}
+   lifecycle.setBusy(true);b.disabled=true;status.textContent='Enviando…';
+   try{const body=new FormData();body.append('file',file);const res=await api('/finance/files',{method:'POST',body,raw:true});dialog.querySelector('[name=file_id]').value=res.id;status.innerHTML=`<a href="${e(res.url)}" target="_blank" rel="noopener">Anexo enviado ✓</a>`;}catch(err){status.textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;event.target.value='';}
   });
   dialog.querySelector('form').onsubmit=async event=>{
-   event.preventDefault();const f=event.currentTarget,b=f.querySelector('button[type=submit]');b.disabled=true;
+   event.preventDefault();if(lifecycle.busy)return;const f=event.currentTarget,b=f.querySelector('button[type=submit]');lifecycle.setBusy(true);b.disabled=true;
    try{
     const body=Object.fromEntries(new FormData(f));if(record)body.version=r.version;
     for(const name of ['family_id','cell_id','birthday','joined_on','baptism_date','started_on','due_date','cost_center_id','entry_id','file_id']){
@@ -903,8 +907,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
     }
     if('is_leader' in body)body.is_leader=body.is_leader==='true';
     await api('/'+key+'/'+kind+(record?'/'+r.id:''),{method:record?'PUT':'POST',body});
-    dialog.close();await refresh('Registro salvo.');
-   }catch(err){f.querySelector('.error').textContent=err.message;}finally{b.disabled=false;}
+    lifecycle.complete();dialog.close();await refresh('Registro salvo.');
+   }catch(err){f.querySelector('.error').textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;}
   };
   dialog.showModal();
  }

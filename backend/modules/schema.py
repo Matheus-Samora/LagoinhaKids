@@ -41,6 +41,7 @@ def ensure_official_gcs(c):
             )
 
 def migrate(c):
+    ensure_column(c,'users','profile_version','BIGINT NOT NULL DEFAULT 1')
     statements = [
         "CREATE TABLE IF NOT EXISTS notification_deliveries(notification_id BIGINT NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,channel TEXT NOT NULL,destination_hash TEXT NOT NULL,accepted_at TEXT NOT NULL,PRIMARY KEY(notification_id,channel,destination_hash))",
         "CREATE TABLE IF NOT EXISTS notification_preferences(user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,settings TEXT NOT NULL,updated_at TEXT NOT NULL)",
@@ -154,3 +155,15 @@ def migrate(c):
         c.execute("INSERT INTO platform_migrations VALUES('record_ownership_v243')")
 
     ensure_column(c,'members_self_registrations','version','BIGINT NOT NULL DEFAULT 1')
+    ensure_column(c,'members_people','account_user_id','BIGINT REFERENCES users(id)')
+    ensure_column(c,'members_self_registrations','person_id','TEXT REFERENCES members_people(id)')
+    # A creator may register many other people: creator ownership is not identity.
+    if not c.execute("SELECT 1 FROM platform_migrations WHERE name='personal_identity_v248'").fetchone():
+        for reg in c.execute("SELECT * FROM members_self_registrations WHERE status='approved' AND owner_id IS NOT NULL AND email!=''"):
+            candidates=c.execute("SELECT id FROM members_people WHERE created_by=? AND name=? AND lower(email)=? AND coalesce(birthday,'')=coalesce(?,'') AND active=1 AND account_user_id IS NULL",(reg['owner_id'],reg['name'],(reg['email'] or '').lower(),reg['birthday'])).fetchall()
+            existing=c.execute('SELECT 1 FROM members_people WHERE account_user_id=? AND active=1',(reg['owner_id'],)).fetchone()
+            if len(candidates)==1 and not existing:
+                c.execute('UPDATE members_people SET account_user_id=? WHERE id=?',(reg['owner_id'],candidates[0]['id']))
+                c.execute('UPDATE members_self_registrations SET person_id=? WHERE id=?',(candidates[0]['id'],reg['id']))
+        c.execute("INSERT INTO platform_migrations VALUES('personal_identity_v248')")
+    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS members_account_identity ON members_people(account_user_id) WHERE active=1 AND account_user_id IS NOT NULL')
