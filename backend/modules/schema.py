@@ -166,4 +166,10 @@ def migrate(c):
                 c.execute('UPDATE members_people SET account_user_id=? WHERE id=?',(reg['owner_id'],candidates[0]['id']))
                 c.execute('UPDATE members_self_registrations SET person_id=? WHERE id=?',(candidates[0]['id'],reg['id']))
         c.execute("INSERT INTO platform_migrations VALUES('personal_identity_v248')")
+    if not c.execute("SELECT 1 FROM platform_migrations WHERE name='link_members_by_email_v249'").fetchone():
+        for person in c.execute("SELECT id,email FROM members_people WHERE account_user_id IS NULL AND email!='' AND active=1").fetchall():
+            u_match=c.execute("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1",(person['email'],)).fetchone()
+            if u_match:
+                c.execute("UPDATE members_people SET account_user_id=? WHERE id=?",(u_match['id'],person['id']))
+        c.execute("INSERT INTO platform_migrations VALUES('link_members_by_email_v249')")
     c.execute('CREATE UNIQUE INDEX IF NOT EXISTS members_account_identity ON members_people(account_user_id) WHERE active=1 AND account_user_id IS NOT NULL')

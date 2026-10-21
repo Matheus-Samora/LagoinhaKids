@@ -7,7 +7,7 @@ from ... import store as s
 from ...app import fail,session
 from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text,merge_existing
 router=APIRouter(prefix='/api/members',tags=['Members'])
-read=module_access('members',('admin','editor'));write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
+read=module_access('members');write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
 STAGES=('visitor','new_convert','baptized','in_training','active_member','leader')
 
 class Cell(Record):
@@ -40,6 +40,7 @@ class Person(Record):
     profession:str=Field(default='',max_length=100)
     address:str=Field(default='',max_length=240)
     pastoral_notes:str=Field(default='',max_length=600)
+    account_user_id:int|None=None
 
 class SelfRegister(BaseModel):
     version:int|None=Field(default=None,ge=1)
@@ -246,6 +247,9 @@ def approve_gc_application(rid:str,user=Depends(write)):
 def reject_gc_application(rid:str,user=Depends(write)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='gc'",(rid,)).fetchone()
+        if app and app['user_id']:
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(app['user_id'],None,'sector_application',f"Atualização · Inscrição em GC",f"Olá {app['member_name']}! Sua solicitação para o {app['target_name']} foi analisada pela coordenação. Fale com a liderança para mais orientações.",user['id'],s.now(),'members'))
         c.execute("UPDATE sector_applications SET status='rejected',reviewed_by=? WHERE id=? AND target_type='gc'",(user['id'],rid))
         s.audit(c,user['id'],'members:gc_app_rejected:'+rid)
         return {'ok':True}

@@ -13,7 +13,7 @@ WORSHIP_ROLES=('Ministrante','Backing Vocal','Tecladista','Guitarrista','Baixist
 TRAINING_STATUSES=('certified','in_training','pending')
 SCHEDULE_STATUSES=('confirmed','pending','declined')
 RESOURCE_CATEGORIES=('repertorio','roteiro','checklist','documento')
-read=module_access('ministries',('admin','editor'));write=module_access('ministries',('admin','editor'));admin=module_access('ministries',('admin',))
+read=module_access('ministries');write=module_access('ministries',('admin','editor'));admin=module_access('ministries',('admin',))
 
 class Assignment(Record):
     person_id:str=Field(max_length=40)
@@ -67,8 +67,8 @@ def people(q:str=Query(default='',max_length=100),user=Depends(read)):
 @router.get('')
 def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('ministries'))):
     with s.db() as c:
-        from ...record_policy import manager,personal_records
-        if not manager(c,user,'ministries'):return personal_records(c,user,'ministries')
+        from ...record_policy import manager
+        is_mgr=manager(c,user,'ministries')
         rows=[dict(r) for r in c.execute('SELECT a.*,p.name person_name,coalesce(p.phone,\'\') person_phone FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1 AND p.active=1 AND lower(p.name) LIKE ? ORDER BY a.ministry,a.is_leader DESC,p.name LIMIT 300',('%'+q.lower()+'%',))]
         schedules=[dict(r) for r in c.execute('SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.active=1 AND p.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC,ms.ministry ASC LIMIT 300')]
         resources=[dict(r) for r in c.execute('SELECT * FROM ministries_resources WHERE active=1 ORDER BY ministry ASC,created_at DESC LIMIT 200')]
@@ -76,9 +76,10 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
         row=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
         scope=(row['scope'] or '').strip() if row and not platform_admin(c,user['id']) and not is_pastor(c,user['id']) else ''
         apps=[]
-        for r in c.execute("SELECT * FROM sector_applications WHERE target_type='ministry' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
-            if scope and r['target_name']!=scope:continue
-            d=dict(r);d['notes']=decrypt_text(d.get('notes',''));apps.append(d)
+        if is_mgr:
+            for r in c.execute("SELECT * FROM sector_applications WHERE target_type='ministry' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
+                if scope and r['target_name']!=scope:continue
+                d=dict(r);d['notes']=decrypt_text(d.get('notes',''));apps.append(d)
         if scope:
             rows=[r for r in rows if r['ministry']==scope]
             schedules=[r for r in schedules if r['ministry']==scope]
@@ -145,7 +146,18 @@ def persist_schedule(data:Schedule,user,rid=None):
             'role_notes':data.role_notes.strip(),'service_date':str(data.service_date),
             'service_time':data.service_time.strip() or '18:00','status':data.status
         }
-        return save(c,'ministries_schedules','ministries',data,vals,user,rid)
+        res=save(c,'ministries_schedules','ministries',data,vals,user,rid)
+        p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(data.person_id,)).fetchone()
+        if p_row:
+            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            if u_row and u_row['id']!=user['id']:
+                s_parts=str(data.service_date).split('-')
+                fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(data.service_date)
+                role_desc=f" ({data.role_notes.strip()})" if data.role_notes.strip() else ""
+                n_title=f"🗓️ Nova Escalação · {data.ministry}" if not rid else f"🔄 Escalação Atualizada · {data.ministry}"
+                n_msg=f"Olá {p_row['name']}! Você foi escalado(a) para o culto '{data.title.strip()}' em {fmt_date} às {data.service_time}{role_desc}. Confira os detalhes na área de Ministérios." if not rid else f"Olá {p_row['name']}! Sua escala no ministério {data.ministry} foi atualizada para o culto '{data.title.strip()}' em {fmt_date} às {data.service_time}{role_desc}."
+                c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
+        return res
 
 @router.post('/schedules')
 def create_schedule(data:Schedule,user=Depends(write)):return persist_schedule(data,user)
@@ -157,6 +169,15 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         c.execute('BEGIN IMMEDIATE')
         old=current(c,'ministries_schedules',rid)
         check_ministry_scope(c,user,old['ministry'])
+        p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
+        if p_row:
+            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            if u_row and u_row['id']!=user['id']:
+                s_parts=str(old['service_date']).split('-')
+                fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(old['service_date'])
+                n_title=f"⚠️ Escalação Desmarcada · {old['ministry']}"
+                n_msg=f"Olá {p_row['name']}! Sua escalação para o culto '{old['title']}' em {fmt_date} às {old['service_time']} foi desmarcada pela coordenação."
+                c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
         return archive(c,'ministries_schedules','ministries',rid,version,user)
 
 @router.post('/worship-scale')
@@ -192,6 +213,13 @@ def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):
                 'role_notes':inst,'service_date':s_date,'service_time':s_time,'status':'confirmed'
             },user)
             created_ids.append(res['id'])
+            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row.get('account_user_id'),p_row.get('email') or '')).fetchone()
+            if u_row and u_row['id']!=user['id']:
+                s_parts=s_date.split('-')
+                fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else s_date
+                n_title=f"🎸 Escala de Louvor · Culto {data.title.strip()}"
+                n_msg=f"Olá {p_row['name']}! Você foi escalado(a) no louvor ({inst}) para {fmt_date} às {s_time}. Confira o repertório no app!"
+                c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
         if not created_ids:
             fail('members','Selecione ao menos um integrante da banda para montar a escala.')
         if data.repertoire_title.strip():
@@ -258,6 +286,8 @@ def reject_ministry_application(rid:str,user=Depends(write)):
         app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='ministry'",(rid,)).fetchone()
         if app:
             check_ministry_scope(c,user,app['target_name'])
+        if app and app['user_id']:
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(app['user_id'],None,'sector_application',f"Atualização · Candidatura a {app['target_name']}",f"Olá {app['member_name']}! Sua solicitação para o ministério {app['target_name']} foi analisada pela coordenação. Fale com a liderança para mais orientações.",user['id'],s.now(),'ministries'))
         c.execute("UPDATE sector_applications SET status='rejected',reviewed_by=? WHERE id=? AND target_type='ministry'",(user['id'],rid))
         s.audit(c,user['id'],'ministries:app_rejected:'+rid)
         return {'ok':True}

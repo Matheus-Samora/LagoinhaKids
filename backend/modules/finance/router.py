@@ -8,7 +8,7 @@ from ... import store as s
 from ...app import fail
 from ..common import Record,money,save,archive,current,check_date,change,encrypt_text,decrypt_text,merge_existing
 router=APIRouter(prefix='/api/finance',tags=['Finance'])
-read=module_access('finance',('admin','editor'));write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
+read=module_access('finance');write=module_access('finance',('admin','editor'));admin=module_access('finance',('admin',))
 
 class SafeCsvWriter:
     def __init__(self,stream):self.writer=csv.writer(stream,delimiter=';')

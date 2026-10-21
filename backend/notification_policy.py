@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 from . import store as s
 
 CATEGORIES={'urgent':('Chamados da salinha','high',1800),'tasks':('Solicitações e respostas','normal',604800),'announcements':('Comunicados','normal',604800),'activity':('Presenças e atualizações','low',86400),'system':('Conta e sistema','normal',86400)}
-KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','ministry_approved','gc_approved','arriving','consent_request'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
+KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','ministry_approved','gc_approved','ministry_schedule','ministry_schedule_update','arriving','consent_request'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
 DEFAULTS={'push_enabled':True,'urgent':True,'tasks':True,'announcements':True,'activity':False,'system':True,'quiet_enabled':False,'quiet_start':'22:00','quiet_end':'07:00'}
 
 
@@ -15,7 +15,7 @@ def metadata(notice):
     sector=notice.get('sector','')
     route='/'+sector if sector in ('finance','members','ministries') else '/membro' if notice.get('child_id') is None and category in ('tasks','announcements') else '/kids#notifications'
     if kind in ('event_announcement','event_registration'):route='/kids#events'
-    elif kind=='ministry_approved':route='/ministries'
+    elif kind in ('ministry_approved','ministry_schedule','ministry_schedule_update'):route='/ministries'
     elif kind=='gc_approved':route='/members'
     return {'category':category,'category_label':label,'priority':priority,'url':route,'ttl':ttl,'channel':'lagoinha_'+category}
 

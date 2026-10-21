@@ -155,7 +155,7 @@ def announcement_people(c,user,sector):
     if scope:
         scopes={row['user_id']:row['scope'] for row in c.execute("SELECT user_id,scope FROM module_scopes WHERE module='ministries'")}
         managers={g['user_id'] for g in grants if g['module']=='ministries' and g['role'] in ('admin','editor')}
-        assigned={r['created_by'] for r in c.execute('SELECT p.created_by FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1 AND p.active=1 AND a.ministry=?',(scope,))}
+        assigned={r['user_id'] for r in c.execute('SELECT coalesce(p.account_user_id,u.id) user_id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id LEFT JOIN users u ON lower(u.email)=lower(p.email) WHERE a.active=1 AND p.active=1 AND a.ministry=?',(scope,)) if r['user_id']}
         eligible={uid for uid in eligible if uid in global_ids or scopes.get(uid)==scope or (uid in managers and not scopes.get(uid)) or uid in assigned}
     result=[{'id':p['id'],'name':p['name'],'leader':p['id'] in leaders} for p in people if p['id'] in eligible]
     return result

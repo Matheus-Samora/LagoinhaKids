@@ -20,3 +20,4 @@ GoogleService-Info.plist
 !.env.example
 ~$*
 **/~$*
+scripts/

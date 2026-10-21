@@ -35,7 +35,7 @@ const brandMeta={
  finance:{word:'Finance',tagline:'GESTÃO FINANCEIRA'}
 };
 const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA'];
-const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Responsável — lançar e editar',viewer:'Pessoal — somente meus dados'};
+const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Responsável — lançar e editar',viewer:'Visualizador — somente leitura'};
 let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=null,notifDrawerOpen=false,activeSectionTab='all';
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
@@ -205,7 +205,10 @@ async function load(justLoggedIn=false){
 function portalHero(module,selected){
  if(module)return '';
  const ti=identity.platform_admin&&!['access','membro'].includes(selected);
- return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${ti?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>':'<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button>'}</div></section>`;
+ const actions=ti
+  ?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>'
+  :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button><button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
+ return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${actions}</div></section>`;
 }
 
 function notificationsBanner(){return '';}
@@ -509,8 +512,8 @@ function render(message=''){
  const module=identity.modules.find(m=>m.id===selected);
  const isMemberPortal=!module&&(selected==='access'||selected==='membro'||!identity.platform_admin);
  const areaKey=module?module.id:(isMemberPortal?'membro':'systems');
- const personalOnly=module&&module.id!=='kids'&&!identity.platform_admin&&!identity.pastor&&module.role==='viewer';
- const tabs=personalOnly?[{id:'all',label:'Meus dados',icon:'identity'}]:(AREA_TABS[areaKey]||AREA_TABS.membro);
+ const personalOnly=false;
+ const tabs=AREA_TABS[areaKey]||AREA_TABS.membro;
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -599,7 +602,7 @@ function render(message=''){
     ${!module&&activeSectionTab==='all'?portalHero(module,selected):''}
     <p class="status" role="status">${e(message)}</p>
     ${notificationsBanner()}
-    ${isMemberPortal?'<button type="button" id="my-personal-data" class="secondary">Meus dados e cadastro</button>':''}
+
     ${module?moduleView(module):`
      ${activeSectionTab==='all'&&visibleModules.length?`
       <div class="section-title" style="margin-bottom:14px;">
@@ -638,7 +641,7 @@ function render(message=''){
   }
  }));
 
- root.querySelector('#my-personal-data')?.addEventListener('click',()=>personal.ownDialog());
+ root.querySelector('#open-my-profile-hero')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
  if(module?.enabled&&!personalOnly&&module.id!=='kids'){
   const container=root.querySelector('#sector-content');
   const bar=document.createElement('div');
