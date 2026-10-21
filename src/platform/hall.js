@@ -130,7 +130,7 @@ export function communityHallUI({api,e,identity,onProfileSaved}){
    }catch(err){status(err.message,true);}finally{if(b.isConnected)b.disabled=false;}
   };
   const initialView=location.hash.split('/')[1];if(initialView==='people')switchMode('people');
-  try{await Promise.all([loadFeed(),loadPeople()]);const rid=location.hash.split('/')[1];if(rid&&/^[\da-f-]{36}$/i.test(rid))await discussion(rid);}catch(err){status(err.message+' Toque em atualizar para tentar novamente.',true);}
+  try{await Promise.all([loadFeed(),loadPeople()]);if(initialView==='moderation'&&moderator){switchMode('reports');await moderation();}const rid=location.hash.split('/')[1];if(rid&&/^[\da-f-]{36}$/i.test(rid))await discussion(rid);}catch(err){status(err.message+' Toque em atualizar para tentar novamente.',true);}
  }
  document.addEventListener('lagoinha:profile-saved',ev=>{if(!host?.isConnected)return;const old=host.querySelector('.ch-composer-start .ch-avatar');if(old)old.outerHTML=avatar(ev.detail.name,ev.detail.avatar_url);});
  setInterval(async()=>{if(!host?.isConnected||document.hidden||mode!=='wall'||category!=='all'||mine||author)return;try{const next=await api('/platform/hall/summary');if(next.latest_id&&next.latest_id!==feed[0]?.id){const refresh=host.querySelector('[data-hall-refresh]');refresh.classList.add('has-news');refresh.setAttribute('aria-label','Novas conversas disponíveis. Atualizar Hall.');}}catch{}},60000);
