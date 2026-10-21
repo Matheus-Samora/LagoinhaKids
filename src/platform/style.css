@@ -3148,3 +3148,319 @@ img {
 .personal-record{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--line,#e4e4e7)}
 .personal-record small{display:block;margin-top:4px;color:var(--subtle,#52525b)}
 @media(max-width:600px){.personal-record{align-items:flex-start;flex-wrap:wrap}.integrity-dialog{padding:16px}}
+
+
+/* ==========================================================================
+   Minhas Escalas & Hall de Membros Styles
+   ========================================================================== */
+
+.my-schedules-section {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--surface);
+}
+
+.my-schedules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.my-schedule-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--bg);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.my-schedule-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.my-schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.my-schedule-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.mini-btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.danger-btn {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+[data-theme="dark"] .danger-btn {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+  background: #450a0a;
+}
+
+/* Hall de Membros Grid & Cards */
+.hall-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.hall-member-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hall-member-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.hall-member-card.is-me-card {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b;
+}
+
+.hall-card-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.hall-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: visible;
+}
+
+.hall-avatar-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--line);
+}
+
+.hall-avatar-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #18181b 0%, #3f3f46 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 700;
+  border: 2px solid var(--line);
+}
+
+.hall-you-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: #f59e0b;
+  color: #09090b;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  border: 2px solid var(--surface);
+}
+
+.hall-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hall-member-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hall-member-role {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hall-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.hall-meta-pill.gc-pill {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.hall-member-bio {
+  margin: 12px 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hall-ministries-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.hall-min-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
+.hall-min-badge.leader-min {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.hall-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.hall-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.hall-action-btn:hover {
+  background: var(--line);
+}
+
+.hall-action-btn.wa-btn {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+  font-weight: 600;
+}
+
+.hall-action-btn.wa-btn:hover {
+  background: #bbf7d0;
+}
+
+.hall-filters-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 0;
+  margin-bottom: 12px;
+  scrollbar-width: thin;
+}
+
+.hall-filter-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hall-filter-chip.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+[data-theme="dark"] .hall-meta-pill.gc-pill {
+  background: #134e4a;
+  color: #5eead4;
+}
+
+[data-theme="dark"] .hall-min-badge {
+  background: #312e81;
+  color: #c7d2fe;
+  border-color: #4338ca;
+}
+
+[data-theme="dark"] .hall-min-badge.leader-min {
+  background: #78350f;
+  color: #fde68a;
+  border-color: #92400e;
+}
+
+[data-theme="dark"] .hall-action-btn.wa-btn {
+  background: #064e3b;
+  color: #86efac;
+  border-color: #065f46;
+}

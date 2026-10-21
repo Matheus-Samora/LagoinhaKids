@@ -48,72 +48,67 @@ def test_ministry_schedule_notifications_on_create_edit_delete(records):
 
     # Create a member record in members_people linked to user 3
     with s.db() as c:
-        c.execute("UPDATE members_people SET account_user_id=3 WHERE lower(email)=lower(?)", (client(3).get('/api/me/profile').json()['user']['email'],))
+        c.execute("INSERT INTO members_people(id,name,phone,email,active,version,created_at,account_user_id) VALUES('p-test-3','Membro Três','(33) 9111-2222','parent.one@example.com',1,1,?,3)", (s.now(),))
 
-    m_profile = member.get('/api/me/profile').json()['user']
-    with s.db() as c:
-        p = c.execute("SELECT id FROM members_people WHERE account_user_id=3").fetchone()
-        if not p:
-            c.execute("INSERT INTO members_people(id, name, email, account_user_id, active, version, created_at) VALUES('p-test-3', ?, ?, 3, 1, 1, ?)", (m_profile['name'], m_profile['email'], s.now()))
-            pid = 'p-test-3'
-        else:
-            pid = p['id']
-
-    # Leader creates schedule for member
-    sch_res = admin.post('/api/ministries/schedules', json={
+    # 1. Admin creates a schedule for user 3
+    create_res = admin.post('/api/ministries/schedules', json={
         'title': 'Culto de Celebração',
         'ministry': 'Music',
-        'person_id': pid,
-        'role_notes': 'Violão',
-        'service_date': '2026-11-15',
-        'service_time': '19:00',
-        'status': 'confirmed'
-    })
-    assert sch_res.status_code == 200, sch_res.text
-    sid = sch_res.json()['id']
-
-    # Verify notification delivered to member
-    notifs = member.get('/api/notification-center').json()
-    sched_notifs = [n for n in notifs['items'] if n['kind'] == 'ministry_schedule']
-    assert len(sched_notifs) >= 1
-    assert 'Nova Escalação' in sched_notifs[0]['title']
-    assert 'Violão' in sched_notifs[0]['message']
-
-    # Edit schedule -> notification updated
-    edit_res = admin.put(f'/api/ministries/schedules/{sid}', json={
-        'version': 1,
-        'title': 'Culto da Família',
-        'ministry': 'Music',
-        'person_id': pid,
+        'person_id': 'p-test-3',
         'role_notes': 'Guitarra',
         'service_date': '2026-11-15',
         'service_time': '18:00',
         'status': 'confirmed'
     })
+    assert create_res.status_code == 200, create_res.text
+    sch_id = create_res.json()['id']
+
+    # Verify notification was generated for user 3
+    with s.db() as c:
+        n1 = c.execute("SELECT * FROM notifications WHERE user_id=3 ORDER BY id DESC LIMIT 1").fetchone()
+        assert n1 is not None
+        assert 'Nova Escalação' in n1['title']
+        assert 'Music' in n1['title']
+        assert '15/11' in n1['message']
+        assert 'Guitarra' in n1['message']
+
+    # 2. Admin edits schedule (changes time/notes)
+    edit_res = admin.put(f'/api/ministries/schedules/{sch_id}', json={
+        'version': 1,
+        'title': 'Culto de Celebração',
+        'ministry': 'Music',
+        'person_id': 'p-test-3',
+        'role_notes': 'Violão e Guitarra',
+        'service_date': '2026-11-15',
+        'service_time': '19:30',
+        'status': 'confirmed'
+    })
     assert edit_res.status_code == 200, edit_res.text
 
-    notifs2 = member.get('/api/notification-center').json()
-    updated_notifs = [n for n in notifs2['items'] if 'Atualizada' in n['title']]
-    assert len(updated_notifs) >= 1
-    assert 'Guitarra' in updated_notifs[0]['message']
+    with s.db() as c:
+        n2 = c.execute("SELECT * FROM notifications WHERE user_id=3 ORDER BY id DESC LIMIT 1").fetchone()
+        assert n2 is not None
+        assert 'Escalação Atualizada' in n2['title']
+        assert '19:30' in n2['message']
 
-    # Delete schedule -> notification cancelled
-    del_res = admin.delete(f'/api/ministries/schedules/{sid}?version=2')
+    # 3. Admin deletes/archives schedule
+    del_res = admin.delete(f'/api/ministries/schedules/{sch_id}?version=2')
     assert del_res.status_code == 200, del_res.text
 
-    notifs3 = member.get('/api/notification-center').json()
-    cancelled_notifs = [n for n in notifs3['items'] if 'Desmarcada' in n['title']]
-    assert len(cancelled_notifs) >= 1
+    with s.db() as c:
+        n3 = c.execute("SELECT * FROM notifications WHERE user_id=3 ORDER BY id DESC LIMIT 1").fetchone()
+        assert n3 is not None
+        assert 'Escalação Desmarcada' in n3['title']
 
 
 def test_viewer_can_view_ministry_programming_without_editing(records):
     admin = client(1)
     viewer = client(3)
 
-    # Create a schedule as admin
+    # Insert a person and schedule
+    pid = 'person-for-viewer-test'
     with s.db() as c:
-        c.execute("INSERT INTO members_people(id, name, email, active, version, created_at) VALUES('p-intercessao', 'Maria Intercessora', 'maria@igreja.com', 1, 1, ?)", (s.now(),))
-        pid = 'p-intercessao'
+        c.execute("INSERT INTO members_people(id,name,phone,email,active,version,created_at) VALUES(?,'Irmão Pedro','(33) 9999-1111','pedro@lagoinha.test',1,1,?)", (pid, s.now()))
 
     sch = admin.post('/api/ministries/schedules', json={
         'title': 'Culto de Oração',
@@ -149,3 +144,170 @@ def test_viewer_can_view_ministry_programming_without_editing(records):
         'status': 'confirmed'
     })
     assert cant_create.status_code == 403
+
+
+def test_viewer_can_update_own_family_and_bio_in_profile(records):
+    viewer = client(3)
+    p0 = viewer.get('/api/me/profile').json()
+    u0 = p0['user']
+    version = u0['profile_version']
+
+    # Update profile with bio, family_id or new_family_name
+    upd = viewer.patch('/api/me/profile', json={
+        'version': version,
+        'bio': 'Apaixonado pela presença de Deus, servindo no louvor.',
+        'new_family_name': 'Família Santos Oliveira'
+    })
+    assert upd.status_code == 200, upd.text
+    u1 = upd.json()['user']
+    assert u1['bio'] == 'Apaixonado pela presença de Deus, servindo no louvor.'
+    assert u1['family_name'] == 'Família Santos Oliveira'
+
+    # Check database
+    with s.db() as c:
+        p_row = c.execute("SELECT * FROM members_people WHERE account_user_id=3").fetchone()
+        assert p_row is not None
+        assert p_row['bio'] == 'Apaixonado pela presença de Deus, servindo no louvor.'
+        f_row = c.execute("SELECT name FROM members_families WHERE id=?", (p_row['family_id'],)).fetchone()
+        assert f_row['name'] == 'Família Santos Oliveira'
+
+
+def test_viewer_can_respond_to_own_schedule_confirm_or_decline(records):
+    admin = client(1)
+    viewer = client(3)
+
+    # Ensure member profile exists for user 3
+    u_prof = viewer.get('/api/me/profile').json()['user']
+    viewer.patch('/api/me/profile', json={
+        'version': u_prof['profile_version'],
+        'name': 'Membro Teste Três'
+    })
+
+    with s.db() as c:
+        p_row = c.execute("SELECT id FROM members_people WHERE account_user_id=3").fetchone()
+        assert p_row is not None
+        pid = p_row['id']
+
+    # Admin schedules user 3
+    sch_res = admin.post('/api/ministries/schedules', json={
+        'title': 'Culto da Família',
+        'ministry': 'Intercessão',
+        'person_id': pid,
+        'role_notes': 'Oração no altar',
+        'service_date': '2026-11-25',
+        'service_time': '18:00',
+        'status': 'pending'
+    })
+    assert sch_res.status_code == 200, sch_res.text
+    sid = sch_res.json()['id']
+
+    # Grant user 3 only viewer role in ministries
+    grant(3, 'ministries', 'viewer')
+
+    # User 3 checks /my-schedules
+    my_s = viewer.get('/api/ministries/my-schedules').json()
+    assert any(x['id'] == sid for x in my_s['schedules'])
+
+    # User 3 confirms participation
+    resp1 = viewer.post(f'/api/ministries/schedules/{sid}/respond', json={
+        'status': 'confirmed'
+    })
+    assert resp1.status_code == 200, resp1.text
+    assert resp1.json()['status'] == 'confirmed'
+
+    with s.db() as c:
+        assert c.execute("SELECT status FROM ministries_schedules WHERE id=?", (sid,)).fetchone()['status'] == 'confirmed'
+
+    # User 3 later informs unavailability (declined) with reason
+    resp2 = viewer.post(f'/api/ministries/schedules/{sid}/respond', json={
+        'status': 'declined',
+        'reason': 'Viagem a trabalho'
+    })
+    assert resp2.status_code == 200, resp2.text
+    assert resp2.json()['status'] == 'declined'
+
+    with s.db() as c:
+        row = c.execute("SELECT status, role_notes FROM ministries_schedules WHERE id=?", (sid,)).fetchone()
+        assert row['status'] == 'declined'
+        assert '[Obs: Viagem a trabalho]' in row['role_notes']
+
+    # Another user (user 2) tries to respond to user 3's schedule -> 403 Forbidden!
+    other_user = client(2)
+    resp3 = other_user.post(f'/api/ministries/schedules/{sid}/respond', json={
+        'status': 'confirmed'
+    })
+    assert resp3.status_code == 403
+
+
+def test_hall_of_members_endpoint(records):
+    viewer = client(3)
+    # Ensure user 3 has profile saved
+    u_prof = viewer.get('/api/me/profile').json()['user']
+    viewer.patch('/api/me/profile', json={
+        'version': u_prof['profile_version'],
+        'name': 'Irmão Três',
+        'bio': 'Membro da igreja Lagoinha'
+    })
+
+    grant(3, 'members', 'viewer')
+
+    res = viewer.get('/api/members/hall')
+    assert res.status_code == 200, res.text
+    hall = res.json()
+    assert 'members' in hall
+    assert 'total' in hall
+    assert hall['total'] >= 1
+    # Check that user 3 appears with bio and is_me=True
+    me = next((m for m in hall['members'] if m['is_me']), None)
+    assert me is not None
+    assert 'bio' in me
+    assert me['bio'] == 'Membro da igreja Lagoinha'
+    assert 'ministries' in me
+
+
+def test_viewer_can_edit_own_person_record_in_members_module(records):
+    admin = client(1)
+    viewer = client(3)
+
+    # Ensure user 3 has profile saved
+    u_prof = viewer.get('/api/me/profile').json()['user']
+    viewer.patch('/api/me/profile', json={
+        'version': u_prof['profile_version'],
+        'name': 'Irmão Três',
+        'phone': '(33) 98888-1111'
+    })
+
+    with s.db() as c:
+        p_row = c.execute('SELECT id, version FROM members_people WHERE account_user_id=3').fetchone()
+        pid = p_row['id']
+        p_ver = p_row['version']
+
+    # User 3 has viewer role in members
+    grant(3, 'members', 'viewer')
+
+    # User 3 edits their OWN person record via PUT /api/members/people/{pid}
+    edit_res = viewer.put(f'/api/members/people/{pid}', json={
+        'version': p_ver,
+        'name': 'Irmão Três Atualizado',
+        'phone': '(33) 97777-2222',
+        'relationship': 'Membro Ativo'
+    })
+    assert edit_res.status_code == 200, edit_res.text
+    assert edit_res.json()['id'] == pid
+
+    with s.db() as c:
+        updated = c.execute('SELECT name, phone FROM members_people WHERE id=?', (pid,)).fetchone()
+        assert updated['name'] == 'Irmão Três Atualizado'
+        assert updated['phone'] == '(33) 97777-2222'
+
+    # Admin creates another person record
+    other_pid = 'person-other-member'
+    with s.db() as c:
+        c.execute("INSERT INTO members_people(id,name,phone,email,active,version,created_at) VALUES(?,'Outro Membro','(33) 9000-0000','outro@lagoinha.test',1,1,?)", (other_pid, s.now()))
+
+    # User 3 tries to edit another person's record -> 403 Forbidden!
+    cant_edit_other = viewer.put(f'/api/members/people/{other_pid}', json={
+        'version': 1,
+        'name': 'Tentativa Invasão'
+    })
+    assert cant_edit_other.status_code == 403

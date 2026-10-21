@@ -8,7 +8,9 @@ export function accountProfileUI({api,e,onSaved}){
   document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();
   let previewUrl=null;dialog.addEventListener('close',()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);dialog.remove();},{once:true});dialog.showModal();
   try{
-   let user=(await api('/me/profile')).user;if(!dialog.isConnected)return;
+   const profileData=await api('/me/profile');if(!dialog.isConnected)return;
+   let user=profileData.user;
+   const families=profileData.families||[];
    const host=dialog.querySelector('[data-content]');
    const ms=user.marital_status||'';
    host.innerHTML=`<form class="account-profile-form">
@@ -31,6 +33,21 @@ export function accountProfileUI({api,e,onSaved}){
       <option value="União Estável" ${ms==='União Estável'?'selected':''}>União Estável</option>
      </select>
     </label>
+    <label>Família à qual pertence
+     <select name="family_id" id="profile-family-select">
+      <option value="">— Sem família vinculada —</option>
+      ${families.map(f=>`<option value="${e(f.id)}" ${user.family_id===f.id?'selected':''}>${e(f.name)}</option>`).join('')}
+      <option value="__new__">+ Cadastrar nova família...</option>
+     </select>
+    </label>
+    <div id="new-family-group" style="display:none;">
+     <label>Nome da nova família
+      <input name="new_family_name" type="text" maxlength="120" placeholder="Ex.: Família Silva">
+     </label>
+    </div>
+    <label>Biografia / Sobre você (Hall de Membros)
+     <textarea name="bio" rows="2" maxlength="500" placeholder="Compartilhe algo sobre você, versículo favorito ou ministérios que ama...">${e(user.bio||'')}</textarea>
+    </label>
     <label>Profissão<input name="profession" value="${e(user.profession||'')}" type="text" maxlength="100" autocomplete="organization-title" placeholder="Ex.: Engenheiro, Autônomo, Estudante"></label>
     <label>Endereço residencial<input name="address" value="${e(user.address||'')}" type="text" maxlength="240" autocomplete="street-address" placeholder="Rua, número, bairro"></label>
     
@@ -40,6 +57,8 @@ export function accountProfileUI({api,e,onSaved}){
    </form>`;
    
    const form=host.querySelector('form'),guard=guardForm(form,dialog),file=form.elements.photo,img=form.querySelector('img'),placeholder=form.querySelector('.account-photo span');
+   const famSelect=form.querySelector('#profile-family-select'),newFamGroup=form.querySelector('#new-family-group');
+   if(famSelect)famSelect.onchange=()=>{newFamGroup.style.display=famSelect.value==='__new__'?'block':'none';};
    let remove=false;
    const revoke=()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=null;};
    file.onchange=()=>{const f=file.files[0];if(!f)return;if(f.size>10*1024*1024){form.querySelector('[role=alert]').textContent='A foto deve ter no máximo 10 MB.';file.value='';return;}revoke();previewUrl=URL.createObjectURL(f);img.src=previewUrl;img.hidden=false;placeholder.hidden=true;remove=false;form.querySelector('[role=alert]').textContent='';};
@@ -49,6 +68,7 @@ export function accountProfileUI({api,e,onSaved}){
     ev.preventDefault();if(guard.busy)return;guard.setBusy(true);form.querySelector('[role=alert]').textContent='';form.querySelector('[role=status]').textContent='Salvando dados pessoais…';
     let result;
     try{
+     const selectedFam=form.elements.family_id.value;
      const fields={
       version:user.profile_version,
       name:form.elements.name.value.trim(),
@@ -56,8 +76,20 @@ export function accountProfileUI({api,e,onSaved}){
       birthday:form.elements.birthday.value||null,
       marital_status:form.elements.marital_status.value.trim(),
       profession:form.elements.profession.value.trim(),
-      address:form.elements.address.value.trim()
+      address:form.elements.address.value.trim(),
+      bio:(form.elements.bio?.value||'').trim()
      };
+     if(selectedFam==='__new__'){
+      const nfn=(form.elements.new_family_name?.value||'').trim();
+      if(!nfn){
+       form.querySelector('[role=alert]').textContent='Informe o nome da nova família.';
+       guard.setBusy(false);
+       return;
+      }
+      fields.new_family_name=nfn;
+     }else{
+      fields.family_id=selectedFam||'';
+     }
      if(remove)fields.avatar_url='';
      if(file.files[0]){
       const body=new FormData();

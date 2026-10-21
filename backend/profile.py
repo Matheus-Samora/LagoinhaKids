@@ -18,6 +18,9 @@ class ProfileUpdate(BaseModel):
     marital_status:str|None=Field(default=None,max_length=40)
     profession:str|None=Field(default=None,max_length=100)
     address:str|None=Field(default=None,max_length=240)
+    bio:str|None=Field(default=None,max_length=500)
+    family_id:str|None=Field(default=None,max_length=40)
+    new_family_name:str|None=Field(default=None,max_length=120)
 
 
 def account(c,user):
@@ -32,23 +35,37 @@ def account(c,user):
         res['profession']=p_dict.get('profession') or ''
         res['marital_status']=p_dict.get('marital_status') or ''
         res['address']=decrypt_text(p_dict.get('address') or '')
+        res['bio']=p_dict.get('bio') or (row['bio'] if 'bio' in row.keys() else '') or ''
+        res['family_id']=p_dict.get('family_id') or ''
+        if p_dict.get('family_id'):
+            fam=c.execute('SELECT name FROM members_families WHERE id=?',(p_dict['family_id'],)).fetchone()
+            res['family_name']=fam['name'] if fam else ''
+        else:
+            res['family_name']=''
         if not res.get('phone') and p_dict.get('phone'):
             res['phone']=p_dict['phone']
+        if not res.get('avatar_url') and p_dict.get('avatar_url'):
+            res['avatar_url']=p_dict['avatar_url']
     else:
         res['birthday']=None
         res['profession']=''
         res['marital_status']=''
         res['address']=''
+        res['family_id']=''
+        res['family_name']=''
+        res['bio']=(row['bio'] if 'bio' in row.keys() else '') or ''
     return res
 
 
 @router.get('/profile')
 def get_profile(user=Depends(session)):
-    with s.db() as c:return {'user':account(c,user)}
+    with s.db() as c:
+        families=[{'id':f['id'],'name':f['name']} for f in c.execute('SELECT id,name FROM members_families WHERE active=1 ORDER BY name').fetchall()]
+        return {'user':account(c,user),'families':families}
 
 
 def persist(data,user,prepared=None):
-    from .modules.common import encrypt_text,check_date
+    from .modules.common import encrypt_text,check_date,current,save,Record
     if data.birthday:
         check_date(data.birthday)
     with s.db() as c:
@@ -66,12 +83,35 @@ def persist(data,user,prepared=None):
             if not media or media['created_by']!=user['id'] or not media['content_type'].startswith('image/'):fail('image','Selecione uma foto enviada pela sua conta.')
         elif values.get('avatar_url') and not values['avatar_url'].startswith('https://'):fail('image','Use uma foto enviada pelo aplicativo ou um endereço HTTPS.')
         
-        user_fields={k:v for k,v in values.items() if k in ('name','phone','avatar_url')}
+        user_fields={k:v for k,v in values.items() if k in ('name','phone','avatar_url','bio')}
         if user_fields:
             result=c.execute('UPDATE users SET '+','.join(k+'=?' for k in user_fields)+',profile_version=profile_version+1 WHERE id=? AND profile_version=?',(*user_fields.values(),user['id'],data.version))
             if result.rowcount!=1:fail('conflict','O perfil mudou durante o salvamento. Reabra para conferir.',409)
         else:
             c.execute('UPDATE users SET profile_version=profile_version+1 WHERE id=? AND profile_version=?',(user['id'],data.version))
+
+        # Handle family selection or new family creation
+        target_family_id = None
+        has_family_change = False
+        if values.get('new_family_name'):
+            fn = values['new_family_name'].strip()
+            existing_fam = c.execute("SELECT id FROM members_families WHERE lower(name)=lower(?) AND active=1 LIMIT 1",(fn,)).fetchone()
+            if existing_fam:
+                target_family_id = existing_fam['id']
+            else:
+                fam_res = save(c,'members_families','members',Record(),{
+                    'name':fn,'joined_on':s.today(),'cell_id':None,'neighborhood':''
+                },user)
+                target_family_id = fam_res['id']
+            has_family_change = True
+        elif 'family_id' in values or 'family_id' in data.model_fields_set:
+            fid = (values.get('family_id') or '').strip()
+            if fid:
+                current(c,'members_families',fid)
+                target_family_id = fid
+            else:
+                target_family_id = None
+            has_family_change = True
 
         # Synchronize with members_people without requiring pastoral approval
         p_row=c.execute(
@@ -87,6 +127,9 @@ def persist(data,user,prepared=None):
         if 'marital_status' in values:m_fields['marital_status']=values['marital_status']
         if 'profession' in values:m_fields['profession']=values['profession']
         if 'address' in values:m_fields['address']=encrypt_text(values['address']) if values['address'] else ''
+        if 'bio' in values:m_fields['bio']=values['bio']
+        if 'avatar_url' in values:m_fields['avatar_url']=values['avatar_url']
+        if has_family_change:m_fields['family_id']=target_family_id
 
         if p_row:
             m_fields['account_user_id']=user['id']
@@ -95,7 +138,6 @@ def persist(data,user,prepared=None):
                 (*m_fields.values(),p_row['id'])
             )
         elif m_fields:
-            from .modules.common import save,Record
             save(c,'members_people','members',Record(),{
                 'name':values.get('name') or user.get('name') or 'Membro',
                 'email':user['email'],
@@ -104,6 +146,9 @@ def persist(data,user,prepared=None):
                 'marital_status':values.get('marital_status',''),
                 'profession':values.get('profession',''),
                 'address':encrypt_text(values.get('address','')) if values.get('address') else '',
+                'bio':values.get('bio',''),
+                'avatar_url':values.get('avatar_url',''),
+                'family_id':target_family_id,
                 'integration_stage':'active_member',
                 'relationship':'Membro',
                 'account_user_id':user['id']
@@ -128,13 +173,17 @@ async def update_profile_photo(
     marital_status:str=Form(default='',max_length=40),
     profession:str=Form(default='',max_length=100),
     address:str=Form(default='',max_length=240),
+    bio:str=Form(default='',max_length=500),
+    family_id:str|None=Form(default=None,max_length=40),
+    new_family_name:str|None=Form(default=None,max_length=120),
     photo:UploadFile|None=File(default=None),
     user=Depends(session)
 ):
     data=ProfileUpdate(
         version=version,name=name,phone=phone,avatar_url=avatar_url,
         birthday=birthday,marital_status=marital_status,
-        profession=profession,address=address
+        profession=profession,address=address,bio=bio,
+        family_id=family_id,new_family_name=new_family_name
     )
     prepared=None
     if photo:

@@ -1,10 +1,11 @@
+import {accountProfileUI} from '../account-profile.js';
 import {guardForm} from '../form-lifecycle.js';
 import {uiIcon} from '../ui/icons.js';
 import {ministryEmblem,MINISTRY_META} from './emblems.js';
 import {t, translateDOM} from './i18n.js';
 
 export function createSectors({api,e,identity,openQrModal,onTabChange}){
- let key='',data={},directory=[],query='',ministryFilter='',activeTab='all',generation=0,host;
+ let key='',data={},directory=[],query='',ministryFilter='',activeTab='all',generation=0,host,hallData=null;
  const cash=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
  const date=v=>v?v.slice(0,10).split('-').reverse().join('/'):'—';
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
@@ -450,17 +451,18 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
    invoices:['Nota / Fornecedor','Emissão','Valor']
   }[kind];
   const filterSuffix=['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'';
-  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${edit()?button('edit','Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):'<span>Consulta</span>'}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
+  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):'<span>Consulta</span>'}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
  }
 
  function paint(message=''){
   const allKinds=key==='members'?['people','families','cells']:key==='ministries'?['schedules','assignments','resources']:['entries','closings','accounts','cost-centers','invoices'];
+  const isHallTab=key==='members'&&activeTab==='hall';
   const visibleKinds=activeTab==='all'?allKinds:activeTab==='worship'?['schedules']:allKinds.filter(k=>k===activeTab);
   const showSummary=activeTab==='all';
   const showWorshipOnly=key==='ministries'&&activeTab==='worship';
   const showGcCards=key==='members'&&(activeTab==='all'||activeTab==='cells');
 
-  host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search"><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="Pesquisar..."></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
+  host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search"><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${isHallTab?hallOfMembersPanel():visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
   host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');void refresh();};
   host.querySelectorAll('[data-sector-action]').forEach(b=>b.onclick=()=>void action(b));
   translateDOM(host);
@@ -468,7 +470,19 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
 
  async function refresh(message=''){
   const n=++generation;
-  try{const result=await api('/'+key+'?q='+encodeURIComponent(query));if(n!==generation)return;data=result;paint(message);}catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
+  try{
+   const result=await api('/'+key+'?q='+encodeURIComponent(query));
+   if(n!==generation)return;
+   data=result;
+   if(key==='members'){
+    try{
+     hallData=await api(`/members/hall?q=${encodeURIComponent(query)}&ministry=${encodeURIComponent(ministryFilter)}`);
+    }catch{
+     hallData={members:[],total:0,catalog:[]};
+    }
+   }
+   paint(message);
+  }catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
  }
 
  async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';if(host)await refresh();}
@@ -913,8 +927,156 @@ export function createSectors({api,e,identity,openQrModal,onTabChange}){
   dialog.showModal();
  }
 
+ 
+ function hallOfMembersPanel(){
+  const members=hallData?.members||[];
+  const catalog=hallData?.catalog||[];
+  return `
+   <section class="panel sector-section" style="margin-top:20px;">
+    <div class="section-title" style="margin-bottom:8px;flex-wrap:wrap;gap:12px;">
+     <div>
+      <h2>${uiIcon('community',22)} Hall de Membros (${hallData?.total||members.length})</h2>
+      <p class="subtle" style="margin:4px 0 0;font-size:13px;">Conecte-se com os irmãos da Lagoinha, veja ministérios e inicie conversas.</p>
+     </div>
+     <button type="button" class="btn secondary" data-edit-my-profile>${uiIcon('identity',16)} Meu Perfil</button>
+    </div>
+    ${catalog.length?`
+     <div class="hall-filters-bar">
+      <button type="button" class="hall-filter-chip ${!ministryFilter?'active':''}" data-hall-filter="">Todos (${hallData?.total||members.length})</button>
+      ${catalog.map(cat=>`<button type="button" class="hall-filter-chip ${ministryFilter===cat?'active':''}" data-hall-filter="${e(cat)}">${e(cat)}</button>`).join('')}
+     </div>
+    `:''}
+    ${members.length?`
+     <div class="hall-members-grid">
+      ${members.map(m=>{
+       const avatarHtml=m.avatar_url
+        ?`<img src="${e(m.avatar_url)}" alt="${e(m.name)}" class="hall-avatar-img" loading="lazy"/>`
+        :`<div class="hall-avatar-placeholder">${e((m.name||'M').slice(0,1).toUpperCase())}</div>`;
+       const digits=(m.phone||'').replace(/\D/g,'');
+       const waUrl=digits.length>=10
+        ?`https://wa.me/55${digits}?text=${encodeURIComponent('A paz do Senhor, '+m.name+'! Sou da Lagoinha.')}`
+        :'';
+       return `
+        <article class="hall-member-card ${m.is_me?'is-me-card':''}">
+         <div class="hall-card-header">
+          <div class="hall-avatar-wrapper">
+           ${avatarHtml}
+           ${m.is_me?'<span class="hall-you-badge">Você</span>':''}
+          </div>
+          <div class="hall-card-info">
+           <h3 class="hall-member-name" title="${e(m.name)}">${e(m.name)}</h3>
+           <span class="hall-member-role">${e(m.profession||'Membro')}</span>
+           ${m.family_name?`<span class="hall-meta-pill">${uiIcon('family',13)} ${e(m.family_name)}</span>`:''}
+           ${m.cell_name?`<span class="hall-meta-pill gc-pill">${uiIcon('groups',13)} ${e(m.cell_name)}</span>`:''}
+          </div>
+         </div>
+         ${m.bio?`<p class="hall-member-bio" title="${e(m.bio)}">“${e(m.bio)}”</p>`:`<p class="hall-member-bio subtle" style="font-style:italic;color:var(--muted);">Membro ativo na comunidade Lagoinha.</p>`}
+         <div class="hall-ministries-row">
+          ${(m.ministries||[]).length?m.ministries.map(min=>`
+           <span class="hall-min-badge ${min.is_leader?'leader-min':''}">
+            ${min.is_leader?'⭐ ':''}${e(min.ministry)}${min.position&&min.position!=='Integrante'?` · ${e(min.position)}`:''}
+           </span>
+          `).join(''):'<span class="subtle" style="font-size:12px;">Sem ministério ativo</span>'}
+         </div>
+         <div class="hall-card-actions">
+          ${waUrl?`<a class="hall-action-btn wa-btn" href="${e(waUrl)}" target="_blank" rel="noopener" title="Conversar no WhatsApp">${uiIcon('whatsapp',14)} WhatsApp</a>`:''}
+          <button type="button" class="hall-action-btn view-btn" data-view-member-id="${e(m.id)}">Ver Perfil</button>
+          ${m.is_me?`<button type="button" class="hall-action-btn edit-me-btn" data-edit-my-profile>Editar dados</button>`:''}
+         </div>
+        </article>
+       `;
+      }).join('')}
+     </div>
+    `:`<div class="sector-empty" style="margin-top:20px;"><h3>Nenhum membro encontrado</h3><p class="subtle">Tente outros termos de busca ou selecione outro ministério.</p></div>`}
+   </section>
+  `;
+ }
+
+ function openMemberProfileModal(m){
+  const dialog=host.querySelector('dialog');
+  const digits=(m.phone||'').replace(/\D/g,'');
+  const waUrl=digits.length>=10?`https://wa.me/55${digits}?text=${encodeURIComponent('A paz do Senhor, '+m.name+'! Sou da Lagoinha.')}`:'';
+  const avatarHtml=m.avatar_url
+   ?`<img src="${e(m.avatar_url)}" alt="${e(m.name)}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid var(--line);"/>`
+   :`<div style="width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,#18181b,#3f3f46);color:#fff;display:grid;place-items:center;font-size:32px;font-weight:700;border:3px solid var(--line);">${e((m.name||'M').slice(0,1).toUpperCase())}</div>`;
+
+  dialog.querySelector('.sector-modal').innerHTML=`
+   <div class="section-title">
+    <h2>Perfil do Membro</h2>
+    ${button('close','Fechar','class="secondary"')}
+   </div>
+   <div style="display:flex;gap:18px;align-items:center;margin:18px 0;flex-wrap:wrap;">
+    ${avatarHtml}
+    <div>
+     <h3 style="margin:0 0 4px;font-size:20px;">${e(m.name)}</h3>
+     <p class="subtle" style="margin:0 0 6px;">${e(m.profession||'Membro da Igreja Batista da Lagoinha')}</p>
+     <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${m.family_name?`<span class="hall-meta-pill">${uiIcon('family',13)} ${e(m.family_name)}</span>`:''}
+      ${m.cell_name?`<span class="hall-meta-pill gc-pill">${uiIcon('groups',13)} ${e(m.cell_name)}</span>`:''}
+     </div>
+    </div>
+   </div>
+   ${m.bio?`
+    <div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;border:1px solid var(--line);">
+     <strong style="display:block;font-size:12px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Biografia</strong>
+     <p style="margin:0;font-size:14px;line-height:1.5;">${e(m.bio)}</p>
+    </div>
+   `:''}
+   <div style="margin-bottom:16px;">
+    <strong style="display:block;font-size:12px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Ministérios em que serve</strong>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+     ${(m.ministries||[]).length?m.ministries.map(min=>`
+      <span class="hall-min-badge ${min.is_leader?'leader-min':''}" style="font-size:12px;padding:5px 10px;">
+       ${min.is_leader?'⭐ ':''}${e(min.ministry)}${min.position&&min.position!=='Integrante'?` · ${e(min.position)}`:''}
+      </span>
+     `).join(''):'<span class="subtle">Nenhum ministério vinculado no momento.</span>'}
+    </div>
+   </div>
+   <div style="display:flex;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap;">
+    ${waUrl?`<a class="btn primary mini-btn" href="${e(waUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:#15803d;color:#fff;">${uiIcon('whatsapp',16)} Conversar no WhatsApp</a>`:''}
+    ${m.email?`<a class="btn secondary mini-btn" href="mailto:${e(m.email)}">Enviar E-mail</a>`:''}
+    ${m.is_me?`<button type="button" class="btn secondary mini-btn" data-edit-my-profile>Editar meu perfil</button>`:''}
+   </div>
+  `;
+  dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
+  dialog.querySelectorAll('[data-edit-my-profile]').forEach(b=>b.onclick=()=>{dialog.close();accountProfileUI({api,e,onSaved:()=>void refresh('Perfil atualizado!')}).open();});
+  dialog.showModal();
+ }
+
  async function action(b){
   try{
+   if(b.dataset.respondSchedule){
+    const sid=b.dataset.respondSchedule;
+    const status=b.dataset.status;
+    let reason='';
+    if(status==='declined'){
+     reason=prompt('Informe o motivo da indisponibilidade (opcional, para a coordenação):')||'';
+    }
+    b.disabled=true;
+    try{
+     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason}});
+     await refresh(status==='confirmed'?'Presença confirmada na escala!':'Indisponibilidade comunicada à coordenação.');
+    }catch(err){
+     b.disabled=false;
+     alert(err.message);
+    }
+    return;
+   }
+   if(b.hasAttribute('data-hall-filter')){
+    ministryFilter=b.dataset.hallFilter;
+    await refresh();
+    return;
+   }
+   if(b.dataset.viewMemberId){
+    const mem=(hallData?.members||[]).find(x=>x.id===b.dataset.viewMemberId);
+    if(mem)openMemberProfileModal(mem);
+    return;
+   }
+   if(b.hasAttribute('data-edit-my-profile')){
+    accountProfileUI({api,e,onSaved:()=>void refresh('Perfil atualizado!')}).open();
+    return;
+   }
+
    const kind=b.dataset.kind;
    const list=kind?getRowsForKind(kind):[];
    const r=list.find(x=>x.id===b.dataset.id);

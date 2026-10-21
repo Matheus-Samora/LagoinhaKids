@@ -71,7 +71,8 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
     from ..schema import ensure_official_gcs
     with s.db() as c:
         from ...record_policy import manager,personal_records
-        if not manager(c,user,'members'):return personal_records(c,user,'members')
+        from ...record_policy import allowed
+        if not allowed(c,user,'members') and not manager(c,user,'members'):return personal_records(c,user,'members')
         if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
             ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')]
@@ -84,6 +85,7 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
         gc_apps=[]
         for r in c.execute("SELECT * FROM sector_applications WHERE target_type='gc' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));gc_apps.append(d)
+        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'pastoral_notes_allowed':bool(global_manager(c,user)),
             'cells':cells,
@@ -93,7 +95,8 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             'gc_applications':gc_apps,
             'total_people':c.execute('SELECT count(*) FROM members_people WHERE active=1').fetchone()[0],
             'total_families':c.execute('SELECT count(*) FROM members_families WHERE active=1').fetchone()[0],
-            'total_cells':c.execute('SELECT count(*) FROM members_cells WHERE active=1').fetchone()[0]
+            'total_cells':c.execute('SELECT count(*) FROM members_cells WHERE active=1').fetchone()[0],
+            'my_person_id':my_p['id'] if my_p else None
         }
 
 def persist(kind,data,user,rid=None):
@@ -136,7 +139,16 @@ def edit_family(rid:str,data:Family,user=Depends(write)):return persist('familie
 @router.post('/people')
 def create_person(data:Person,user=Depends(write)):return persist('people',data,user)
 @router.put('/people/{rid}')
-def edit_person(rid:str,data:Person,user=Depends(write)):return persist('people',data,user,rid)
+def edit_person(rid:str,data:Person,user=Depends(read)):
+    with s.db() as c:
+        from ...record_policy import manager
+        is_mgr=manager(c,user,'members')
+        if not is_mgr:
+            p_row=current(c,'members_people',rid)
+            is_self=(p_row['account_user_id']==user['id'] or (p_row['email'] and p_row['email'].lower()==user['email'].lower()))
+            if not is_self:
+                fail('forbidden','Você só pode alterar seus próprios dados de membro.',403)
+    return persist('people',data,user,rid)
 
 @router.post('/self-register')
 def submit_self_registration(data:SelfRegister,user=Depends(session)):
@@ -270,3 +282,67 @@ def delete_person(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         return result
 
 
+
+
+@router.get('/hall')
+def hall_of_members(q:str=Query(default='',max_length=100),ministry:str=Query(default='',max_length=50),cell_id:str=Query(default='',max_length=50),user=Depends(session)):
+    with s.db() as c:
+        sql = '''
+            SELECT 
+                p.id, p.name, p.phone, p.email, p.birthday, p.profession, p.marital_status,
+                p.joined_on, p.integration_stage, p.family_id, p.cell_id,
+                coalesce(p.bio, u.bio, '') as bio,
+                coalesce(p.avatar_url, u.avatar_url, '') as avatar_url,
+                coalesce(f.name, '') as family_name,
+                coalesce(mc.name, '') as cell_name,
+                p.account_user_id
+            FROM members_people p
+            LEFT JOIN users u ON (u.id = p.account_user_id OR lower(u.email) = lower(p.email))
+            LEFT JOIN members_families f ON f.id = p.family_id
+            LEFT JOIN members_cells mc ON mc.id = p.cell_id
+            WHERE p.active = 1
+        '''
+        params = []
+        if q.strip():
+            sql += " AND (lower(p.name) LIKE ? OR lower(p.profession) LIKE ? OR lower(coalesce(f.name,'')) LIKE ? OR lower(coalesce(mc.name,'')) LIKE ?)"
+            like_q = f'%{q.strip().lower()}%'
+            params.extend([like_q, like_q, like_q, like_q])
+        if cell_id:
+            sql += ' AND p.cell_id = ?'
+            params.append(cell_id)
+
+        sql += ' ORDER BY p.name ASC LIMIT 300'
+        rows = [dict(r) for r in c.execute(sql, tuple(params)).fetchall()]
+
+        assignments = c.execute('SELECT person_id,ministry,position,is_leader FROM ministries_assignments WHERE active=1').fetchall()
+        min_map = {}
+        catalog = set()
+        for a in assignments:
+            pid = a['person_id']
+            catalog.add(a['ministry'])
+            if pid not in min_map:
+                min_map[pid] = []
+            min_map[pid].append({
+                'ministry': a['ministry'],
+                'position': a['position'],
+                'is_leader': bool(a['is_leader'])
+            })
+
+        my_p = c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_person_id = my_p['id'] if my_p else None
+
+        result = []
+        for r in rows:
+            r['ministries'] = min_map.get(r['id'], [])
+            r['is_me'] = bool(r['id'] == my_person_id)
+            if ministry:
+                if not any(m['ministry'].lower() == ministry.lower() for m in r['ministries']):
+                    continue
+            result.append(r)
+
+        return {
+            'members': result,
+            'total': len(result),
+            'my_person_id': my_person_id,
+            'catalog': sorted(list(catalog))
+        }

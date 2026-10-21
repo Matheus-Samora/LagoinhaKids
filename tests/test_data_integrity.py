@@ -102,12 +102,15 @@ def test_viewer_personal_only_and_pastoral_notes_privacy(records):
     })
     assert forbid_notes.status_code == 403
 
-    # User 3 is a viewer ("Pessoal — somente meus dados")
+    # User 3 is a viewer (Visualizador — somente leitura)
     grant(3, 'members', 'viewer')
     viewer = client(3)
     listing_vw = viewer.get('/api/members').json()
-    assert listing_vw['personal_only'] is True
-    assert listing_vw['records'] == []
+    assert listing_vw['pastoral_notes_allowed'] is False
+    for p in listing_vw['people']:
+        assert 'pastoral_notes' not in p
+    cant_create = viewer.post('/api/members/people', json={'name': 'Tentativa Viewer'})
+    assert cant_create.status_code == 403
 
 
 def test_reversible_archive_and_restore_with_referential_integrity(records):

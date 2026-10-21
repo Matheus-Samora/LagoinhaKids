@@ -5,7 +5,7 @@ from pydantic import BaseModel,Field
 from ...module_security import module_access
 from ...platform_access import platform_admin,is_pastor
 from ... import store as s
-from ...app import fail
+from ...app import fail,session
 from ..common import merge_existing,Record,save,archive,current,check_date,encrypt_text,decrypt_text
 router=APIRouter(prefix='/api/ministries',tags=['Ministries'])
 CATALOG=('Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA')
@@ -85,6 +85,7 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             schedules=[r for r in schedules if r['ministry']==scope]
             resources=[r for r in resources if r['ministry']==scope]
             counts=[r for r in counts if r['ministry']==scope]
+        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'assignments':rows,
             'schedules':schedules,
@@ -93,7 +94,8 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             'worship_roles':WORSHIP_ROLES,
             'counts':counts,
             'user_scope':scope,
-            'applications':apps
+            'applications':apps,
+            'my_person_id':my_p['id'] if my_p else None
         }
 
 def persist(data,user,rid=None):
@@ -179,6 +181,52 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
                 n_msg=f"Olá {p_row['name']}! Sua escalação para o culto '{old['title']}' em {fmt_date} às {old['service_time']} foi desmarcada pela coordenação."
                 c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
         return archive(c,'ministries_schedules','ministries',rid,version,user)
+
+class ScheduleResponse(BaseModel):
+    status:str=Field(pattern='^(confirmed|declined)$')
+    reason:str|None=Field(default=None,max_length=200)
+
+@router.post('/schedules/{rid}/respond')
+def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        old=current(c,'ministries_schedules',rid)
+        p_row=c.execute('SELECT id,name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
+        if not p_row:fail('not_found','Pessoa da escala não encontrada.',404)
+        is_self=(p_row['account_user_id']==user['id'] or (p_row['email'] and p_row['email'].lower()==user['email'].lower()))
+        from ...record_policy import manager
+        is_mgr=manager(c,user,'ministries')
+        if not is_self and not is_mgr:
+            fail('forbidden','Você só pode confirmar ou declarar indisponibilidade nas suas próprias escalas.',403)
+        notes=old['role_notes'] or ''
+        if data.reason and data.reason.strip():
+            notes=f"{notes} [Obs: {data.reason.strip()}]".strip()
+        c.execute('UPDATE ministries_schedules SET status=?,role_notes=?,version=version+1 WHERE id=?',(data.status,notes,rid))
+        s_parts=str(old['service_date']).split('-')
+        fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(old['service_date'])
+        if data.status=='declined':
+            n_title=f"⚠️ Indisponibilidade · {old['ministry']}"
+            n_msg=f"{p_row['name']} informou que NÃO poderá comparecer à escala no culto '{old['title']}' em {fmt_date} às {old['service_time']}."+(f" Motivo: {data.reason.strip()}" if data.reason else '')
+            leaders=c.execute("SELECT coalesce(p.account_user_id,u.id) user_id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id LEFT JOIN users u ON lower(u.email)=lower(p.email) WHERE a.ministry=? AND a.is_leader=1 AND a.active=1",(old['ministry'],)).fetchall()
+            notified=set()
+            for l in leaders:
+                if l['user_id'] and l['user_id']!=user['id']:
+                    notified.add(l['user_id'])
+                    c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(l['user_id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
+            if not notified:
+                for adm in c.execute("SELECT id FROM users WHERE role='admin' AND active=1").fetchall():
+                    if adm['id']!=user['id']:
+                        c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(adm['id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
+        return {'ok':True,'id':rid,'status':data.status}
+
+@router.get('/my-schedules')
+def my_schedules(user=Depends(session)):
+    with s.db() as c:
+        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        if not p_row:return {'schedules':[]}
+        rows=c.execute("SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.person_id=? AND ms.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC LIMIT 50",(p_row['id'],)).fetchall()
+        return {'schedules':[dict(r) for r in rows]}
+
 
 @router.post('/worship-scale')
 def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):

@@ -24,6 +24,8 @@ def can_change(c,user,module,row):
  if not allowed(c,user,module) and not (module=='members' and row.get('created_by')==user['id']):fail('module_access','Acesso ao setor não autorizado.',403)
  check_scope(c,user,module,row)
  if not manager(c,user,module) and row.get('created_by')!=user['id']:
+  if module=='members' and (row.get('account_user_id')==user['id'] or (row.get('email') and row.get('email').lower()==(user.get('email') or '').lower())):
+   return
   fail('owner','Você pode alterar ou arquivar somente os seus próprios registros.',403)
 
 def personal_records(c,user,module,archived=False):

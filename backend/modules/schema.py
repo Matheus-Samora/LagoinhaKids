@@ -157,6 +157,9 @@ def migrate(c):
     ensure_column(c,'members_self_registrations','version','BIGINT NOT NULL DEFAULT 1')
     ensure_column(c,'members_people','account_user_id','BIGINT REFERENCES users(id)')
     ensure_column(c,'members_self_registrations','person_id','TEXT REFERENCES members_people(id)')
+    ensure_column(c,'users','bio',"TEXT NOT NULL DEFAULT ''")
+    ensure_column(c,'members_people','bio',"TEXT NOT NULL DEFAULT ''")
+    ensure_column(c,'members_people','avatar_url',"TEXT NOT NULL DEFAULT ''")
     # A creator may register many other people: creator ownership is not identity.
     if not c.execute("SELECT 1 FROM platform_migrations WHERE name='personal_identity_v248'").fetchone():
         for reg in c.execute("SELECT * FROM members_self_registrations WHERE status='approved' AND owner_id IS NOT NULL AND email!=''"):

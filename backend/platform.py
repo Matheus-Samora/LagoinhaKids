@@ -54,12 +54,17 @@ def community_catalog(user=Depends(session)):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
         announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 200') if visible_announcement(c,user,dict(r))][:40]
+        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_schedules=[]
+        if p_row:
+            my_schedules=[dict(r) for r in c.execute("SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.person_id=? AND ms.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC LIMIT 30",(p_row['id'],)).fetchall()]
         return {
             'cells':cells,
             'ministries':[{'name':m,'total':counts.get(m,{}).get('total',0),'leaders':counts.get(m,{}).get('leaders',0)} for m in MINISTRY_CATALOG],
             'my_applications':my_apps,
             'notifications':notifs,
-            'announcements':announcements
+            'announcements':announcements,
+            'my_schedules':my_schedules
         }
 
 class CommunityApplication(BaseModel):

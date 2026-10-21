@@ -54,6 +54,7 @@ const AREA_TABS={
  ],
  members:[
   {id:'all',label:'Visão Geral',icon:'home'},
+  {id:'hall',label:'Hall de Membros',icon:'community'},
   {id:'people',label:'Membros',icon:'identity'},
   {id:'families',label:'Famílias',icon:'family'},
   {id:'cells',label:'GCs',icon:'groups'}
@@ -207,7 +208,7 @@ function portalHero(module,selected){
  const ti=identity.platform_admin&&!['access','membro'].includes(selected);
  const actions=ti
   ?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>'
-  :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button><button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
+  :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button><a class="button secondary" href="/members" id="open-hall-hero">${uiIcon('community',18)} Hall de Membros</a><button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
  return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${actions}</div></section>`;
 }
 
@@ -217,6 +218,44 @@ function memberCommunityPortal(tab='all'){
  const cells=communityData?.cells||[];
  const mins=communityData?.ministries||MINISTRY_CATALOG.map(name=>({name,total:0,leaders:0}));
  const myApps=communityData?.my_applications||[];
+ const mySchedules=communityData?.my_schedules||[];
+
+ const mySchedulesHtml=(tab==='all'&&mySchedules.length)?`<section class="panel my-schedules-section" style="margin-top:20px;">
+  <div class="section-title">
+   <h2>${uiIcon('schedules',20)} Minhas Escalações (${mySchedules.length})</h2>
+   <span class="subtle" style="font-size:12.5px;">Confirme sua presença ou informe indisponibilidade</span>
+  </div>
+  <div class="my-schedules-grid">
+   ${mySchedules.map(s=>{
+    const isConfirmed=s.status==='confirmed';
+    const isDeclined=s.status==='declined';
+    const statusBadge=isConfirmed
+     ?'<span class="badge" style="background:#dcfce7;color:#166534;font-weight:600;">✓ Presença Confirmada</span>'
+     :isDeclined
+      ?'<span class="badge" style="background:#fee2e2;color:#991b1b;font-weight:600;">✕ Indisponível</span>'
+      :'<span class="badge" style="background:#fef3c7;color:#92400e;font-weight:600;">⏳ Confirmação Pendente</span>';
+    return `
+     <article class="my-schedule-card">
+      <div class="my-schedule-card-main">
+       <div class="my-schedule-header">
+        <span class="badge" style="background:#09090b;color:#fff;font-weight:600;">${e(s.ministry)}</span>
+        ${statusBadge}
+       </div>
+       <h3 style="margin:8px 0 4px;font-size:16px;">${e(s.title)}</h3>
+       <p class="subtle" style="margin:0 0 6px;font-size:13px;">
+        📅 <strong>${e(new Date(s.service_date+'T12:00:00').toLocaleDateString('pt-BR'))}</strong> às <strong>${e(s.service_time||'18:00')}</strong>
+        ${s.role_notes?` · <span style="color:#09090b;font-weight:500;">Função: ${e(s.role_notes)}</span>`:''}
+       </p>
+      </div>
+      <div class="my-schedule-actions">
+       ${!isConfirmed?`<button type="button" class="btn primary mini-btn" data-schedule-respond="${e(s.id)}" data-status="confirmed">✓ Confirmar Presença</button>`:''}
+       ${!isDeclined?`<button type="button" class="btn secondary mini-btn danger-btn" data-schedule-respond="${e(s.id)}" data-status="declined">Informar Indisponibilidade</button>`:''}
+      </div>
+     </article>
+    `;
+   }).join('')}
+  </div>
+ </section>`:'';
 
  const myAppsHtml=(tab==='all'&&myApps.length)?`<section class="panel" style="margin-top:20px;">
   <div class="section-title">
@@ -642,6 +681,26 @@ function render(message=''){
  }));
 
  root.querySelector('#open-my-profile-hero')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
+  root.querySelectorAll('[data-schedule-respond]').forEach(b=>{
+   b.onclick=async()=>{
+    const sid=b.dataset.scheduleRespond;
+    const status=b.dataset.status;
+    let reason='';
+    if(status==='declined'){
+     reason=prompt('Informe o motivo da indisponibilidade (opcional, para a coordenação):')||'';
+    }
+    b.disabled=true;
+    try{
+     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason}});
+     communityData=await api('/platform/community');
+     render(status==='confirmed'?'Presença confirmada na escala!':'Indisponibilidade comunicada à coordenação.');
+    }catch(err){
+     b.disabled=false;
+     alert(err.message);
+    }
+   };
+  });
+
  if(module?.enabled&&!personalOnly&&module.id!=='kids'){
   const container=root.querySelector('#sector-content');
   const bar=document.createElement('div');
