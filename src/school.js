@@ -588,7 +588,6 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
           <div class="room-hero-content">
             <div class="room-hero-icon">${icon('rooms', 26)}</div>
             <div class="room-hero-info">
-              <div class="room-hero-tag">TURMA SELECIONADA</div>
               <h2>${e(room.name)}</h2>
               <p class="room-hero-meta">
                 <span><strong>Faixa etária:</strong> ${room.min_age} a ${room.max_age} anos</span>
@@ -603,42 +602,6 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
             <button type="button" class="btn primary" data-action="new-child" data-room="${room.id}">
               ${icon('plus', 16)} Matricular aluno nesta turma
             </button>
-          </div>
-        </section>
-
-        <section class="room-actions-guide">
-          <div class="guide-header">
-            <span class="guide-badge">⚡ O QUE VOCÊ PODE FAZER COM OS ALUNOS DESTA TURMA</span>
-          </div>
-          <div class="guide-grid">
-            <div class="guide-card">
-              <div class="guide-card-icon">🏷️</div>
-              <div class="guide-card-text">
-                <strong>Presença & Saída</strong>
-                <p>Marcar chegada no início e conferir a Etiqueta de Segurança (TAG) dos pais no check-out.</p>
-              </div>
-            </div>
-            <div class="guide-card">
-              <div class="guide-card-icon">🪪</div>
-              <div class="guide-card-text">
-                <strong>Carteirinha Digital</strong>
-                <p>Exibir o QR Code do aluno para leitura com leitor USB de mesa ou câmera do celular.</p>
-              </div>
-            </div>
-            <div class="guide-card">
-              <div class="guide-card-icon">📢</div>
-              <div class="guide-card-text">
-                <strong>Chamar no Telão</strong>
-                <p>Chamar os pais ao auditório e enviar notificação push imediata no celular em caso de urgência.</p>
-              </div>
-            </div>
-            <div class="guide-card">
-              <div class="guide-card-icon">🔄</div>
-              <div class="guide-card-text">
-                <strong>Mudar Turma & Ficha</strong>
-                <p>Transferir para outra salinha, editar alergias alimentares, cuidados especiais e foto de perfil.</p>
-              </div>
-            </div>
           </div>
         </section>
 

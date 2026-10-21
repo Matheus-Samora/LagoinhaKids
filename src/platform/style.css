@@ -3621,8 +3621,6 @@ img {
   height: 7px;
   border-radius: 50%;
   background: #10b981;
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-  animation: realtimePulse 2s infinite;
 }
 
 .realtime-status-pill:not(.is-connected) {
@@ -3633,20 +3631,4 @@ img {
 
 .realtime-status-pill:not(.is-connected) .realtime-dot {
   background: #eab308;
-  animation: none;
-}
-
-@keyframes realtimePulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-  }
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
-  }
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
 }

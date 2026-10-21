@@ -847,9 +847,8 @@ function render(message=''){
 }
 
 function card(m){
- const roleLabel=m.role?` · ${roleNames[m.role]||m.role}`:'';
- const scopeLabel=m.scope?` (${m.scope})`:'';
- return `<article class="card ${m.enabled?'':'locked'}" data-module="${e(m.id)}">${sectorEmblem(m.id)}<span class="badge">${m.enabled?(m.status==='operational'?`Liberado${e(roleLabel)}${e(scopeLabel)}`:'Em breve'):'Restrito'}</span><h2>${e(m.name)}</h2><p>${e(descriptions[m.id])}</p>${m.enabled?`<a class="button" href="${m.url}">Abrir →</a>`:'<p class="subtle">Solicite acesso ao líder.</p>'}</article>`;
+ const badgeHtml = !m.enabled ? '<span class="badge">Restrito</span>' : (m.status !== 'operational' ? '<span class="badge">Em breve</span>' : '');
+ return `<article class="card ${m.enabled?'':'locked'}" data-module="${e(m.id)}">${sectorEmblem(m.id)}${badgeHtml}<h2>${e(m.name)}</h2><p>${e(descriptions[m.id])}</p>${m.enabled?`<a class="button" href="${m.url}">Abrir →</a>`:'<p class="subtle">Solicite acesso ao líder.</p>'}</article>`;
 }
 
 function moduleView(m){if(!m.enabled)return `<section class="panel"><h2>Acesso restrito</h2><a class="button secondary" href="/membro">Voltar</a></section>`;return '<div id="sector-content"><p>Carregando…</p></div>';}

@@ -383,7 +383,7 @@ def get_privacy_terms():
         'sections':[
             {'title':'1. Finalidade Exclusiva','text':'Os dados cadastrais de crianças (nome, nascimento, turma, alergias e condições de saúde) e responsáveis são coletados com a finalidade estrita de acolhimento cristão, segurança física no templo e conferência presencial de entrega de menores durante os cultos.'},
             {'title':'2. Alergias e Cuidados Médicos','text':'Informações de alergias e condições especiais são tratadas como dados sensíveis e exibidas exclusivamente à equipe voluntária responsável pela salinha para preservação da saúde e prevenção de choque anafilático durante as refeições.'},
-            {'title':'3. Conferência Facial (Opcional)','text':'O cadastro facial é estritamente opcional e requer autorização expressa dos pais. O sistema não guarda fotos no servidor; gera apenas um descritor criptografado. A conferência é 1:1 e jamais substitui a checagem presencial humana nem autoriza a liberação da criança sozinha. O responsável pode revogar a autorização e solicitar exclusão a qualquer momento.'},
+            {'title':'3. Identificação e Segurança','text':'O acolhimento e a liberação utilizam a identificação pela carteirinha digital do membro e etiqueta de segurança pareada, garantindo a proteção e integridade de cada criança.'},
             {'title':'4. Código de Segurança Pareado ("No Tag, No Child")','text':'Em cada culto é gerado um código randômico de 4 caracteres pareado entre a etiqueta da criança e o comprovante dos pais. Nenhuma criança é entregue sem a conferência deste código ou protocolo formal de exceção.'}
         ]
     }
@@ -687,7 +687,7 @@ def enroll(cid:int,image:bytes=File(...),user=Depends(staff)):
         ch=child_allowed(c,user,cid)
         if not ch['face_allowed'] or not ch['parent_id']: fail('consent','O responsável vinculado precisa autorizar o cadastro facial.',403)
         consent_version=ch['consent_at'];guardian=ch['parent_id']
-    fail('face_retired','Reconhecimento facial descontinuado. Use a carteirinha digital.',410)
+    fail('face_retired','Recurso descontinuado. Use a carteirinha digital.',410)
     result,feature=engine().analyze(engine().decode(image),True)
     encrypted=s.CIPHER.encrypt(np.asarray(feature,dtype=np.float32).tobytes())
     with s.db() as c:
@@ -697,7 +697,7 @@ def enroll(cid:int,image:bytes=File(...),user=Depends(staff)):
     return {'ok':True,'analysis':result,'liveness':False}
 @app.post('/api/children/{cid}/face/verify')
 def verify_face(cid:int,image:bytes=File(...),user=Depends(staff)):
-    fail('face_retired','Reconhecimento facial descontinuado. Use a carteirinha digital.',410)
+    fail('face_retired','Recurso descontinuado. Use a carteirinha digital.',410)
     with s.db() as c:
         ch=child_allowed(c,user,cid)
         if not ch['face_allowed'] or not ch['face_template']: fail('face','Cadastro facial autorizado indisponível.',409)
