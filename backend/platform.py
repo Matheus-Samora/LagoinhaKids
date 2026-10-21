@@ -215,10 +215,13 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
         c.execute('UPDATE platform_announcements SET target_scope=?,target_user_ids=? WHERE id=?',(target_scope,selected,aid))
         n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
         n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
+        from .realtime import publish, dispatch_notification_event
         for uid in recipients:
             if uid==user['id']:continue
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now,t_sector))
+            dispatch_notification_event(c, uid, 'announcement', n_title, n_msg, sector=t_sector, context_id=aid)
 
+        publish('announcement:new', {'id': aid, 'title': data.title, 'sector': t_sector, 'author_name': user['name']}, sector=t_sector or 'all')
         s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
         return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']})}
 
@@ -231,6 +234,8 @@ def remove_announcement(aid:str,user=Depends(session)):
         if not (platform_admin(c,user['id']) or is_pastor(c,user['id']) or row['author_id']==user['id']):
             fail('forbidden','Apenas o autor do comunicado ou a liderança pastoral/TI pode removê-lo.',403)
         c.execute('UPDATE platform_announcements SET active=0 WHERE id=?',(aid,))
+        from .realtime import publish
+        publish('announcement:archived', {'id': aid}, sector='all')
         s.audit(c,user['id'],f'platform_announcement_archived:{aid}')
         return {'ok':True,'message':'Comunicado arquivado.'}
 

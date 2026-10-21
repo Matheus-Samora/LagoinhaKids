@@ -14,7 +14,15 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Systems',version='2.6.0')
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from .realtime import broker as realtime_broker
+    realtime_broker.start_postgres_listener()
+    yield
+
+app=FastAPI(title='Lagoinha Systems',version='2.7.0',lifespan=lifespan)
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -83,13 +91,13 @@ app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_cr
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
-    token=bearer[7:] if bearer.startswith('Bearer ') else request.cookies.get(COOKIE,'')
+    token=bearer[7:] if bearer.startswith('Bearer ') else (request.query_params.get('token') or request.cookies.get(COOKIE,''))
     with s.db() as c:
         row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=?',(s.digest(token),)).fetchone()
     if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/'))
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/'))
     if not shared:
         requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
         requested=requested if requested in PLATFORM_MODULES else 'kids'
@@ -348,6 +356,10 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
             title='Saída registrada'
             msg=f'{ch["name"]}: saída conferida pela equipe com responsável {guardian["name"]}.'
         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(ch['parent_id'],cid,'attendance',title,msg,user['id'],s.now()))
+        from .realtime import publish, dispatch_notification_event
+        dispatch_notification_event(c, ch['parent_id'], 'attendance', title, msg, sector='kids', context_id=str(cid))
+        publish('kids:attendance', {'action': data.action, 'child_id': cid, 'child_name': ch['name']}, sector='kids')
+        publish('kids:sync', {'action': data.action, 'child_id': cid}, sector='kids')
         c.execute('DELETE FROM attempts WHERE key=?',(attempt_key,))
         c.execute('INSERT INTO attendance_events(child_id,lesson_id,action,guardian_id,guardian_name,actor,created_at,exception_reason) VALUES(?,?,?,?,?,?,?,?)',(cid,data.lesson_id,data.action,data.guardian_id,guardian['name'],user['id'],s.now(),data.exception_reason.strip() if data.action=='out' else ''))
         s.audit(c,user['id'],'check_in' if data.action=='in' else 'check_out',cid)
@@ -393,7 +405,12 @@ def notify(cid:int,data:Notify,user=Depends(session)):
         else:
             if data.kind not in ('please_pickup','consent_request') or not ch['parent_id']: fail('kind','Este aluno precisa de responsável vinculado.')
             recipients=[ch['parent_id']]
-        for uid in set(recipients): c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,cid,data.kind,titles[data.kind],data.message.strip() or f'Aviso sobre {ch["name"]}.',user['id'],s.now()))
+        from .realtime import publish, dispatch_notification_event
+        for uid in set(recipients):
+            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,cid,data.kind,titles[data.kind],data.message.strip() or f'Aviso sobre {ch["name"]}.',user['id'],s.now()))
+            dispatch_notification_event(c, uid, data.kind, titles[data.kind], data.message.strip() or f'Aviso sobre {ch["name"]}.', sector='kids', context_id=str(cid))
+        publish('kids:paging', {'child_id': cid, 'kind': data.kind, 'message': data.message.strip()}, sector='kids')
+        publish('kids:sync', {'action': 'paging', 'child_id': cid}, sector='kids')
         s.audit(c,user['id'],'notification_'+data.kind,cid)
     return {'ok':True,'delivery':'in_app','recipients':len(set(recipients))}
 @app.get('/api/notifications')
@@ -403,6 +420,8 @@ def notifications(user=Depends(session)):
 def read_all_notifications(user=Depends(session)):
     with s.db() as c:
         c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE user_id=? AND read_at IS NULL',(s.now(),user['id']))
+        from .realtime import publish
+        publish('notification:count', {'unread_count': 0}, user_id=user['id'])
     return {'ok':True}
 @app.post('/api/notifications/{nid}/read')
 def read_notification(nid:int,user=Depends(session)):
@@ -799,6 +818,12 @@ def whatsapp_removed(path:str):
 
 from .notification_center import router as notification_center_router
 app.include_router(notification_center_router)
+from .realtime import router as realtime_router
+app.include_router(realtime_router)
+
+
+
+
 
 WEB_DIR=Path(os.getenv('KIDS_WEB_DIR',str(s.ROOT/'dist')))
 
@@ -812,7 +837,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.6.0',
+        'version': '2.7.0',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

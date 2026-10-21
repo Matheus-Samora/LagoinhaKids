@@ -55,6 +55,8 @@ def inbox(before:int|None=Query(default=None,ge=1),category:str='all',unread:boo
 @router.post('/read-all')
 def read_all(user=Depends(session)):
     with s.db() as c:c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE user_id=? AND read_at IS NULL',(s.now(),user['id']))
+    from .realtime import publish
+    publish('notification:count', {'unread_count': 0}, user_id=user['id'])
     return {'ok':True}
 
 

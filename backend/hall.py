@@ -90,6 +90,9 @@ def create(data:Publication,user=Depends(participant)):
         rate(c,user,'hall_posts',5,5)
         c.execute('INSERT INTO hall_posts(id,author_id,kind,content,created_at,updated_at) VALUES(?,?,?,?,?,?)',(rid,user['id'],data.kind,data.content.strip(),s.now(),s.now()))
         s.audit(c,user['id'],'hall:post_created:'+rid)
+        fresh=card(c,post(c,rid),user,False)
+        from .realtime import publish
+        publish('hall:post',{'action':'created','post':fresh},sector='members')
     return {'id':rid,'ok':True}
 
 @router.patch('/posts/{rid}')
@@ -100,6 +103,9 @@ def edit(rid:str,data:EditPublication,user=Depends(participant)):
         if old['version']!=data.version:fail('conflict','A publicação mudou. Reabra antes de editar.',409)
         c.execute('UPDATE hall_posts SET content=?,kind=?,version=version+1,updated_at=? WHERE id=?',(data.content.strip(),data.kind,s.now(),rid))
         s.audit(c,user['id'],'hall:post_updated:'+rid)
+        fresh=card(c,post(c,rid),user,False)
+        from .realtime import publish
+        publish('hall:post',{'action':'updated','post':fresh},sector='members')
     return {'ok':True}
 
 @router.delete('/posts/{rid}')
@@ -110,6 +116,8 @@ def archive(rid:str,version:int=Query(ge=1),user=Depends(participant)):
         c.execute('UPDATE hall_posts SET active=0,version=version+1,updated_at=? WHERE id=?',(s.now(),rid))
         c.execute('UPDATE hall_reports SET resolved=1 WHERE post_id=?',(rid,))
         s.audit(c,user['id'],'hall:post_archived:'+rid)
+        from .realtime import publish
+        publish('hall:post',{'action':'archived','post_id':rid},sector='members')
     return {'ok':True}
 
 class Reaction(BaseModel):active:bool
@@ -120,7 +128,10 @@ def react(rid:str,data:Reaction,user=Depends(participant)):
         c.execute('BEGIN IMMEDIATE');post(c,rid)
         if data.active:c.execute('INSERT INTO hall_reactions VALUES(?,?,?) ON CONFLICT(post_id,user_id) DO NOTHING',(rid,user['id'],s.now()))
         else:c.execute('DELETE FROM hall_reactions WHERE post_id=? AND user_id=?',(rid,user['id']))
-        return {'ok':True,'reacted':data.active,'reactions':c.execute('SELECT count(*) FROM hall_reactions WHERE post_id=?',(rid,)).fetchone()[0]}
+        count=c.execute('SELECT count(*) FROM hall_reactions WHERE post_id=?',(rid,)).fetchone()[0]
+        from .realtime import publish
+        publish('hall:reaction',{'post_id':rid,'reactions':count,'actor_id':user['id']},sector='members')
+        return {'ok':True,'reacted':data.active,'reactions':count}
 
 @router.get('/posts/{rid}/comments')
 def comments(rid:str,page:int=Query(1,ge=1,le=5000),user=Depends(participant)):
@@ -148,7 +159,14 @@ def reply(rid:str,data:Comment,user=Depends(participant)):
         # Only the post author is notified; reactions and broadcast posts stay quiet.
         if parent['author_id']!=user['id'] and allowed(c,{'id':parent['author_id']},'members'):
             c.execute('INSERT INTO notifications(user_id,kind,title,message,sender,created_at,sector,context_id) VALUES(?,?,?,?,?,?,?,?)',(parent['author_id'],'hall_reply','Nova conversa no Hall','Sua publicação recebeu um comentário. Abra o aplicativo para ver.',user['id'],s.now(),'members',rid))
+        from .realtime import publish, dispatch_notification_event
+        if parent['author_id']!=user['id'] and allowed(c,{'id':parent['author_id']},'members'):
+            dispatch_notification_event(c, user_id=parent['author_id'], kind='hall_reply', title='Nova conversa no Hall', message=f"{user['name']} respondeu à sua publicação no Hall.", sector='members', context_id=rid)
         s.audit(c,user['id'],'hall:comment_created:'+cid)
+        u_row=c.execute('SELECT name,avatar_url FROM users WHERE id=?',(user['id'],)).fetchone()
+        c_dict={'id':cid,'post_id':rid,'content':data.content.strip(),'author_id':user['id'],'author_name':u_row['name'],'author_avatar':u_row['avatar_url'],'created_at':s.now(),'can_manage':False}
+        comments_count=c.execute('SELECT count(*) FROM hall_comments WHERE post_id=? AND active=1',(rid,)).fetchone()[0]
+        publish('hall:comment',{'post_id':rid,'comment':c_dict,'comments_count':comments_count},sector='members')
     return {'ok':True,'id':cid}
 
 @router.delete('/comments/{cid}')
@@ -158,6 +176,10 @@ def remove_comment(cid:str,user=Depends(participant)):
         if not row:fail('missing','Comentário não encontrado.',404)
         post(c,row['post_id']);can_edit(c,user,dict(row))
         c.execute('UPDATE hall_comments SET active=0 WHERE id=?',(cid,));s.audit(c,user['id'],'hall:comment_archived:'+cid)
+        pid=row['post_id']
+        comments_count=c.execute('SELECT count(*) FROM hall_comments WHERE post_id=? AND active=1',(pid,)).fetchone()[0]
+        from .realtime import publish
+        publish('hall:comment_removed',{'post_id':pid,'comment_id':cid,'comments_count':comments_count},sector='members')
     return {'ok':True}
 
 class Report(BaseModel):reason:str=Field(pattern='^(inappropriate|privacy|spam|other)$')

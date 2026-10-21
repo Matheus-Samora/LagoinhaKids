@@ -1,4 +1,5 @@
 import {accountProfileUI} from './account-profile.js';
+import {realtime} from './platform/realtime.js';
 import {notificationCenterUI} from './notification-center.js';
 import {uiIcon,hasIcon} from './ui/icons.js';
 import {subscribeWebPush} from './web-push.js';
@@ -1185,7 +1186,7 @@ document.addEventListener('click',async e=>{
   toast('Conta removida da lista deste aparelho.');
  }
  if(action==='toggle-theme'){toggleTheme();if(S.user)render();else renderLogin();return;}
- if(action==='logout'){localStorage.removeItem('lagoinha_web_push_registered');localStorage.removeItem('lagoinha_push_enabled');await api('/auth/logout',{method:'POST'}).catch(()=>{});S.user=null;S.csrf='';S.token='';navHistory.length=0;renderLogin();toast('Sessão encerrada com sucesso.');}
+ if(action==='logout'){realtime.disconnect();localStorage.removeItem('lagoinha_web_push_registered');localStorage.removeItem('lagoinha_push_enabled');await api('/auth/logout',{method:'POST'}).catch(()=>{});S.user=null;S.csrf='';S.token='';navHistory.length=0;renderLogin();toast('Sessão encerrada com sucesso.');}
  if(action==='open-push-modal')promptPushPermissionModal();
  if(action==='activate-notifications')await requestNotificationPermission(true);
  if(action==='dismiss-push-modal'){localStorage.setItem('lagoinha_push_dismissed_until',String(Date.now()+86400000*3));sessionStorage.setItem('lagoinha_push_session_dismissed','true');modal.close();}
@@ -1404,7 +1405,7 @@ async function start(){
  void initNativeNotifications();
  if(NATIVE&&!S.apiOrigin){renderLogin();return;}
  try{const health=await api('/health');S.google=health.google_enabled;}catch{renderLogin();toast('Não foi possível conectar. Verifique sua internet e tente entrar novamente.',true);return;}
- try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();checkAutoPromptPush();}catch{renderLogin();}
+ try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();checkAutoPromptPush();realtime.connect(S.csrf,S.apiOrigin);}catch{renderLogin();}
  const params=new URL(location.href).searchParams;const resetTok=params.get('reset')||new URLSearchParams(location.hash.slice(1)).get('reset');if(resetTok){history.replaceState({},'',location.pathname);resetModal(resetTok);}
  if(params.get('verify'))showModal('Confirmar e-mail','Confirme o endereço associado à sua conta.',`<form data-form="verify-email"><input type="hidden" name="token" value="${escape(params.get('verify'))}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar e-mail</button></form>`);
  const err=params.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
@@ -1477,7 +1478,14 @@ async function syncLive(){
   }
  }catch{}finally{syncing=false;}
 }
-setInterval(()=>void syncLive(),5000);
+// Real-time reactive stream listeners for Kids: instant response without 5-second polling lag
+window.addEventListener('lagoinha:realtime:kids:sync', () => void syncLive());
+window.addEventListener('lagoinha:realtime:kids:attendance', () => void syncLive());
+window.addEventListener('lagoinha:realtime:kids:paging', () => void syncLive());
+window.addEventListener('lagoinha:realtime:notification:new', () => void syncLive());
+
+// Gentle 60s background safety heartbeat (reduced from aggressive 5s polling)
+setInterval(()=>void syncLive(),60000);
 setInterval(()=>void checkLiveUpdate(),60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){void syncLive();void checkLiveUpdate();}});
 window.addEventListener('focus',()=>{void syncLive();void checkLiveUpdate();});

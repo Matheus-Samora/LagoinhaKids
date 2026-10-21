@@ -3464,3 +3464,189 @@ img {
   color: #86efac;
   border-color: #065f46;
 }
+
+/* ==========================================================================
+   Real-Time Reactive SSE & Toast System (Microservice Architecture)
+   ========================================================================== */
+
+.realtime-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  width: calc(100vw - 40px);
+  pointer-events: none;
+}
+
+.realtime-toast {
+  pointer-events: auto;
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 14px 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: translateX(120%);
+  animation: realtimeToastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.realtime-toast.is-leaving {
+  transform: translateX(120%);
+  opacity: 0;
+}
+
+.realtime-toast.is-clickable {
+  cursor: pointer;
+}
+
+.realtime-toast.is-clickable:hover {
+  border-color: var(--ink);
+}
+
+.realtime-toast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.realtime-toast-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #10b981;
+}
+
+.realtime-toast-close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.realtime-toast-close:hover {
+  color: var(--ink);
+}
+
+.realtime-toast-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.realtime-toast-msg {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.realtime-toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.realtime-toast-bar {
+  height: 100%;
+  background: #10b981;
+  width: 100%;
+  animation: realtimeProgressBar 6s linear forwards;
+}
+
+@keyframes realtimeToastSlideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes realtimeProgressBar {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* Status Indicator Dot & Pill */
+.realtime-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #059669;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .realtime-status-pill {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.realtime-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: realtimePulse 2s infinite;
+}
+
+.realtime-status-pill:not(.is-connected) {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #ca8a04;
+}
+
+.realtime-status-pill:not(.is-connected) .realtime-dot {
+  background: #eab308;
+  animation: none;
+}
+
+@keyframes realtimePulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}

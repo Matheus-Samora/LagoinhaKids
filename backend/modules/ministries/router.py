@@ -159,6 +159,12 @@ def persist_schedule(data:Schedule,user,rid=None):
                 n_title=f"🗓️ Nova Escalação · {data.ministry}" if not rid else f"🔄 Escalação Atualizada · {data.ministry}"
                 n_msg=f"Olá {p_row['name']}! Você foi escalado(a) para o culto '{data.title.strip()}' em {fmt_date} às {data.service_time}{role_desc}. Confira os detalhes na área de Ministérios." if not rid else f"Olá {p_row['name']}! Sua escala no ministério {data.ministry} foi atualizada para o culto '{data.title.strip()}' em {fmt_date} às {data.service_time}{role_desc}."
                 c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
+                from ...realtime import dispatch_notification_event
+                dispatch_notification_event(c, u_row['id'], 'ministry_schedule', n_title, n_msg, sector='ministries')
+        from ...realtime import publish
+        publish('ministries:schedule', {'action': 'update' if rid else 'create', 'schedule_id': res['id'], 'ministry': data.ministry}, sector='ministries')
+        if p_row and u_row:
+            publish('ministries:my_schedule', {'action': 'assigned', 'schedule_id': res['id'], 'ministry': data.ministry}, user_id=u_row['id'])
         return res
 
 @router.post('/schedules')
@@ -180,6 +186,12 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
                 n_title=f"⚠️ Escalação Desmarcada · {old['ministry']}"
                 n_msg=f"Olá {p_row['name']}! Sua escalação para o culto '{old['title']}' em {fmt_date} às {old['service_time']} foi desmarcada pela coordenação."
                 c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(u_row['id'],None,'ministry_schedule',n_title,n_msg,user['id'],s.now(),'ministries'))
+                from ...realtime import dispatch_notification_event
+                dispatch_notification_event(c, u_row['id'], 'ministry_schedule', n_title, n_msg, sector='ministries')
+        from ...realtime import publish
+        publish('ministries:schedule', {'action': 'deleted', 'schedule_id': rid, 'ministry': old['ministry']}, sector='ministries')
+        if p_row and u_row:
+            publish('ministries:my_schedule', {'action': 'cancelled', 'schedule_id': rid, 'ministry': old['ministry']}, user_id=u_row['id'])
         return archive(c,'ministries_schedules','ministries',rid,version,user)
 
 class ScheduleResponse(BaseModel):
@@ -213,10 +225,17 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
                 if l['user_id'] and l['user_id']!=user['id']:
                     notified.add(l['user_id'])
                     c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(l['user_id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
+                    from ...realtime import dispatch_notification_event
+                    dispatch_notification_event(c, l['user_id'], 'ministry_schedule_update', n_title, n_msg, sector='ministries')
             if not notified:
                 for adm in c.execute("SELECT id FROM users WHERE role='admin' AND active=1").fetchall():
                     if adm['id']!=user['id']:
                         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(adm['id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
+                        from ...realtime import dispatch_notification_event
+                        dispatch_notification_event(c, adm['id'], 'ministry_schedule_update', n_title, n_msg, sector='ministries')
+        from ...realtime import publish
+        publish('ministries:schedule', {'action': 'response', 'schedule_id': rid, 'status': data.status, 'person_id': p_row['id'], 'ministry': old['ministry']}, sector='ministries')
+        publish('ministries:my_schedule', {'action': 'responded', 'schedule_id': rid, 'status': data.status}, user_id=user['id'])
         return {'ok':True,'id':rid,'status':data.status}
 
 @router.get('/my-schedules')

@@ -70,7 +70,15 @@ export function communityHallUI({api,e,identity,onProfileSaved}){
     try{await load();await updatePost(rid);}catch(err){error(new Error('Comentário enviado. Não foi possível atualizar a conversa. Reabra para conferir.'));}
    };
    await load();
-   const poll=setInterval(()=>{if(!document.hidden&&d.isConnected)void load().catch(()=>{});},30000);d.addEventListener('close',()=>clearInterval(poll),{once:true});
+   const onRtComment = ev => {
+     if (d.isConnected && ev.detail?.post_id === rid) void load();
+   };
+   window.addEventListener('lagoinha:realtime:hall:comment', onRtComment);
+   window.addEventListener('lagoinha:realtime:hall:comment_removed', onRtComment);
+   d.addEventListener('close', () => {
+     window.removeEventListener('lagoinha:realtime:hall:comment', onRtComment);
+     window.removeEventListener('lagoinha:realtime:hall:comment_removed', onRtComment);
+   }, { once: true });
   }catch(err){if(d.isConnected)d.querySelector('[role=status]').textContent=err.message;}
  }
  async function updatePost(rid){const fresh=await api('/platform/hall/posts/'+rid);feed=feed.map(p=>p.id===rid?fresh:p);const old=host.querySelector(`[data-post="${rid}"]`);if(old)old.outerHTML=postCard(fresh);}
@@ -133,6 +141,55 @@ export function communityHallUI({api,e,identity,onProfileSaved}){
   try{await Promise.all([loadFeed(),loadPeople()]);if(initialView==='moderation'&&moderator){switchMode('reports');await moderation();}const rid=location.hash.split('/')[1];if(rid&&/^[\da-f-]{36}$/i.test(rid))await discussion(rid);}catch(err){status(err.message+' Toque em atualizar para tentar novamente.',true);}
  }
  document.addEventListener('lagoinha:profile-saved',ev=>{if(!host?.isConnected)return;const old=host.querySelector('.ch-composer-start .ch-avatar');if(old)old.outerHTML=avatar(ev.detail.name,ev.detail.avatar_url);});
- setInterval(async()=>{if(!host?.isConnected||document.hidden||mode!=='wall'||category!=='all'||mine||author)return;try{const next=await api('/platform/hall/summary');if(next.latest_id&&next.latest_id!==feed[0]?.id){const refresh=host.querySelector('[data-hall-refresh]');refresh.classList.add('has-news');refresh.setAttribute('aria-label','Novas conversas disponíveis. Atualizar Hall.');}}catch{}},60000);
+ window.addEventListener('lagoinha:realtime:hall:reaction', ev => {
+   if (!host?.isConnected) return;
+   const { post_id, reactions } = ev.detail || {};
+   const btn = host.querySelector(`[data-post="${post_id}"] [data-react]`);
+   if (btn) {
+     const sp = btn.querySelector('span');
+     if (sp) sp.textContent = reactions;
+   }
+   const p = feed.find(x => x.id === post_id);
+   if (p) p.reactions = reactions;
+ });
+ window.addEventListener('lagoinha:realtime:hall:post', ev => {
+   if (!host?.isConnected) return;
+   const { action, post, post_id } = ev.detail || {};
+   if (action === 'archived') {
+     host.querySelector(`[data-post="${post_id}"]`)?.remove();
+     feed = feed.filter(x => x.id !== post_id);
+   } else if (action === 'updated' && post) {
+     const old = host.querySelector(`[data-post="${post.id}"]`);
+     if (old) old.outerHTML = postCard(post);
+     feed = feed.map(x => x.id === post.id ? post : x);
+   } else if (action === 'created' && post) {
+     const refresh = host.querySelector('[data-hall-refresh]');
+     if (refresh) {
+       refresh.classList.add('has-news');
+       refresh.setAttribute('aria-label', 'Novas conversas disponíveis. Atualizar Hall.');
+     }
+     if (mode === 'wall' && category === 'all' && !mine && !author) {
+       const feedEl = host.querySelector('[data-feed]');
+       if (feedEl && !feedEl.querySelector('.ch-empty')) {
+         feedEl.insertAdjacentHTML('afterbegin', postCard(post));
+         feed.unshift(post);
+       }
+     }
+     const countEl = host.querySelector('[data-post-count]');
+     if (countEl && countEl.textContent !== '—') {
+       countEl.textContent = String(Number(countEl.textContent || 0) + 1);
+     }
+   }
+ });
+ window.addEventListener('lagoinha:realtime:hall:comment', ev => {
+   if (!host?.isConnected) return;
+   const { post_id, comments_count } = ev.detail || {};
+   const btn = host.querySelector(`[data-post="${post_id}"] [data-discuss]`);
+   if (btn) {
+     btn.innerHTML = `${symbol('chat')} ${comments_count} <span class="ch-action-label">Conversar</span>`;
+   }
+   const p = feed.find(x => x.id === post_id);
+   if (p) p.comments = comments_count;
+ });
  return {mount};
 }

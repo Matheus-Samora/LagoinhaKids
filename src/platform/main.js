@@ -1,5 +1,6 @@
 import {communityHallUI} from './hall.js';
 import {accountProfileUI} from '../account-profile.js';
+import {realtime, showRealtimeToast} from './realtime.js';
 import {notificationCenterUI} from '../notification-center.js';
 import {personalDataUI} from './personal.js';
 import {uiIcon} from '../ui/icons.js';
@@ -644,6 +645,7 @@ function render(message=''){
      </div>
     </div>
     <div class="topbar-user-area">
+     <div class="realtime-status-pill" data-realtime-status title="Tempo real ativo"><span class="realtime-dot"></span><span class="realtime-text">Ao vivo</span></div>
      <button type="button" class="quiet topbar-btn-compact" id="topbar-profile-btn" aria-label="Meu perfil">${uiIcon('identity',18)}</button><button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
      <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
@@ -734,7 +736,7 @@ function render(message=''){
  };
  bindPushBtn(root.querySelector('#enable-push'));
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
- const handleLogout=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
+ const handleLogout=async()=>{try{realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
  root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
@@ -886,23 +888,64 @@ function auditSection(){
 await welcome(currentAreaKey());
 const resetToken=new URLSearchParams(location.search).get('reset')||new URLSearchParams(location.hash.slice(1)).get('reset');
 if(resetToken){history.replaceState(null,'',location.pathname);recoveryScreen({root,api,e,login,token:resetToken});}
-else {try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}}
+else {try{const me=await api('/me');csrf=me.csrf;await load();realtime.connect(csrf,'');}catch{login();}}
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
+function updateTopBadge(count){
+ const button=root.querySelector('#topbar-notif-btn');if(!button)return;
+ button.querySelector('.notif-count-badge')?.remove();
+ if(count){const badge=document.createElement('span');badge.className='badge notif-count-badge';badge.textContent=count>99?'99+':String(count);button.append(badge);}
+}
 
 async function refreshNoticeBadge(){
  if(!identity||document.hidden)return;
  try{
   const next=await api('/notification-center/summary');identity.notification_unread_count=next.unread_count;
-  const button=root.querySelector('#topbar-notif-btn');if(!button)return;
-  button.querySelector('.notif-count-badge')?.remove();
-  if(next.unread_count){const badge=document.createElement('span');badge.className='badge notif-count-badge';badge.textContent=next.unread_count>99?'99+':String(next.unread_count);button.append(badge);}
+  updateTopBadge(next.unread_count);
  }catch{}
 }
 setInterval(()=>void refreshNoticeBadge(),60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshNoticeBadge();});
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',event=>{
  if(event.data?.type==='NEW_NOTICE'){void refreshNoticeBadge();noticeCenter.notify();}
+});
+
+realtime.on('notification:new', notice => {
+ if (notice.unread_count !== undefined) {
+  if (identity) identity.notification_unread_count = notice.unread_count;
+  updateTopBadge(notice.unread_count);
+ }
+ noticeCenter.notify();
+ showRealtimeToast({
+  title: notice.title || 'Novo aviso',
+  message: notice.message || '',
+  onClick: () => noticeCenter.open({ noticeId: notice.id })
+ });
+});
+
+realtime.on('notification:count', ({ unread_count }) => {
+ if (identity) identity.notification_unread_count = unread_count;
+ updateTopBadge(unread_count);
+});
+
+realtime.on('ministries:my_schedule', async () => {
+ try {
+  communityData = await api('/platform/community');
+  render();
+ } catch {}
+});
+
+realtime.on('announcement:new', async ann => {
+ try {
+  communityData = await api('/platform/community');
+  render();
+  showRealtimeToast({
+   title: '📢 Novo Comunicado Oficial',
+   message: ann.title || '',
+   url: '#announcements'
+  });
+ } catch {}
 });
 
 window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});
