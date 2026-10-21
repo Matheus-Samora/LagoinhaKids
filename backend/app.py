@@ -91,10 +91,18 @@ app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_cr
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
-    token=bearer[7:] if bearer.startswith('Bearer ') else (request.query_params.get('token') or request.cookies.get(COOKIE,''))
+    query_token=request.query_params.get('token','')
+    cookie_token=request.cookies.get(COOKIE,'')
+    tokens_to_try=[]
+    if bearer.startswith('Bearer '):tokens_to_try.append(bearer[7:])
+    if cookie_token:tokens_to_try.append(cookie_token)
+    if query_token and query_token not in tokens_to_try:tokens_to_try.append(query_token)
+    row=None
     with s.db() as c:
-        row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=?',(s.digest(token),)).fetchone()
-    if not row or row['expires']<time.time() or not row['active']: fail('login','Entre para continuar.',401)
+        for t in tokens_to_try:
+            row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE (ss.token=? OR ss.csrf=?) AND ss.expires>? AND u.active=1',(s.digest(t),t,int(time.time()))).fetchone()
+            if row:break
+    if not row:fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
     shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/'))

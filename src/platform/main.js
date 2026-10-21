@@ -645,7 +645,7 @@ function render(message=''){
      </div>
     </div>
     <div class="topbar-user-area">
-     <div class="realtime-status-pill" data-realtime-status title="Tempo real ativo"><span class="realtime-dot"></span><span class="realtime-text">Ao vivo</span></div>
+     <div class="realtime-status-pill ${realtime.connected ? 'is-connected' : ''}" data-realtime-status title="${realtime.connected ? 'Tempo real ativo (ao vivo)' : 'Reconectando em tempo real...'}"><span class="realtime-dot"></span><span class="realtime-text">${realtime.connected ? 'Ao vivo' : 'Conectando…'}</span></div>
      <button type="button" class="quiet topbar-btn-compact" id="topbar-profile-btn" aria-label="Meu perfil">${uiIcon('identity',18)}</button><button type="button" class="quiet topbar-btn-compact" id="topbar-notif-btn" title="Notificações">${uiIcon('notifications',18)} ${t("nav.notices", "Avisos")}${unreadCount?`<span class="badge notif-count-badge">${unreadCount}</span>`:''}</button>
      <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>

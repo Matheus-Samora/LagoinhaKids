@@ -48,6 +48,33 @@ def test_realtime_stream_with_query_token(records):
     assert 'allowed_sectors' in payload
 
 
+def test_realtime_stream_cookie_and_csrf(records):
+    from starlette.testclient import TestClient
+    from backend.app import app, COOKIE
+    c1 = client(1)
+    me_res = c1.get('/api/me')
+    assert me_res.status_code == 200
+    csrf = me_res.json()['csrf']
+    cookie_val = c1.cookies.get(COOKIE)
+    assert cookie_val, "Session cookie should be present"
+
+    # Case 1: Connect with cookie alone
+    res_cookie = c1.get('/api/realtime/stream?once=1')
+    assert res_cookie.status_code == 200
+    assert 'event: connected' in res_cookie.text
+
+    # Case 2: Connect with cookie AND ?token=<csrf> (web browser pattern)
+    res_both = c1.get(f'/api/realtime/stream?token={csrf}&once=1')
+    assert res_both.status_code == 200
+    assert 'event: connected' in res_both.text
+
+    # Case 3: Connect without cookie, only ?token=<csrf>
+    tc = TestClient(app)
+    res_csrf_only = tc.get(f'/api/realtime/stream?token={csrf}&once=1')
+    assert res_csrf_only.status_code == 200
+    assert 'event: connected' in res_csrf_only.text
+
+
 def test_realtime_targeted_and_sector_events(records):
     # Register test subscribers directly on broker to verify dispatch logic
     sub1 = RealtimeSubscriber(user_id=1, allowed_sectors={'members', 'ministries'})
