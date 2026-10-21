@@ -18,7 +18,7 @@ class ProfileUpdate(BaseModel):
 def account(c,user):
     row=c.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
     value=dict(row);value['role']=user['role']
-    return public_user(value)
+    return public_user(value,connection=c)
 
 
 @router.get('/profile')

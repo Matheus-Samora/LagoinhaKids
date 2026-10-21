@@ -3,6 +3,7 @@
 ## Problemas corrigidos
 
 - Perfil da conta condicionado indevidamente à permissão do Kids. Perfil, foto e central de notificações agora usam autenticação compartilhada, mantendo CSRF e limites de acesso aos dados.
+- A serialização do perfil reutiliza a conexão da transação, evitando requisitar outra conexão do pool enquanto a gravação está bloqueada.
 - Foto enviada e associada em duas operações. O novo formulário grava nome, celular e imagem na mesma transação. Uma falha ou versão desatualizada não deixa a imagem parcialmente associada nem sobrescreve alterações mais recentes.
 - Cadastro criado por um usuário confundido com seu cadastro pessoal. Identidade pessoal agora tem vínculo explícito com a conta; registros de terceiros continuam preservados. A migração associa apenas cadastros aprovados com correspondência única de proprietário, nome, e-mail e nascimento.
 - Formulários simplificados apagavam campos omitidos. Membros, famílias, GCs, contas, lançamentos, centros de custo, notas, fechamentos, vínculos, escalas e materiais preservam campos que não foram enviados. Um valor vazio explícito continua permitindo limpar um campo opcional.
@@ -15,7 +16,7 @@
 
 ## Validação
 
-- Suíte automatizada de autenticação, permissões, cadastros, aulas, presença, eventos, arquivos, finanças, notificações e integridade, acrescida de 12 regressões de salvamento.
+- Suíte automatizada de autenticação, permissões, cadastros, aulas, presença, eventos, arquivos, finanças, notificações e integridade, acrescida de 13 regressões de salvamento.
 - Testes específicos de gravação atômica, leitura em nova sessão, conflitos, ausência de arquivos órfãos no perfil, CSRF, acesso sem Kids, campos omitidos, migração de identidade e consistência de fechamentos.
 - Build Vite e auditoria das dependências de produção.
 - Interface local isolada: nome, celular e foto salvos pelo Kids; persistência após recarregar; confirmação de descarte cancelada mantém rascunho; fechamento sem alterações; acesso ao mesmo perfil no Members; criação e fechamento de cadastro; enquadramento de 390 × 844.

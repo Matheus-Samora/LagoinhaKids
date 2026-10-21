@@ -172,3 +172,12 @@ def test_identity_migration_only_links_an_approved_unambiguous_registration(reco
         migrate(db)
         assert db.execute('SELECT account_user_id FROM members_people WHERE id=?',(approved,)).fetchone()[0]==3
         assert db.execute('SELECT account_user_id FROM members_people WHERE id=?',(unrelated,)).fetchone()[0] is None
+
+
+def test_profile_serialization_reuses_transaction_connection(records,monkeypatch):
+    from backend.profile import account
+    with s.db() as db:
+        user=dict(db.execute('SELECT * FROM users WHERE id=3').fetchone())
+        def unexpected_connection():raise AssertionError('Profile must not acquire a second pool connection during its transaction')
+        monkeypatch.setattr(s,'db',unexpected_connection)
+        assert account(db,user)['id']==3

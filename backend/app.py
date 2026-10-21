@@ -25,7 +25,7 @@ NATIVE_ORIGINS={'https://localhost','capacitor://localhost'}
 
 def fail(code,message,status=400): raise HTTPException(status,detail={'code':code,'message':message})
 def google_ready(): return bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))
-def public_user(row):
+def public_user(row,connection=None):
     keys = row.keys() if hasattr(row, 'keys') else []
     staff_r = row['staff_role'] if 'staff_role' in keys else ''
     if not staff_r and row['role'] == 'teacher':
@@ -33,7 +33,7 @@ def public_user(row):
     elif not staff_r and row['role'] == 'admin':
         staff_r = 'admin'
     from .platform_access import platform_admin,is_pastor
-    with s.db() as c:
+    with (nullcontext(connection) if connection is not None else s.db()) as c:
         central=platform_admin(c,row['id'])
         pastor=is_pastor(c,row['id'])
     if pastor and not staff_r:
