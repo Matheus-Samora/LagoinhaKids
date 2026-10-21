@@ -41,7 +41,7 @@ export function showRealtimeToast({ title, message, url, onClick }) {
   toast.setAttribute('role', 'alert');
   toast.innerHTML = `
     <div class="realtime-toast-head">
-      <span class="realtime-toast-badge"><span class="realtime-dot"></span> Ao vivo</span>
+      <span class="realtime-toast-badge">Aviso</span>
       <button type="button" class="realtime-toast-close" aria-label="Fechar aviso">×</button>
     </div>
     <strong class="realtime-toast-title"></strong>
