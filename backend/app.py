@@ -14,7 +14,7 @@ from starlette.formparsers import MultiPartParser
 from . import store as s
 from .push_transport import push_platforms
 
-app=FastAPI(title='Lagoinha Systems',version='2.5.0')
+app=FastAPI(title='Lagoinha Systems',version='2.6.0')
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -763,6 +763,8 @@ def get_media(media_id: str, user=Depends(session)):
 
 from .profile import router as profile_router
 app.include_router(profile_router)
+from .hall import router as hall_router
+app.include_router(hall_router)
 
 from .security import router as security_router
 app.include_router(security_router)
@@ -810,7 +812,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.5.0',
+        'version': '2.6.0',
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

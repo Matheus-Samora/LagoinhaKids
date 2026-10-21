@@ -176,3 +176,7 @@ def migrate(c):
                 c.execute("UPDATE members_people SET account_user_id=? WHERE id=?",(u_match['id'],person['id']))
         c.execute("INSERT INTO platform_migrations VALUES('link_members_by_email_v249')")
     c.execute('CREATE UNIQUE INDEX IF NOT EXISTS members_account_identity ON members_people(account_user_id) WHERE active=1 AND account_user_id IS NOT NULL')
+
+    ensure_column(c,'notifications','context_id',"TEXT NOT NULL DEFAULT ''")
+    from ..hall_schema import migrate as migrate_hall
+    migrate_hall(c)

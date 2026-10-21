@@ -24,11 +24,11 @@ def apns_jwt():
 def send_apns(token,notification_id):
     host='api.sandbox.push.apple.com' if os.getenv('KIDS_APNS_SANDBOX','true')=='true' else 'api.push.apple.com'
     from . import store as s
-    from .notification_policy import metadata
+    from .notification_policy import metadata,notification_url
     with s.db() as c:row=c.execute('SELECT * FROM notifications WHERE id=?',(notification_id,)).fetchone()
     meta=metadata(dict(row)) if row else {'url':'/membro','category':'system'}
     base=meta['url'].split('#')[0]
-    target=f'{base}?notice={notification_id}'+('#notifications' if base=='/kids' else '')
+    target=notification_url(notification_id,meta)
     aps={'alert':{'title':'Lagoinha Systems','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'}}
     if meta['category'] not in ('activity','announcements'):aps['sound']='default'
     with httpx.Client(http2=True,timeout=15) as client:

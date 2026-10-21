@@ -1,3 +1,4 @@
+import {communityHallUI} from './hall.js';
 import {accountProfileUI} from '../account-profile.js';
 import {notificationCenterUI} from '../notification-center.js';
 import {personalDataUI} from './personal.js';
@@ -36,13 +37,14 @@ const brandMeta={
 };
 const MINISTRY_CATALOG=['Music','Intercessão','Hero','Shine','Bem Casados','Rocket','Legacy','Kids','Manutenção','Voluntário','Follow','Link','Future','Gourmet','Champions','DNA'];
 const roleNames={admin:'Administrador',pastor:'Pastor / Pastora',teacher:'Professor(a)',parent:'Responsável',editor:'Responsável — lançar e editar',viewer:'Visualizador — somente leitura'};
-let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=null,notifDrawerOpen=false,activeSectionTab='all';
+let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=null,notifDrawerOpen=false,activeSectionTab=location.hash.slice(1).split('/')[0]||'all';
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
 
 const AREA_TABS={
  membro:[
   {id:'all',label:'Início',icon:'home'},
+  {id:'hall',label:'Hall de Membros',icon:'community'},
   {id:'announcements',label:'Comunicados',icon:'announcements'},
   {id:'gcs',label:'GCs',icon:'groups'},
   {id:'ministries',label:'Ministérios',icon:'ministries'}
@@ -113,7 +115,8 @@ async function api(path,options={}){
 }
 
 const personal=personalDataUI({api,e});
-const sectors=createSectors({api,e,identity:()=>identity,openQrModal:()=>openAppDownloadQrModal()});
+const portalHall=communityHallUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
+const sectors=createSectors({api,e,identity:()=>identity,onProfileSaved:profileSaved,openQrModal:()=>openAppDownloadQrModal()});
 
 const brand=(areaKey=currentAreaKey())=>{
  const meta=brandMeta[areaKey]||brandMeta.systems;
@@ -203,18 +206,28 @@ async function load(justLoggedIn=false){
  render();
 }
 
+function profileSaved(user){
+ identity.user=user;saveAccount(user);
+ if(activeSectionTab==='hall'){
+  const badge=root.querySelector('#account-profile');if(badge)badge.innerHTML=user.avatar_url?`<img src="${e(user.avatar_url)}" alt="Sua foto" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:`<span class="avatar mini">${e(initials(user.name))}</span>`;
+  const name=root.querySelector('.sidebar-user-info strong');if(name)name.textContent=user.name;
+  document.dispatchEvent(new CustomEvent('lagoinha:profile-saved',{detail:user}));
+ }else render('Perfil salvo.');
+}
+
 function portalHero(module,selected){
  if(module)return '';
  const ti=identity.platform_admin&&!['access','membro'].includes(selected);
  const actions=ti
   ?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>'
-  :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button><a class="button secondary" href="/members" id="open-hall-hero">${uiIcon('community',18)} Hall de Membros</a><button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
+  :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button>${identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled)?`<a class="button secondary" href="/membro#hall" id="open-hall-hero">${uiIcon('community',18)} Hall de Membros</a>`: ''}<button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
  return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${actions}</div></section>`;
 }
 
 function notificationsBanner(){return '';}
 
 function memberCommunityPortal(tab='all'){
+ if(tab==='hall')return '<div id="member-hall-root"></div>';
  const cells=communityData?.cells||[];
  const mins=communityData?.ministries||MINISTRY_CATALOG.map(name=>({name,total:0,leaders:0}));
  const myApps=communityData?.my_applications||[];
@@ -552,7 +565,8 @@ function render(message=''){
  const isMemberPortal=!module&&(selected==='access'||selected==='membro'||!identity.platform_admin);
  const areaKey=module?module.id:(isMemberPortal?'membro':'systems');
  const personalOnly=false;
- const tabs=AREA_TABS[areaKey]||AREA_TABS.membro;
+ const canHall=identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled);
+ const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>item.id!=='hall'||canHall);
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -662,11 +676,14 @@ function render(message=''){
   </div>
  </div>`;
 
+ if(isMemberPortal&&activeSectionTab==='hall'&&canHall)void portalHall.mount(root.querySelector('#member-hall-root'));
  if(module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
 
  root.querySelectorAll('[data-switch-tab]').forEach(btn=>btn.addEventListener('click',()=>{
   const nextTab=btn.dataset.switchTab||'all';
   activeSectionTab=nextTab;
+  const recordTools=root.querySelector('[data-record-tools]');if(recordTools)recordTools.style.display=nextTab==='hall'?'none':'flex';
+  history.replaceState({},'',location.pathname+location.search+'#'+nextTab);
   if(module?.enabled&&module.id!=='kids'){
    root.querySelectorAll('[data-switch-tab]').forEach(b=>b.classList.toggle('active',b.dataset.switchTab===nextTab));
    const crumb=root.querySelector('.desktop-breadcrumb strong');
@@ -680,7 +697,7 @@ function render(message=''){
   }
  }));
 
- root.querySelector('#open-my-profile-hero')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
+ root.querySelector('#open-my-profile-hero')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
   root.querySelectorAll('[data-schedule-respond]').forEach(b=>{
    b.onclick=async()=>{
     const sid=b.dataset.scheduleRespond;
@@ -704,7 +721,7 @@ function render(message=''){
  if(module?.enabled&&!personalOnly&&module.id!=='kids'){
   const container=root.querySelector('#sector-content');
   const bar=document.createElement('div');
-  bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
+  bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';bar.dataset.recordTools='true';if(activeSectionTab==='hall')bar.style.display='none';
   const archiveButton=document.createElement('button');
   archiveButton.type='button';archiveButton.className='secondary';archiveButton.textContent='Arquivados';
   archiveButton.onclick=()=>void personal.archives(module.id,()=>sectors.mount(module,activeSectionTab)).catch(error=>{root.querySelector('.status').textContent=error.message;});
@@ -719,8 +736,8 @@ function render(message=''){
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
  const handleLogout=async()=>{try{await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
- root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
- root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:user=>{identity.user=user;saveAccount(user);render('Perfil salvo.');}}).open());
+ root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
+ root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
  root.querySelector('#sidebar-logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-theme-btn')?.addEventListener('click',()=>{toggleTheme();render(message);});
  root.querySelector('#topbar-lang-select')?.addEventListener('change',ev=>{setLang(ev.target.value);render(message);});
@@ -887,3 +904,5 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refre
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',event=>{
  if(event.data?.type==='NEW_NOTICE'){void refreshNoticeBadge();noticeCenter.notify();}
 });
+
+window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});

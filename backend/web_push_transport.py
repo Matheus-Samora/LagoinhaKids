@@ -17,7 +17,7 @@ def send(subscription,notification_id):
     from pywebpush import webpush,WebPushException
     from py_vapid import Vapid
     try:
-        from .notification_policy import metadata
+        from .notification_policy import metadata,notification_url
         with s.db() as c:
             row=c.execute('SELECT * FROM notifications WHERE id=?',(notification_id,)).fetchone()
         if not row:return False
@@ -33,10 +33,11 @@ def send(subscription,notification_id):
                 'system':'Há uma atualização da sua conta.'
             }[meta['category']],
             'tag':f'notice-{notification_id}',
-            'url':f'{base}?notice={notification_id}'+('#notifications' if base=='/kids' else ''),
+            'url':notification_url(notification_id,meta),
             'id':notification_id,'kind':notice['kind'],'category':meta['category'],
             'urgent':urgent,'priority':meta['priority']
         }
+        if notice['kind']=='hall_reply':payload['body']='Há uma nova conversa no Hall de Membros.'
 
         webpush(
             subscription_info={'endpoint':subscription['endpoint'],'keys':json.loads(subscription['keys_json'])},

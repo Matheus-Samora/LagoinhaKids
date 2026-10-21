@@ -23,10 +23,10 @@ def deliver_batch(limit=50):
         credentials.refresh(Request());project=credentials.project_id
     sent=0
     with s.db() as c:
-        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id,n.kind,n.child_id,n.created_at,n.read_at,n.sector FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY CASE WHEN n.kind IN ("urgent_call","please_pickup","pickup_ready") THEN 0 WHEN n.kind IN ("sector_application","arriving") THEN 1 ELSE 2 END,o.id LIMIT ?',(int(time.time()),limit)).fetchall()
+        rows=c.execute('SELECT o.id,o.attempts,n.id notification_id,n.user_id,n.kind,n.child_id,n.created_at,n.read_at,n.sector,n.context_id FROM outbox o JOIN notifications n ON n.id=o.notification_id WHERE o.status="pending" AND o.next_attempt<=? ORDER BY CASE WHEN n.kind IN ("urgent_call","please_pickup","pickup_ready") THEN 0 WHEN n.kind IN ("sector_application","arriving") THEN 1 ELSE 2 END,o.id LIMIT ?',(int(time.time()),limit)).fetchall()
     for row in rows:
         try:
-            from .notification_policy import push_policy,metadata
+            from .notification_policy import push_policy,metadata,notification_url
             with s.db() as c:
                 send,delay,reason=push_policy(c,dict(row))
                 if not send:
@@ -35,7 +35,7 @@ def deliver_batch(limit=50):
                     continue
             from .platform_access import allowed
             with s.db() as c:
-                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved','announcement')
+                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved','announcement','hall_reply')
                 if not sector_notice and not allowed(c,{'id':row['user_id']},'kids'):
                     c.execute('UPDATE outbox SET next_attempt=?,last_error=? WHERE id=?',(int(time.time())+3600,'Acesso ao módulo Kids suspenso.',row['id']))
                     continue
@@ -65,7 +65,7 @@ def deliver_batch(limit=50):
                     if accepted(row['notification_id'],device['platform'],token):delivered_any=True;continue
                     meta=metadata(dict(row))
                     base=meta['url'].split('#')[0]
-                    target=f"{base}?notice={row['notification_id']}"+('#notifications' if base=='/kids' else '')
+                    target=notification_url(row['notification_id'],meta)
                     response=send_apns(token,row['notification_id']) if device['platform']=='ios' else httpx.post(f'https://fcm.googleapis.com/v1/projects/{project}/messages:send',headers={'Authorization':'Bearer '+credentials.token},json={'message':{'token':token,'notification':{'title':'Lagoinha Systems' if sector_notice else 'Lagoinha Kids','body':'Você recebeu um novo aviso. Abra o aplicativo para conferir.'},'data':{'notification_id':str(row['notification_id']),'category':meta['category'],'url':target},'android':{'priority':'HIGH' if meta['priority']=='high' else 'NORMAL','notification':{'channel_id':meta['channel'],'tag':f"notice-{row['notification_id']}"}}}},timeout=15)
                     if response.status_code==410 or (device['platform']=='android' and response.status_code==404):
                         with s.db() as c:c.execute('DELETE FROM device_tokens WHERE token=?',(token,))

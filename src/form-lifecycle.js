@@ -3,10 +3,12 @@ const guards=new Set();
 const dialogGuards=new WeakMap();
 const snapshot=form=>JSON.stringify([...new FormData(form)].map(([k,v])=>[k,v instanceof File?(v.name?`${v.name}:${v.size}:${v.lastModified}`:''):v]));
 export function guardForm(form,dialog=form.closest('dialog')){
+ for(const previous of guards)if(!previous.connected)previous.dispose();
  if(dialog)dialogGuards.get(dialog)?.dispose();
  let saved=snapshot(form),busy=false,disposed=false;
  const originalClose=dialog?.close.bind(dialog);
  const guard={
+  get connected(){return !disposed&&form.isConnected;},
   get dirty(){return !disposed&&form.isConnected&&snapshot(form)!==saved;},
   get busy(){return !disposed&&form.isConnected&&busy;},
   setBusy(value){busy=value;form.inert=value;form.setAttribute('aria-busy',String(value));},

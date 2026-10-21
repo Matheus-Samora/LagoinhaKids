@@ -367,7 +367,11 @@ def export_backup(user=Depends(central_admin)):
             'finance_cost_centers':[dict(r) for r in c.execute('SELECT * FROM finance_cost_centers WHERE active=1')],
             'finance_accounts':[dict(r) for r in c.execute('SELECT * FROM finance_accounts WHERE active=1')],
             'finance_entries':[dict(r) for r in c.execute('SELECT * FROM finance_entries WHERE active=1')],
-            'finance_service_closings':[dict(r) for r in c.execute('SELECT * FROM finance_service_closings WHERE active=1')]
+            'finance_service_closings':[dict(r) for r in c.execute('SELECT * FROM finance_service_closings WHERE active=1')],
+            'hall_posts':[dict(r) for r in c.execute('SELECT * FROM hall_posts')],
+            'hall_comments':[dict(r) for r in c.execute('SELECT * FROM hall_comments')],
+            'hall_reactions':[dict(r) for r in c.execute('SELECT * FROM hall_reactions')],
+            'hall_reports':[dict(r) for r in c.execute('SELECT * FROM hall_reports')]
         }
         s.audit(c,user['id'],'platform:backup_exported')
     return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':'attachment; filename="lagoinha-systems-backup.json"'})
