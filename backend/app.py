@@ -105,12 +105,12 @@ def session(request:Request):
     if not row:fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/'))
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
     if not shared:
         requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
         requested=requested if requested in PLATFORM_MODULES else 'kids'
         with s.db() as c:
-            if not allowed(c,dict(row),requested):fail('module_access','Seu acesso ao Lagoinha Kids não foi autorizado.',403)
+            if not allowed(c,dict(row),requested):fail('module_access',f'Seu acesso ao setor {requested} não foi autorizado.',403)
         selected=host_module(request.url.hostname or '')
         if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
     result=dict(row)

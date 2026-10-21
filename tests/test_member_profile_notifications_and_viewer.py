@@ -311,3 +311,76 @@ def test_viewer_can_edit_own_person_record_in_members_module(records):
         'name': 'Tentativa Invasão'
     })
     assert cant_edit_other.status_code == 403
+
+
+def test_schedule_confirmation_and_decline_modal_behavior(records):
+    admin = client(1)
+    volunteer = client(3)
+    stranger = client(2)
+
+    # Link user 3 to a person record
+    with s.db() as c:
+        c.execute("INSERT OR REPLACE INTO members_people(id,name,phone,email,active,version,created_at,account_user_id) VALUES('p-vol-3','Voluntário Três','(33) 9999-3333','parent.one@example.com',1,1,?,3)", (s.now(),))
+
+    # Leader for Music ministry is user 1 (admin)
+    with s.db() as c:
+        c.execute("INSERT OR REPLACE INTO members_people(id,name,phone,email,active,version,created_at,account_user_id) VALUES('p-lead-1','Líder Um','(33) 9999-1111','admin@example.com',1,1,?,1)", (s.now(),))
+        c.execute("INSERT OR REPLACE INTO ministries_assignments(id,person_id,ministry,position,is_leader,training_status,active,version,created_at) VALUES('a-lead-1','p-lead-1','Music','Líder de Louvor',1,'certified',1,1,?)", (s.now(),))
+
+    # Admin schedules user 3 for worship
+    sch = admin.post('/api/ministries/schedules', json={
+        'title': 'Culto de Domingo Noite',
+        'ministry': 'Music',
+        'person_id': 'p-vol-3',
+        'role_notes': 'Guitarra Base',
+        'service_date': '2026-12-06',
+        'service_time': '19:00',
+        'status': 'pending'
+    })
+    assert sch.status_code == 200, sch.text
+    sch_id = sch.json()['id']
+
+    # Stranger (user 2) tries to respond -> 403 Forbidden
+    resp_stranger = stranger.post(f'/api/ministries/schedules/{sch_id}/respond', json={
+        'status': 'declined',
+        'reason': 'Intruso'
+    })
+    assert resp_stranger.status_code == 403
+
+    # Volunteer (user 3) marks 'declined' with reason
+    resp_dec = volunteer.post(f'/api/ministries/schedules/{sch_id}/respond', json={
+        'status': 'declined',
+        'reason': 'Viagem a trabalho'
+    })
+    assert resp_dec.status_code == 200, resp_dec.text
+
+    with s.db() as c:
+        s_row = c.execute("SELECT status, role_notes FROM ministries_schedules WHERE id=?", (sch_id,)).fetchone()
+        assert s_row['status'] == 'declined'
+        assert '[Obs: Viagem a trabalho]' in s_row['role_notes']
+
+        # Leader (user 1) received indisponibility notification
+        notif = c.execute("SELECT * FROM notifications WHERE user_id=1 AND kind='ministry_schedule_update' ORDER BY id DESC LIMIT 1").fetchone()
+        assert notif is not None
+        assert 'Indisponibilidade' in notif['title']
+        assert 'Voluntário Três' in notif['message']
+        assert 'Viagem a trabalho' in notif['message']
+
+    # Volunteer changes plans and confirms presence!
+    resp_conf = volunteer.post(f'/api/ministries/schedules/{sch_id}/respond', json={
+        'status': 'confirmed',
+        'reason': ''
+    })
+    assert resp_conf.status_code == 200, resp_conf.text
+
+    with s.db() as c:
+        s_row = c.execute("SELECT status, role_notes FROM ministries_schedules WHERE id=?", (sch_id,)).fetchone()
+        assert s_row['status'] == 'confirmed'
+        assert '[Obs:' not in s_row['role_notes']
+        assert 'Guitarra Base' in s_row['role_notes']
+
+        # Leader (user 1) received confirmation notification
+        notif2 = c.execute("SELECT * FROM notifications WHERE user_id=1 AND kind='ministry_schedule_update' ORDER BY id DESC LIMIT 1").fetchone()
+        assert notif2 is not None
+        assert 'Presença Confirmada' in notif2['title']
+        assert 'Voluntário Três' in notif2['message']

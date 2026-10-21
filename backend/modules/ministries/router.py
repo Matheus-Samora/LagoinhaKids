@@ -210,9 +210,11 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
         is_mgr=manager(c,user,'ministries')
         if not is_self and not is_mgr:
             fail('forbidden','Você só pode confirmar ou declarar indisponibilidade nas suas próprias escalas.',403)
-        notes=old['role_notes'] or ''
-        if data.reason and data.reason.strip():
-            notes=f"{notes} [Obs: {data.reason.strip()}]".strip()
+        import re
+        base_notes=re.sub(r'\s*\[Obs:[^\]]*\]', '', old['role_notes'] or '').strip()
+        notes=base_notes
+        if data.status=='declined' and data.reason and data.reason.strip():
+            notes=f"{base_notes} [Obs: {data.reason.strip()}]".strip() if base_notes else f"[Obs: {data.reason.strip()}]"
         c.execute('UPDATE ministries_schedules SET status=?,role_notes=?,version=version+1 WHERE id=?',(data.status,notes,rid))
         s_parts=str(old['service_date']).split('-')
         fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(old['service_date'])
@@ -233,6 +235,15 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
                         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(adm['id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
                         from ...realtime import dispatch_notification_event
                         dispatch_notification_event(c, adm['id'], 'ministry_schedule_update', n_title, n_msg, sector='ministries')
+        elif data.status=='confirmed':
+            n_title=f"✓ Presença Confirmada · {old['ministry']}"
+            n_msg=f"{p_row['name']} confirmou presença na escala do culto '{old['title']}' em {fmt_date} às {old['service_time']}."
+            leaders=c.execute("SELECT coalesce(p.account_user_id,u.id) user_id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id LEFT JOIN users u ON lower(u.email)=lower(p.email) WHERE a.ministry=? AND a.is_leader=1 AND a.active=1",(old['ministry'],)).fetchall()
+            for l in leaders:
+                if l['user_id'] and l['user_id']!=user['id']:
+                    c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(l['user_id'],None,'ministry_schedule_update',n_title,n_msg,user['id'],s.now(),'ministries'))
+                    from ...realtime import dispatch_notification_event
+                    dispatch_notification_event(c, l['user_id'], 'ministry_schedule_update', n_title, n_msg, sector='ministries')
         from ...realtime import publish
         publish('ministries:schedule', {'action': 'response', 'schedule_id': rid, 'status': data.status, 'person_id': p_row['id'], 'ministry': old['ministry']}, sector='ministries')
         publish('ministries:my_schedule', {'action': 'responded', 'schedule_id': rid, 'status': data.status}, user_id=user['id'])

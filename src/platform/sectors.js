@@ -415,7 +415,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(kind==='people'){
       return `<td><strong>${e(r.name)}</strong><small>${e(r.phone||r.email||'')}</small></td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
   }
-  if(kind==='schedules')return `<td><strong>${e(r.title)}</strong><small>${date(r.service_date)} às ${e(r.service_time||'18:00')}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.person_name)} ${r.role_notes?`· <strong>${e(r.role_notes)}</strong>`:''}</small></td><td><span class="badge">${e(scheduleStatusLabels[r.status]||r.status)}</span></td>`;
+  if(kind==='schedules')return `<td><strong>${e(r.title)}</strong><small>${date(r.service_date)} às ${e(r.service_time||'18:00')}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.person_name)} ${r.role_notes?`· <strong>${e(r.role_notes)}</strong>`:''}</small></td><td><span class="badge badge-status-${e(r.status)}">${e(scheduleStatusLabels[r.status]||r.status)}</span></td>`;
   if(kind==='assignments')return `<td><strong>${e(r.person_name)}</strong>${r.is_leader?' <span class="badge">⭐ Líder</span>':''}</td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.position)}</small></td><td><span class="badge" style="background:#09090b;color:#fff;">${r.is_leader?'Líder':'Equipe'}</span></td>`;
   if(kind==='resources')return `<td><strong>${e(r.title)}</strong><small>${e(resourceCatLabels[r.category]||r.category)}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.notes||'')}</small></td><td>${r.resource_url?`<a class="badge" href="${e(r.resource_url)}" target="_blank" rel="noopener">Abrir</a>`:'<span class="subtle">Interno</span>'}</td>`;
   if(kind==='closings')return `<td><strong>${e(r.service_name)}</strong><small>${date(r.service_date)} · ${e(r.account_name)}</small></td><td><small>Dízimos: ${cash(r.tithes_cents)} · Espécie: ${cash(r.offerings_cash_cents)} · PIX: ${cash(r.offerings_pix_cents)}</small></td><td><strong class="money income">${cash(r.total_cents)}</strong><small>${e(r.counted_by)}${r.verified_by&&r.verified_by!==r.counted_by?` &amp; ${e(r.verified_by)}`:''}</small></td>`;
@@ -453,7 +453,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    invoices:['Nota / Fornecedor','Emissão','Valor']
   }[kind];
   const filterSuffix=['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'';
-  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):'<span>Consulta</span>'}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
+  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button success-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):(kind==='schedules'&&r.person_id===data.my_person_id?'':'<span>Consulta</span>')}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
  }
 
  function paint(message=''){
@@ -467,7 +467,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
 
   host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search"><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
   host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');void refresh();};
-  host.querySelectorAll('[data-sector-action]').forEach(b=>b.onclick=()=>void action(b));
+  host.querySelectorAll('[data-sector-action], [data-respond-schedule]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();void action(b);});
   translateDOM(host);
  }
 
@@ -927,17 +927,59 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
  
  async function action(b){
   try{
-   if(b.dataset.respondSchedule){
+   if(b.dataset.respondSchedule || b.dataset.sectorAction === 'respond-schedule'){
     const sid=b.dataset.respondSchedule;
     const status=b.dataset.status;
-    let reason='';
     if(status==='declined'){
-     reason=prompt('Informe o motivo da indisponibilidade (opcional, para a coordenação):')||'';
+     let dlg=host.querySelector('#sector-dialog')||document.querySelector('#sector-dialog');
+     if(!dlg){
+      dlg=document.createElement('dialog');
+      dlg.id='sector-dialog';
+      dlg.innerHTML='<div class="sector-modal"></div>';
+      (host.querySelector('.page-enter')||host).append(dlg);
+     }
+     if(dlg){
+      dlg.querySelector('.sector-modal').innerHTML=`
+       <div class="section-title">
+        <h2>Informar Indisponibilidade</h2>
+        <button type="button" class="secondary" id="close-decl-modal">Voltar</button>
+       </div>
+       <p style="margin:0 0 14px;font-size:13.5px;color:var(--muted,#71717a);line-height:1.5;">
+        Você confirma que <strong>não poderá comparecer</strong> a esta escala? A liderança e coordenação serão avisadas para reorganizar a equipe do culto.
+       </p>
+       <form id="decline-schedule-form">
+        <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:600;">Motivo da indisponibilidade (opcional)
+         <textarea name="reason" rows="3" maxlength="200" placeholder="Ex.: Viagem a trabalho, compromisso familiar..." style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--border,#e4e4e7);border-radius:10px;font:inherit;box-sizing:border-box;resize:vertical;"></textarea>
+        </label>
+        <p class="error" role="alert" style="color:#ef4444;font-size:12.5px;margin:6px 0;"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+         <button type="button" class="secondary" id="cancel-decl-modal" style="min-height:38px;">Cancelar</button>
+         <button type="submit" class="btn danger" style="background:#dc2626;color:#ffffff;min-height:38px;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;">✕ Confirmar Indisponibilidade</button>
+        </div>
+       </form>`;
+      dlg.querySelector('#close-decl-modal').onclick=()=>dlg.close();
+      dlg.querySelector('#cancel-decl-modal').onclick=()=>dlg.close();
+      dlg.querySelector('#decline-schedule-form').onsubmit=async(ev)=>{
+       ev.preventDefault();
+       const reason=ev.currentTarget.elements.reason.value.trim();
+       dlg.close();
+       b.disabled=true;
+       try{
+        await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status:'declined',reason}});
+        await refresh('Indisponibilidade comunicada à coordenação.');
+       }catch(err){
+        b.disabled=false;
+        alert(err.message);
+       }
+      };
+      dlg.showModal();
+      return;
+     }
     }
     b.disabled=true;
     try{
-     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason}});
-     await refresh(status==='confirmed'?'Presença confirmada na escala!':'Indisponibilidade comunicada à coordenação.');
+     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason:''}});
+     await refresh('Presença confirmada na escala!');
     }catch(err){
      b.disabled=false;
      alert(err.message);

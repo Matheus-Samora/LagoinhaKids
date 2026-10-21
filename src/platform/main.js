@@ -703,15 +703,56 @@ function render(message=''){
    b.onclick=async()=>{
     const sid=b.dataset.scheduleRespond;
     const status=b.dataset.status;
-    let reason='';
     if(status==='declined'){
-     reason=prompt('Informe o motivo da indisponibilidade (opcional, para a coordenação):')||'';
+     let dlg=root.querySelector('#community-apply-dialog')||document.querySelector('#community-apply-dialog');
+     if(!dlg){
+      dlg=document.createElement('dialog');
+      dlg.id='community-apply-dialog';
+      dlg.innerHTML='<div class="sector-modal"></div>';
+      root.append(dlg);
+     }
+     dlg.querySelector('.sector-modal').innerHTML=`
+      <div class="section-title">
+       <h2>Informar Indisponibilidade</h2>
+       <button type="button" class="secondary" id="close-decl-modal">Voltar</button>
+      </div>
+      <p style="margin:0 0 14px;font-size:13.5px;color:var(--muted,#71717a);line-height:1.5;">
+       Você confirma que <strong>não poderá comparecer</strong> a esta escala? A liderança e coordenação serão avisadas para reorganizar a equipe do culto.
+      </p>
+      <form id="decline-schedule-form">
+       <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:600;">Motivo da indisponibilidade (opcional)
+        <textarea name="reason" rows="3" maxlength="200" placeholder="Ex.: Viagem a trabalho, compromisso familiar..." style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--border,#e4e4e7);border-radius:10px;font:inherit;box-sizing:border-box;resize:vertical;"></textarea>
+       </label>
+       <p class="error" role="alert" style="color:#ef4444;font-size:12.5px;margin:6px 0;"></p>
+       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+        <button type="button" class="secondary" id="cancel-decl-modal" style="min-height:38px;">Cancelar</button>
+        <button type="submit" class="btn danger" style="background:#dc2626;color:#ffffff;min-height:38px;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;">✕ Confirmar Indisponibilidade</button>
+       </div>
+      </form>`;
+     dlg.querySelector('#close-decl-modal').onclick=()=>dlg.close();
+     dlg.querySelector('#cancel-decl-modal').onclick=()=>dlg.close();
+     dlg.querySelector('#decline-schedule-form').onsubmit=async(ev)=>{
+      ev.preventDefault();
+      const reason=ev.currentTarget.elements.reason.value.trim();
+      dlg.close();
+      b.disabled=true;
+      try{
+       await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status:'declined',reason}});
+       communityData=await api('/platform/community');
+       render('Indisponibilidade comunicada à coordenação.');
+      }catch(err){
+       b.disabled=false;
+       alert(err.message);
+      }
+     };
+     dlg.showModal();
+     return;
     }
     b.disabled=true;
     try{
-     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason}});
+     await api(`/ministries/schedules/${sid}/respond`,{method:'POST',body:{status,reason:''}});
      communityData=await api('/platform/community');
-     render(status==='confirmed'?'Presença confirmada na escala!':'Indisponibilidade comunicada à coordenação.');
+     render('Presença confirmada na escala!');
     }catch(err){
      b.disabled=false;
      alert(err.message);
