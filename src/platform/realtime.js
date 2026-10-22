@@ -90,32 +90,46 @@ export class RealtimeClient {
     this.heartbeatTimer = null;
     this.token = '';
     this.apiOrigin = '';
+    this.bearerToken = '';
+    this.enabled = false;
+    this.generation = 0;
     this._listeners = new Map();
     this.lastEventTime = Date.now();
 
     window.addEventListener('online', () => {
-      if (!this.connected) this.connect(this.token, this.apiOrigin);
+      if (this.enabled && !this.connected) this.reconnect();
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && (!this.connected || (Date.now() - this.lastEventTime > 45000))) {
+      if (this.enabled && !document.hidden && (!this.connected || (Date.now() - this.lastEventTime > 45000))) {
         this.reconnect();
       }
     });
   }
 
-  connect(token = '', apiOrigin = '') {
-    if (token) this.token = token;
+  async connect(token = '', apiOrigin = '', bearerToken = '') {
+    this.token = token;
+    this.bearerToken = bearerToken;
     if (apiOrigin) this.apiOrigin = apiOrigin.replace(/\/$/, '');
     this.disconnect();
 
     const base = this.apiOrigin || '';
-    const qs = this.token ? `?token=${encodeURIComponent(this.token)}` : '';
-    const url = `${base}/api/realtime/stream${qs}`;
-
+    this.enabled = true;
+    const generation = this.generation;
     try {
-      this.es = new EventSource(url, { withCredentials: true });
+      const response = await fetch(`${base}/api/realtime/ticket`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'X-CSRF-Token': this.token, ...(this.bearerToken ? {Authorization: `Bearer ${this.bearerToken}`} : {}) },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (generation !== this.generation) return;
+      if (response.status === 401 || response.status === 403) { this.disconnect(); return; }
+      if (!response.ok) throw new Error('Realtime unavailable');
+      const {ticket} = await response.json();
+      if (generation !== this.generation) return;
+      this.es = new EventSource(`${base}/api/realtime/stream?ticket=${encodeURIComponent(ticket)}`, { withCredentials: true });
     } catch {
+      if (generation !== this.generation) return;
       this._scheduleReconnect();
       return;
     }
@@ -137,6 +151,7 @@ export class RealtimeClient {
 
     const registeredEvents = [
       'connected',
+      'heartbeat',
       'notification:new',
       'notification:count',
       'hall:post',
@@ -201,10 +216,11 @@ export class RealtimeClient {
 
   _scheduleReconnect() {
     this.disconnect();
+    this.enabled = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     const delay = Math.min(15000, 1000 * Math.pow(1.5, this.reconnectAttempts++)) + Math.random() * 500;
     this.reconnectTimer = setTimeout(() => {
-      this.connect(this.token, this.apiOrigin);
+      this.connect(this.token, this.apiOrigin, this.bearerToken);
     }, delay);
   }
 
@@ -219,10 +235,12 @@ export class RealtimeClient {
 
   reconnect() {
     this.disconnect();
-    this.connect(this.token, this.apiOrigin);
+    this.connect(this.token, this.apiOrigin, this.bearerToken);
   }
 
   disconnect() {
+    this.enabled = false;
+    this.generation++;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;

@@ -143,41 +143,30 @@ export function communityHallUI({api,e,identity,onProfileSaved}){
  document.addEventListener('lagoinha:profile-saved',ev=>{if(!host?.isConnected)return;const old=host.querySelector('.ch-composer-start .ch-avatar');if(old)old.outerHTML=avatar(ev.detail.name,ev.detail.avatar_url);});
  window.addEventListener('lagoinha:realtime:hall:reaction', ev => {
    if (!host?.isConnected) return;
-   const { post_id, reactions } = ev.detail || {};
+   const { post_id, reactions, actor_id, active } = ev.detail || {};
    const btn = host.querySelector(`[data-post="${post_id}"] [data-react]`);
    if (btn) {
      const sp = btn.querySelector('span');
      if (sp) sp.textContent = reactions;
+     if (actor_id === user().id && typeof active === 'boolean') {
+       btn.setAttribute('aria-pressed', String(active));
+       btn.classList.toggle('is-reacted', active);
+     }
    }
    const p = feed.find(x => x.id === post_id);
-   if (p) p.reactions = reactions;
+   if (p) { p.reactions = reactions; if (actor_id === user().id && typeof active === 'boolean') p.reacted = active; }
  });
- window.addEventListener('lagoinha:realtime:hall:post', ev => {
+ window.addEventListener('lagoinha:realtime:hall:post', async () => {
    if (!host?.isConnected) return;
-   const { action, post, post_id } = ev.detail || {};
-   if (action === 'archived') {
-     host.querySelector(`[data-post="${post_id}"]`)?.remove();
-     feed = feed.filter(x => x.id !== post_id);
-   } else if (action === 'updated' && post) {
-     const old = host.querySelector(`[data-post="${post.id}"]`);
-     if (old) old.outerHTML = postCard(post);
-     feed = feed.map(x => x.id === post.id ? post : x);
-   } else if (action === 'created' && post) {
+   // Reload through the API: counts, filters and management permissions belong
+   // to the current viewer, never to the user who published the event.
+   if (mode === 'wall' && page === 1) {
+     try { await loadFeed(); } catch (err) { status(err.message, true); }
+   } else {
      const refresh = host.querySelector('[data-hall-refresh]');
      if (refresh) {
        refresh.classList.add('has-news');
-       refresh.setAttribute('aria-label', 'Novas conversas disponíveis. Atualizar Hall.');
-     }
-     if (mode === 'wall' && category === 'all' && !mine && !author) {
-       const feedEl = host.querySelector('[data-feed]');
-       if (feedEl && !feedEl.querySelector('.ch-empty')) {
-         feedEl.insertAdjacentHTML('afterbegin', postCard(post));
-         feed.unshift(post);
-       }
-     }
-     const countEl = host.querySelector('[data-post-count]');
-     if (countEl && countEl.textContent !== '—') {
-       countEl.textContent = String(Number(countEl.textContent || 0) + 1);
+       refresh.setAttribute('aria-label', 'Conversas atualizadas. Atualizar Hall.');
      }
    }
  });

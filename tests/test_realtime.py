@@ -26,53 +26,83 @@ def test_realtime_stream_unauthenticated(records):
     assert res.status_code == 401
 
 
-def test_realtime_stream_with_query_token(records):
+def test_realtime_stream_credentials_and_tickets(records):
     from starlette.testclient import TestClient
     from backend.app import app
-    c1 = client(1)
-    # Login as native to get raw token
-    login_res = c1.post('/api/auth/login', json={'email': 'user1@example.test', 'password': PASSWORD}, headers={'x-native-client': '1'})
-    raw_token = login_res.json()['access_token']
+    c = client(3)
+    anonymous = TestClient(app)
+    csrf = c.get('/api/me').json()['csrf']
+    native = c.post('/api/auth/login', json={'email':'user3@example.test','password':PASSWORD},headers={'x-native-client':'1'}).json()['access_token']
+    for secret in (csrf,native):
+        assert anonymous.get('/api/realtime/stream',params={'token':secret,'once':1}).status_code == 401
+    assert anonymous.get('/api/me',headers={'Authorization':'Bearer '+csrf}).status_code == 401
+    assert anonymous.get('/api/me',headers={'Authorization':'Bearer '+native}).status_code == 200
+    # An invalid Authorization header cannot bypass CSRF through cookie fallback.
+    assert c.post('/api/realtime/ticket',headers={'Authorization':'Bearer invalid','X-CSRF-Token':''}).status_code in (401,403)
+    assert anonymous.post('/api/realtime/ticket').status_code == 401
+    c.headers['X-CSRF-Token']=c.get('/api/me').json()['csrf']
+    ticket=c.post('/api/realtime/ticket').json()['ticket']
+    assert anonymous.get('/api/me',params={'ticket':ticket}).status_code == 401
+    before=len(broker.subscribers)
+    result=anonymous.get('/api/realtime/stream',params={'ticket':ticket,'once':1})
+    assert result.status_code == 200
+    payload=json.loads(next(line[6:] for line in result.text.splitlines() if line.startswith('data: ')))
+    assert payload['allowed_sectors'] == ['kids']
+    assert len(broker.subscribers)==before
+    sub=RealtimeSubscriber(3,set(payload['allowed_sectors']))
+    broker._deliver_to_subscriber(sub,{'sector':'finance','data':{'private':True}})
+    assert sub.queue.empty()
+    # Even a legacy all marker cannot bypass sector authorization.
+    sub.allowed_sectors.add('all')
+    broker._deliver_to_subscriber(sub,{'sector':'members'})
+    assert sub.queue.empty()
+    c.post('/api/auth/logout')
+    assert anonymous.get('/api/realtime/stream',params={'ticket':ticket,'once':1}).status_code == 401
 
-    # Connect with query parameter ?token=... and once=1
-    tc = TestClient(app)
-    res = tc.get(f'/api/realtime/stream?token={raw_token}&once=1')
-    assert res.status_code == 200
-    assert 'text/event-stream' in res.headers['content-type']
-    assert 'event: connected' in res.text
-    lines = res.text.strip().split('\n')
-    data_line = [l for l in lines if l.startswith('data:')][0]
-    payload = json.loads(data_line.replace('data: ', ''))
-    assert payload['user_id'] == 1
-    assert 'unread_count' in payload
-    assert 'allowed_sectors' in payload
 
-
-def test_realtime_stream_cookie_and_csrf(records):
+def test_stream_ticket_expiry_tampering_and_revocation(records):
     from starlette.testclient import TestClient
-    from backend.app import app, COOKIE
-    c1 = client(1)
-    me_res = c1.get('/api/me')
-    assert me_res.status_code == 200
-    csrf = me_res.json()['csrf']
-    cookie_val = c1.cookies.get(COOKIE)
-    assert cookie_val, "Session cookie should be present"
+    from backend.app import app
+    from backend.realtime import stream_access
+    c=client(3)
+    anonymous=TestClient(app)
+    with s.db() as db:
+        hashed=s.digest(c.cookies.get(COOKIE))
+        user=dict(db.execute('SELECT u.*,ss.token FROM users u JOIN sessions ss ON ss.user_id=u.id WHERE ss.token=?',(hashed,)).fetchone())
+    def ticket(**values):
+        return s.CIPHER.encrypt(json.dumps({'purpose':'realtime','session':hashed,'expires':int(time.time())+60,**values}).encode()).decode()
+    for invalid in (ticket(expires=int(time.time())-1),ticket(purpose='other'),'invalid'):
+        assert anonymous.get('/api/realtime/stream',params={'ticket':invalid,'once':1}).status_code==401
+    assert stream_access(user)[0]=={'kids'}
+    with s.db() as db:
+        db.execute("UPDATE module_access SET enabled=0 WHERE user_id=3 AND module='kids'")
+    assert stream_access(user)[0]==set()
+    with s.db() as db:
+        db.execute('UPDATE users SET active=0 WHERE id=3')
+    assert stream_access(user) is None
 
-    # Case 1: Connect with cookie alone
-    res_cookie = c1.get('/api/realtime/stream?once=1')
-    assert res_cookie.status_code == 200
-    assert 'event: connected' in res_cookie.text
 
-    # Case 2: Connect with cookie AND ?token=<csrf> (web browser pattern)
-    res_both = c1.get(f'/api/realtime/stream?token={csrf}&once=1')
-    assert res_both.status_code == 200
-    assert 'event: connected' in res_both.text
-
-    # Case 3: Connect without cookie, only ?token=<csrf>
-    tc = TestClient(app)
-    res_csrf_only = tc.get(f'/api/realtime/stream?token={csrf}&once=1')
-    assert res_csrf_only.status_code == 200
-    assert 'event: connected' in res_csrf_only.text
+def test_realtime_delivery_only_after_commit(records):
+    sub=RealtimeSubscriber(3,{'members'})
+    broker.register(sub)
+    try:
+        with s.db() as db:
+            db.execute("UPDATE users SET name='Committed' WHERE id=3")
+            publish('test:commit',{'ok':True},user_id=3)
+            assert sub.queue.empty()
+        assert sub.queue.get_nowait()['type']=='test:commit'
+        try:
+            with s.db() as db:
+                db.execute("UPDATE users SET name='Rolled back' WHERE id=3")
+                publish('test:rollback',{},user_id=3)
+                raise ValueError('rollback')
+        except ValueError:
+            pass
+        assert sub.queue.empty()
+        with s.db() as db:
+            assert db.execute('SELECT name FROM users WHERE id=3').fetchone()[0]=='Committed'
+    finally:
+        broker.unregister(sub)
 
 
 def test_realtime_targeted_and_sector_events(records):
@@ -138,7 +168,8 @@ def test_hall_and_schedule_publish_realtime_events(records):
             evt = sub3.queue.get_nowait()
             if evt['type'] == 'hall:post' and evt['data'].get('action') == 'created':
                 found_post = True
-                assert 'Testemunho abençoado' in evt['data']['post']['content']
+                assert evt['data']['post_id'] == post_res.json()['id']
+                assert 'post' not in evt['data']
         assert found_post, "Realtime hall:post event was not received"
 
         # React to post -> hall:reaction event
@@ -166,7 +197,8 @@ def test_hall_and_schedule_publish_realtime_events(records):
             evt = sub3.queue.get_nowait()
             if evt['type'] == 'hall:comment':
                 found_comment = True
-                assert 'Amém' in evt['data']['comment']['content']
+                assert evt['data']['comment_id'] == comment_res.json()['id']
+                assert 'comment' not in evt['data']
         assert found_comment, "Realtime hall:comment event was not received"
 
     finally:
@@ -282,3 +314,38 @@ def test_announcements_and_notification_read_events(records):
         assert archived_events[-1]['data']['id'] == aid
     finally:
         broker.unregister(sub3)
+
+
+def test_directed_announcements_do_not_broadcast_to_other_members(records):
+    admin=client(1)
+    subscribers=[RealtimeSubscriber(uid,{'kids'}) for uid in (3,4)]
+    for sub in subscribers:broker.register(sub)
+    try:
+        result=admin.post('/api/platform/announcements',json={
+            'title':'Aviso reservado','message':'Conteúdo somente para destinatário',
+            'target_sector':'kids','audience':'people','recipient_ids':[3]})
+        assert result.status_code==200
+        events=[]
+        while not subscribers[0].queue.empty():events.append(subscribers[0].queue.get_nowait())
+        assert any(e['type']=='announcement:new' for e in events)
+        assert subscribers[1].queue.empty()
+    finally:
+        for sub in subscribers:broker.unregister(sub)
+
+
+def test_single_notification_read_updates_all_clients_and_checks_owner(records):
+    parent=client(3)
+    sub=RealtimeSubscriber(3,{'kids'})
+    broker.register(sub)
+    try:
+        for prefix in ('/api/notification-center','/api/notifications','/api/platform/notifications'):
+            with s.db() as db:
+                nid=db.execute("INSERT INTO notifications(user_id,kind,title,message,created_at) VALUES(3,'attendance','Aviso','Mensagem',?)",(s.now(),)).lastrowid
+            assert parent.post(f'{prefix}/{nid}/read').status_code==200
+            event=sub.queue.get_nowait()
+            assert event['type']=='notification:count'
+            assert event['data']['unread_count']==0
+            assert client(4).post(f'{prefix}/{nid}/read').status_code==404
+            assert sub.queue.empty()
+    finally:
+        broker.unregister(sub)

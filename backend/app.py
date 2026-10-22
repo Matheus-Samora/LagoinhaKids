@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='2.7.0',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='2.7.1',lifespan=lifespan)
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -91,19 +91,33 @@ app.add_middleware(CORSMiddleware,allow_origins=sorted(ALLOWED_ORIGINS),allow_cr
 
 def session(request:Request):
     bearer=request.headers.get('authorization','')
-    query_token=request.query_params.get('token','')
     cookie_token=request.cookies.get(COOKIE,'')
-    tokens_to_try=[]
-    if bearer.startswith('Bearer '):tokens_to_try.append(bearer[7:])
-    if cookie_token:tokens_to_try.append(cookie_token)
-    if query_token and query_token not in tokens_to_try:tokens_to_try.append(query_token)
+    bearer_token=bearer[7:] if bearer.startswith('Bearer ') else ''
+    # Query credentials are accepted only as short-lived, stream-scoped tickets.
+    ticket_hash=None
+    if request.url.path=='/api/realtime/stream' and request.query_params.get('ticket'):
+        try:
+            ticket=json.loads(s.CIPHER.decrypt(request.query_params['ticket'].encode(),ttl=60))
+            if ticket.get('purpose')=='realtime' and ticket['expires']>time.time():
+                ticket_hash=ticket['session']
+        except Exception:
+            pass
     row=None
+    bearer_authenticated=False
     with s.db() as c:
-        for t in tokens_to_try:
-            row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE (ss.token=? OR ss.csrf=?) AND ss.expires>? AND u.active=1',(s.digest(t),t,int(time.time()))).fetchone()
-            if row:break
+        credentials = [(s.digest(bearer_token), True)] if bearer_token else []
+        if not bearer_token:
+            if cookie_token:
+                credentials.append((s.digest(cookie_token), False))
+            elif ticket_hash:
+                credentials.append((ticket_hash, False))
+        for token_hash, is_bearer in credentials:
+            row=c.execute('SELECT u.*,ss.csrf,ss.expires,ss.token FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=? AND ss.expires>? AND u.active=1',(token_hash,int(time.time()))).fetchone()
+            if row:
+                bearer_authenticated=is_bearer
+                break
     if not row:fail('login','Entre para continuar.',401)
-    if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer.startswith('Bearer ') and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
+    if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer_authenticated and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
     shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
     if not shared:
@@ -366,8 +380,8 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(ch['parent_id'],cid,'attendance',title,msg,user['id'],s.now()))
         from .realtime import publish, dispatch_notification_event
         dispatch_notification_event(c, ch['parent_id'], 'attendance', title, msg, sector='kids', context_id=str(cid))
-        publish('kids:attendance', {'action': data.action, 'child_id': cid, 'child_name': ch['name']}, sector='kids')
-        publish('kids:sync', {'action': data.action, 'child_id': cid}, sector='kids')
+        publish('kids:attendance', {'action': data.action}, sector='kids')
+        publish('kids:sync', {'action': data.action}, sector='kids')
         c.execute('DELETE FROM attempts WHERE key=?',(attempt_key,))
         c.execute('INSERT INTO attendance_events(child_id,lesson_id,action,guardian_id,guardian_name,actor,created_at,exception_reason) VALUES(?,?,?,?,?,?,?,?)',(cid,data.lesson_id,data.action,data.guardian_id,guardian['name'],user['id'],s.now(),data.exception_reason.strip() if data.action=='out' else ''))
         s.audit(c,user['id'],'check_in' if data.action=='in' else 'check_out',cid)
@@ -417,8 +431,8 @@ def notify(cid:int,data:Notify,user=Depends(session)):
         for uid in set(recipients):
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(uid,cid,data.kind,titles[data.kind],data.message.strip() or f'Aviso sobre {ch["name"]}.',user['id'],s.now()))
             dispatch_notification_event(c, uid, data.kind, titles[data.kind], data.message.strip() or f'Aviso sobre {ch["name"]}.', sector='kids', context_id=str(cid))
-        publish('kids:paging', {'child_id': cid, 'kind': data.kind, 'message': data.message.strip()}, sector='kids')
-        publish('kids:sync', {'action': 'paging', 'child_id': cid}, sector='kids')
+        publish('kids:paging', {'action': 'changed'}, sector='kids')
+        publish('kids:sync', {'action': 'paging'}, sector='kids')
         s.audit(c,user['id'],'notification_'+data.kind,cid)
     return {'ok':True,'delivery':'in_app','recipients':len(set(recipients))}
 @app.get('/api/notifications')
@@ -436,6 +450,9 @@ def read_notification(nid:int,user=Depends(session)):
     with s.db() as c:
         if not c.execute('SELECT 1 FROM notifications WHERE id=? AND user_id=?',(nid,user['id'])).fetchone(): fail('missing','Notificação não encontrada.',404)
         c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=?',(s.now(),nid))
+        from .realtime import publish
+        count=c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()[0]
+        publish('notification:count', {'unread_count':count}, user_id=user['id'])
     return {'ok':True}
 
 @app.get('/api/users')
@@ -845,7 +862,7 @@ def get_build_id():
 @app.get('/api/version')
 def get_version():
     return {
-        'version': '2.7.0',
+        'version': app.version,
         'build': get_build_id(),
         'app': 'Lagoinha Systems',
         'encryption': 'AES-128-Fernet-HMAC-SHA256',

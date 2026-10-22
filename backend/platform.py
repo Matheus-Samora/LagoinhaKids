@@ -127,7 +127,12 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
 @router.post('/notifications/{nid}/read')
 def mark_notification_read(nid:int,user=Depends(session)):
     with s.db() as c:
+        if not c.execute('SELECT 1 FROM notifications WHERE id=? AND user_id=?',(nid,user['id'])).fetchone():
+            fail('notice','Notificação não encontrada.',404)
         c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?',(s.now(),nid,user['id']))
+        from .realtime import publish
+        count=c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()[0]
+        publish('notification:count', {'unread_count':count}, user_id=user['id'])
     return {'ok':True}
 
 class PlatformAnnouncementCreate(BaseModel):
@@ -221,7 +226,8 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now,t_sector))
             dispatch_notification_event(c, uid, 'announcement', n_title, n_msg, sector=t_sector, context_id=aid)
 
-        publish('announcement:new', {'id': aid, 'title': data.title, 'sector': t_sector, 'author_name': user['name']}, sector=t_sector or 'all')
+        for uid in recipients:
+            publish('announcement:new', {'id': aid, 'title': data.title, 'sector': t_sector}, user_id=uid)
         s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
         return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']})}
 

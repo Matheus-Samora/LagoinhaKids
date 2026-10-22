@@ -70,11 +70,7 @@ class RealtimeBroker:
             return
         target_sector = event.get('sector')
         if target_sector and target_sector != 'all':
-            if (
-                target_sector not in sub.allowed_sectors
-                and 'admin' not in sub.allowed_sectors
-                and 'all' not in sub.allowed_sectors
-            ):
+            if target_sector not in sub.allowed_sectors:
                 return
         try:
             sub.queue.put_nowait(event)
@@ -126,13 +122,13 @@ class RealtimeBroker:
 
     def _broadcast_postgres(self, event: dict):
         try:
-            import psycopg
-            with psycopg.connect(os.environ['KIDS_DATABASE_URL'], autocommit=True) as conn:
+            # Reuse the application's bounded pool; notify runs after the data commit.
+            with s.db() as conn:
                 payload = json.dumps(event)
                 if len(payload) > 7500:
                     compact = {**event, 'data': {'ref': str(event['data'].get('id', '')), 'truncated': True}}
                     payload = json.dumps(compact)
-                conn.execute("SELECT pg_notify('lagoinha_realtime', %s)", (payload,))
+                conn.execute("SELECT pg_notify('lagoinha_realtime', ?)", (payload,))
         except Exception as err:
             logger.warning(f"Realtime Postgres notify warning: {err}")
 
@@ -177,7 +173,7 @@ broker = RealtimeBroker()
 
 def publish(event_type: str, data: dict, user_id: Optional[int] = None, sector: Optional[str] = None):
     """Global helper to publish real-time events across the platform."""
-    broker.publish(event_type, data, user_id=user_id, sector=sector)
+    s.after_commit(lambda: broker.publish(event_type, data, user_id=user_id, sector=sector))
 
 
 def dispatch_notification_event(c, user_id: int, kind: str, title: str, message: str, sector: str = '', context_id: str = '', notification_id: Optional[int] = None):
@@ -202,18 +198,30 @@ def dispatch_notification_event(c, user_id: int, kind: str, title: str, message:
     }, user_id=user_id)
 
 
+@router.post('/ticket')
+def realtime_ticket(user=Depends(session)):
+    expires=min(user['expires'],int(time.time())+60)
+    payload={'purpose':'realtime','session':user['token'],'expires':expires}
+    return {'ticket':s.CIPHER.encrypt(json.dumps(payload).encode()).decode(),'expires':expires}
+
+
+def stream_access(user):
+    from .platform_access import allowed
+    with s.db() as c:
+        current=c.execute('SELECT u.* FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=? AND ss.expires>? AND u.active=1',(user['token'],int(time.time()))).fetchone()
+        if not current:
+            return None
+        sectors={mod for mod in ('members','ministries','kids','finance') if allowed(c,dict(current),mod)}
+        count=c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()[0]
+        return sectors,count
+
+
 @router.get('/stream')
 async def realtime_stream(request: Request, once: bool = False, user=Depends(session)):
-    """SSE real-time stream endpoint. Holds open connection for server push events."""
-    allowed_sectors = {'all'}
-    with s.db() as c:
-        for mod in ('members', 'ministries', 'kids', 'finance'):
-            from .platform_access import allowed
-            if allowed(c, user, mod):
-                allowed_sectors.add(mod)
-        if user.get('role') == 'admin':
-            allowed_sectors.add('admin')
-        unread_count = c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL', (user['id'],)).fetchone()[0]
+    access=await asyncio.to_thread(stream_access,user)
+    if access is None:
+        fail('login','Entre para continuar.',401)
+    allowed_sectors,unread_count=access
 
     sub = RealtimeSubscriber(user['id'], allowed_sectors)
     broker.register(sub)
@@ -230,23 +238,33 @@ async def realtime_stream(request: Request, once: bool = False, user=Depends(ses
     }
 
     async def event_generator():
-        # 1. Initial connection handshake
-        yield f"event: connected\ndata: {json.dumps(initial_state)}\n\n"
-        if once:
-            return
         try:
+            yield f"event: connected\ndata: {json.dumps(initial_state)}\n\n"
+            if once:
+                return
             while True:
                 if await request.is_disconnected():
                     break
                 try:
                     event = await asyncio.wait_for(sub.queue.get(), timeout=15.0)
+                    access=await asyncio.to_thread(stream_access,user)
+                    if access is None:
+                        break
+                    sub.allowed_sectors=access[0]
+                    target=event.get('sector')
+                    if target and target!='all' and target not in sub.allowed_sectors:
+                        continue
                     evt_type = event.get('type', 'message')
                     evt_data = json.dumps(event.get('data', {}))
                     evt_id = event.get('id', '')
                     yield f"id: {evt_id}\nevent: {evt_type}\ndata: {evt_data}\n\n"
                 except asyncio.TimeoutError:
                     # Keepalive comment resets proxy / Cloud Run idle timeout
-                    yield ":keepalive\n\n"
+                    access=await asyncio.to_thread(stream_access,user)
+                    if access is None:
+                        break
+                    sub.allowed_sectors=access[0]
+                    yield 'event: heartbeat\ndata: {}\n\n'
         finally:
             broker.unregister(sub)
 

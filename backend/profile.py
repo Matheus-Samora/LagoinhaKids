@@ -157,7 +157,7 @@ def persist(data,user,prepared=None):
         s.audit(c,user['id'],'own_profile_updated')
         saved_user=account(c,user)
         from .realtime import publish
-        publish('profile:updated',{'user_id':user['id'],'name':saved_user['name'],'avatar_url':saved_user['avatar_url'],'bio':saved_user.get('bio',''),'profession':saved_user.get('profession','')},sector='members')
+        publish('profile:updated',{'user_id':user['id']},sector='members')
         return {'ok':True,'user':saved_user}
 
 

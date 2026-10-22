@@ -26,23 +26,48 @@ else:
     CIPHER = Fernet(key_file.read_bytes())
 
 
+AFTER_COMMIT = ContextVar('after_commit', default=None)
+
+def after_commit(callback):
+    pending = AFTER_COMMIT.get()
+    if pending is None:
+        callback()
+    else:
+        pending.append(callback)
+
 @contextmanager
 def db():
-    if os.getenv('KIDS_DATABASE_URL'):
-        from .postgres import db as postgres_db
-        with postgres_db() as connection:yield connection
-        return
-    conn = sqlite3.connect(DB, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys=ON')
-    conn.execute('PRAGMA busy_timeout=15000')
+    pending = []
+    marker = AFTER_COMMIT.set(pending)
+    committed = False
     try:
-        yield conn
-        conn.commit()
-    except BaseException:
-        conn.rollback()
-        raise
-    finally: conn.close()
+        if os.getenv('KIDS_DATABASE_URL'):
+            from .postgres import db as postgres_db
+            with postgres_db() as connection:
+                yield connection
+        else:
+            conn = sqlite3.connect(DB, timeout=15)
+            conn.row_factory = sqlite3.Row
+            conn.execute('PRAGMA foreign_keys=ON')
+            conn.execute('PRAGMA busy_timeout=15000')
+            try:
+                yield conn
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        committed = True
+    finally:
+        AFTER_COMMIT.reset(marker)
+    if committed:
+        for callback in pending:
+            try:
+                callback()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception('Post-commit delivery failed')
 
 def now(): return datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat(timespec='seconds')
 def today(): return now()[:10]

@@ -65,6 +65,9 @@ def read_one(nid:int,user=Depends(session)):
     with s.db() as c:
         if not c.execute('SELECT 1 FROM notifications WHERE id=? AND user_id=?',(nid,user['id'])).fetchone():fail('notice','Notificação não encontrada.',404)
         c.execute('UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?',(s.now(),nid,user['id']))
+        from .realtime import publish
+        count=c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()[0]
+        publish('notification:count', {'unread_count':count}, user_id=user['id'])
     return {'ok':True}
 
 
