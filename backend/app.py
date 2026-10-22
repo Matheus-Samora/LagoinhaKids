@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='2.7.1',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='2.7.2',lifespan=lifespan)
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -83,6 +83,16 @@ async def protection(request:Request,call_next):
     context=s.REQUEST_IP.set(request.client.host if request.client else '')
     try:response=await call_next(request)
     finally:s.REQUEST_IP.reset(context)
+    viewer=getattr(request.state,'privacy_user',None)
+    hall=request.url.path.startswith(('/api/platform/hall/','/api/members/hall'))
+    if viewer and (hall or not viewer['privacy_admin']) and 'application/json' in response.headers.get('content-type',''):
+        from .privacy import hide_emails
+        raw=b''.join([part async for part in response.body_iterator])
+        filtered=json.dumps(hide_emails(json.loads(raw),'' if hall else viewer['email']),ensure_ascii=False,separators=(',',':')).encode('utf-8')
+        async def private_body():
+            yield filtered
+        response.body_iterator=private_body()
+        response.headers['content-length']=str(len(filtered))
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY'})
     return response
 
@@ -130,7 +140,9 @@ def session(request:Request):
     result=dict(row)
     from .platform_access import platform_admin,is_pastor
     with s.db() as c:
-        if platform_admin(c,result['id']) or is_pastor(c,result['id']):result['role']='admin'
+        result['privacy_admin']=bool(platform_admin(c,result['id']) or is_pastor(c,result['id']))
+        if result['privacy_admin']:result['role']='admin'
+    request.state.privacy_user=result
     return result
 def _user_is_pastor(user):
     if (user.get('staff_role') or '').lower() in ('pastor','pastora'):return True
@@ -538,8 +550,9 @@ def get_team(user=Depends(staff)):
             if user['role']!='admin' and r['id']!=user['id'] and not any(room_allowed(c,user,rid) for rid in rooms):
                 continue
             visible=public_user(r)
-            if user['role']!='admin':
-                visible={k:visible[k] for k in ('id','name','role','active','staff_role','avatar_url')}
+            if not user.get('privacy_admin'):
+                visible={k:visible[k] for k in ('id','name','role','active','staff_role')}
+                if r['id']==user['id']:visible['avatar_url']=r['avatar_url']
                 rooms=[rid for rid in rooms if room_allowed(c,user,rid)]
             members.append(visible | {'rooms': rooms})
         from .platform_access import platform_admin

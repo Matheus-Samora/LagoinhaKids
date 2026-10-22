@@ -80,11 +80,20 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
         people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name LIMIT 200",('%'+q.lower()+'%',))]
         from ...record_policy import global_manager
         if not global_manager(c,user):
+            from ...privacy import operational_person
+            people=[operational_person(person,user) for person in people]
             for person in people:person.pop('pastoral_notes',None)
         self_regs=[_decrypt_person(dict(r)) for r in c.execute("SELECT * FROM members_self_registrations WHERE status='pending' ORDER BY created_at DESC LIMIT 100")]
+        if not global_manager(c,user):
+            for reg in self_regs:
+                if reg.get('owner_id')!=user['id']:
+                    for key in ('birthday','phone','email','address','marital_status','profession','family_name'):reg.pop(key,None)
         gc_apps=[]
         for r in c.execute("SELECT * FROM sector_applications WHERE target_type='gc' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
-            d=dict(r);d['notes']=decrypt_text(d.get('notes',''));gc_apps.append(d)
+            d=dict(r);d['notes']=decrypt_text(d.get('notes',''))
+            if not global_manager(c,user) and d.get('user_id')!=user['id']:
+                for key in ('email','phone','notes'):d.pop(key,None)
+            gc_apps.append(d)
         my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'pastoral_notes_allowed':bool(global_manager(c,user)),
@@ -113,6 +122,14 @@ def persist(kind,data,user,rid=None):
         if isinstance(data,Person) and data.family_id:current(c,'members_families',data.family_id)
         from ...record_policy import global_manager
         provided=set(data.model_fields_set)
+        if isinstance(data,Person) and not global_manager(c,user) and 'account_user_id' in provided:
+            fail('profile_link','Somente TI e pastores podem vincular cadastros a contas de acesso.',403)
+        if isinstance(data,Person) and rid and not global_manager(c,user):
+            from ...privacy import own_person,PROFILE_FIELDS
+            old=current(c,'members_people',rid)
+            if not own_person(old,user):
+                protected=provided & PROFILE_FIELDS
+                if protected:fail('profile_privacy','Dados pessoais de outros membros são restritos à administração e aos pastores.',403)
         data=merge_existing(c,'members_'+kind,data,user,rid)
         payload=values(data)
         if isinstance(data,Person) and not global_manager(c,user):

@@ -206,11 +206,12 @@ def realtime_ticket(user=Depends(session)):
 
 
 def stream_access(user):
-    from .platform_access import allowed
+    from .platform_access import allowed,platform_admin,is_pastor
     with s.db() as c:
         current=c.execute('SELECT u.* FROM sessions ss JOIN users u ON u.id=ss.user_id WHERE ss.token=? AND ss.expires>? AND u.active=1',(user['token'],int(time.time()))).fetchone()
         if not current:
             return None
+        user['privacy_admin']=bool(platform_admin(c,user['id']) or is_pastor(c,user['id']))
         sectors={mod for mod in ('members','ministries','kids','finance') if allowed(c,dict(current),mod)}
         count=c.execute('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()[0]
         return sectors,count
@@ -255,7 +256,11 @@ async def realtime_stream(request: Request, once: bool = False, user=Depends(ses
                     if target and target!='all' and target not in sub.allowed_sectors:
                         continue
                     evt_type = event.get('type', 'message')
-                    evt_data = json.dumps(event.get('data', {}))
+                    from .privacy import hide_emails
+                    payload=event.get('data', {})
+                    if not user.get('privacy_admin') or evt_type.startswith('hall:'):
+                        payload=hide_emails(payload,'' if evt_type.startswith('hall:') else user.get('email',''))
+                    evt_data = json.dumps(payload)
                     evt_id = event.get('id', '')
                     yield f"id: {evt_id}\nevent: {evt_type}\ndata: {evt_data}\n\n"
                 except asyncio.TimeoutError:

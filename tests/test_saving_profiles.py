@@ -61,11 +61,11 @@ def test_simplified_members_edit_preserves_hidden_fields_and_explicit_clear(reco
     payload={'name':'Cadastro anterior','joined_on':'2020-01-01','birthday':'1990-02-02','relationship':'Titular','phone':'123','address':'Endereco anterior','pastoral_notes':'Nota privada','marital_status':'Casado(a)'}
     pid=c.post('/api/members/people',json=payload).json()['id']
     grant(2,'members','editor');editor=client(2)
-    r=editor.put('/api/members/people/'+pid,json={'version':1,'name':'Nome editado','phone':'456'})
+    r=editor.put('/api/members/people/'+pid,json={'version':1,'name':'Nome editado'})
     assert r.status_code==200,r.text
     actual=next(p for p in c.get('/api/members').json()['people'] if p['id']==pid)
     for key,value in payload.items():
-        if key not in ('name','phone'):assert actual[key]==value
+        if key!='name':assert actual[key]==value
     assert c.put('/api/members/people/'+pid,json={'version':2,'name':'Nome editado','address':''}).status_code==200
     assert next(p for p in c.get('/api/members').json()['people'] if p['id']==pid)['address']==''
 

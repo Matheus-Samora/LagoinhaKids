@@ -85,6 +85,11 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             schedules=[r for r in schedules if r['ministry']==scope]
             resources=[r for r in resources if r['ministry']==scope]
             counts=[r for r in counts if r['ministry']==scope]
+        if not (platform_admin(c,user['id']) or is_pastor(c,user['id'])):
+            for row in rows:row.pop('person_phone',None)
+            for item in apps:
+                if item.get('user_id')!=user['id']:
+                    for key in ('email','phone','notes'):item.pop(key,None)
         my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'assignments':rows,
