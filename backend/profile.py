@@ -85,7 +85,7 @@ def persist(data,user,prepared=None):
             if not media or media['created_by']!=user['id'] or not media['content_type'].startswith('image/'):fail('image','Selecione uma foto enviada pela sua conta.')
         elif values.get('avatar_url') and not values['avatar_url'].startswith('https://'):fail('image','Use uma foto enviada pelo aplicativo ou um endereço HTTPS.')
         
-        user_fields={k:v for k,v in values.items() if k in ('name','phone','avatar_url','bio','public_bio','public_profession')}
+        user_fields={k:int(v) if k in ('public_bio','public_profession') else v for k,v in values.items() if k in ('name','phone','avatar_url','bio','public_bio','public_profession')}
         if user_fields:
             result=c.execute('UPDATE users SET '+','.join(k+'=?' for k in user_fields)+',profile_version=profile_version+1 WHERE id=? AND profile_version=?',(*user_fields.values(),user['id'],data.version))
             if result.rowcount!=1:fail('conflict','O perfil mudou durante o salvamento. Reabra para conferir.',409)

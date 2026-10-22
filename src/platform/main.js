@@ -776,7 +776,7 @@ function render(message=''){
    };
   });
 
- if(module?.enabled&&!personalOnly&&module.id!=='kids'){
+ if(module?.enabled&&!personalOnly&&module.id!=='kids'&&!WORK_TABS.has(activeSectionTab)){
   const container=root.querySelector('#sector-content');
   const bar=document.createElement('div');
   bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';bar.dataset.recordTools='true';if(activeSectionTab==='hall')bar.style.display='none';
