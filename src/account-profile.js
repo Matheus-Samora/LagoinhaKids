@@ -21,7 +21,7 @@ export function accountProfileUI({api,e,onSaved}){
     
     <label>Nome completo<input name="name" value="${e(user.name)}" required minlength="2" maxlength="100" autocomplete="name"></label>
     <label>E-mail institucional / Login<input value="${e(user.email)}" type="email" readonly></label>
-    <label>Celular (WhatsApp)<input name="phone" value="${e(user.phone||'')}" type="tel" inputmode="tel" maxlength="30" autocomplete="tel" placeholder="(DDD) 99999-9999"></label>
+    <label>Celular<input name="phone" value="${e(user.phone||'')}" type="tel" inputmode="tel" maxlength="30" autocomplete="tel" placeholder="(DDD) 99999-9999"></label>
     <label>Data de nascimento<input name="birthday" value="${e(user.birthday||'')}" type="date"></label>
     <label>Estado civil
      <select name="marital_status">
@@ -49,6 +49,7 @@ export function accountProfileUI({api,e,onSaved}){
      <textarea name="bio" rows="2" maxlength="500" placeholder="Compartilhe algo sobre você, versículo favorito ou ministérios que ama...">${e(user.bio||'')}</textarea>
     </label>
     <label>Profissão<input name="profession" value="${e(user.profession||'')}" type="text" maxlength="100" autocomplete="organization-title" placeholder="Ex.: Engenheiro, Autônomo, Estudante"></label>
+    <fieldset><legend>Visibilidade no Hall</legend><label><input type="checkbox" name="public_bio" ${user.public_bio!==false?'checked':''}> Mostrar minha biografia</label><label><input type="checkbox" name="public_profession" ${user.public_profession!==false?'checked':''}> Mostrar minha profissão</label><small>E-mail, telefone, endereço e nascimento não aparecem no Hall.</small></fieldset>
     <label>Endereço residencial<input name="address" value="${e(user.address||'')}" type="text" maxlength="240" autocomplete="street-address" placeholder="Rua, número, bairro"></label>
     
     <p role="alert" class="error"></p>
@@ -71,6 +72,8 @@ export function accountProfileUI({api,e,onSaved}){
      const selectedFam=form.elements.family_id.value;
      const fields={
       version:user.profile_version,
+      public_bio:form.elements.public_bio.checked,
+      public_profession:form.elements.public_profession.checked,
       name:form.elements.name.value.trim(),
       phone:form.elements.phone.value.trim(),
       birthday:form.elements.birthday.value||null,

@@ -18,13 +18,13 @@ def verify_otp(c,user,code):
 class Setup(BaseModel):password:str=Field(max_length=128)
 class Confirm(Setup):secret:str=Field(max_length=300);code:str=Field(max_length=40)
 @router.post('/auth/mfa/setup')
-def setup(data:Setup,user=Depends(admin)):
+def setup(data:Setup,user=Depends(session)):
     if not s.password_ok(data.password,user['password']):fail('credentials','Senha incorreta.',403)
     secret=base64.b32encode(secrets.token_bytes(20)).decode()
     envelope=s.CIPHER.encrypt(f'{user["id"]}|{int(time.time())+600}|{secret}'.encode()).decode()
     return {'secret':secret,'enrollment':envelope}
 @router.post('/auth/mfa/confirm')
-def confirm(data:Confirm,user=Depends(admin)):
+def confirm(data:Confirm,user=Depends(session)):
     if not s.password_ok(data.password,user['password']):fail('credentials','Senha incorreta.',403)
     try:
         uid,expires,secret=s.CIPHER.decrypt(data.secret.encode(),ttl=600).decode().split('|')
@@ -41,8 +41,9 @@ def confirm(data:Confirm,user=Depends(admin)):
     return {'ok':True,'recovery_codes':codes}
 class Disable(Setup):code:str=Field(max_length=40)
 @router.post('/auth/mfa/disable')
-def disable(data:Disable,user=Depends(admin)):
+def disable(data:Disable,user=Depends(session)):
     with s.db() as c:
+        if user.get('mfa_required'):fail('mfa_policy','TI exige segundo fator para esta conta.',403)
         if not user['mfa_secret'] or not s.password_ok(data.password,user['password']) or not verify_otp(c,user,data.code):fail('credentials','Confira sua senha e código.',403)
         c.execute('UPDATE users SET mfa_secret=NULL WHERE id=?',(user['id'],));c.execute('DELETE FROM mfa_recovery WHERE user_id=?',(user['id'],));s.audit(c,user['id'],'mfa_disabled')
     return {'ok':True}

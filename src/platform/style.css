@@ -3734,3 +3734,6 @@ button.mini-button.success-button:hover {
   color: #facc15;
   border-color: rgba(202, 138, 4, 0.3);
 }
+
+[hidden]{display:none!important} :focus-visible{outline:2px solid #f59e0b;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

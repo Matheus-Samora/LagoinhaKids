@@ -1,3 +1,4 @@
+import {workspaceUI} from './workspace.js';
 import {hasPendingForms} from '../form-lifecycle.js';
 import {deferredRefresh} from './live-refresh.js';
 import {communityHallUI} from './hall.js';
@@ -44,6 +45,7 @@ let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=nu
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
 
+const WORK_TABS=new Set(['tasks','calendar','account','operations','groups','reception']);
 const AREA_TABS={
  membro:[
   {id:'all',label:'Início',icon:'home'},
@@ -67,7 +69,7 @@ const AREA_TABS={
  ministries:[
   {id:'all',label:'Visão Geral',icon:'home'},
   {id:'worship',label:'Louvor',icon:'worship'},
-  {id:'schedules',label:'Cultos',icon:'schedules'},
+  {id:'schedules',label:'Escalas',icon:'schedules'},
   {id:'assignments',label:'Equipes',icon:'volunteers'},
   {id:'resources',label:'Materiais',icon:'resources'}
  ],
@@ -77,26 +79,21 @@ const AREA_TABS={
   {id:'closings',label:'Fechamento do culto',icon:'closing'},
   {id:'accounts',label:'Contas',icon:'bank'},
   {id:'cost-centers',label:'Centros',icon:'costs'},
-  {id:'invoices',label:'Faturas',icon:'invoice'}
+  {id:'invoices',label:'Notas Fiscais',icon:'invoice'}
  ]
 };
+
+for(const [area,tabs] of Object.entries(AREA_TABS)){tabs.push({id:'tasks',label:'Tarefas',icon:'closing'},{id:'calendar',label:'Agenda',icon:'schedules'},{id:'account',label:'Minha conta',icon:'identity'});if(area==='membro')tabs.push({id:'reception',label:'Recepção Kids',icon:'kids'},{id:'groups',label:'Liderança de GC',icon:'groups'});else tabs.push({id:'operations',label:area==='systems'?'Operações':area==='finance'?'Conferência':area==='members'?'Integração & GCs':'Gestão da equipe',icon:'systems'});}
 
 function currentAreaKey(){
  const p=location.pathname.split('/')[1];
  return brandMeta[p]?p:'systems';
 }
 
-function getSavedAccounts(){
- try{return JSON.parse(localStorage.getItem('kids_saved_accounts')||'[]');}catch{return [];}
-}
-function saveAccount(user){
- if(!user?.email)return;
- try{
-  const list=getSavedAccounts().filter(a=>a.email!==user.email);
-  list.unshift({name:user.name,email:user.email,role:user.role});
-  localStorage.setItem('kids_saved_accounts',JSON.stringify(list.slice(0,5)));
- }catch{}
-}
+function getSavedAccounts(){try{localStorage.removeItem('kids_saved_accounts');}catch{}return [];}
+
+function saveAccount(){try{localStorage.removeItem('kids_saved_accounts');}catch{}}
+
 function removeSavedAccount(email){
  try{
   const list=getSavedAccounts().filter(a=>a.email!==email);
@@ -118,6 +115,7 @@ async function api(path,options={}){
 }
 
 const personal=personalDataUI({api,e});
+const operationsUI=workspaceUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
 const portalHall=communityHallUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
 const sectors=createSectors({api,e,identity:()=>identity,onProfileSaved:profileSaved,openQrModal:()=>openAppDownloadQrModal()});
 
@@ -136,7 +134,7 @@ function login(message='',prefillEmail=''){
  const saved=getSavedAccounts();
  const savedHtml=saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos salvos</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-saved-email="${e(a.email)}"><span class="avatar mini">${e(initials(a.name||a.email))}</span><div class="saved-account-text"><strong>${e(a.name||a.email)}</strong><small>${e(a.email)}</small></div></button><button type="button" class="saved-account-del" data-remove-email="${e(a.email)}" title="Remover conta" aria-label="Remover"></button></div>`).join('')}</div></div>`:'';
 
- root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label>Código 2FA (opcional)<input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar')}</button></form><button type="button" class="secondary" id="recover-access">Esqueci minha senha</button><footer class="auth-footer"><a class="subtle" href="/kids">Lagoinha Kids →</a><div class="aux-controls-bar"><button type="button" class="aux-btn" id="auth-qr-btn">${t('auth.install_app', 'Instalar app')}</button><button type="button" class="aux-btn" id="auth-theme-btn" title="Alternar tema">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="auth-lang-select" class="aux-lang-select" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></section></main>`;
+ root.innerHTML=`<main class="auth-screen"><section class="auth-card">${authBrand(areaKey)}<h1>${t('auth.welcome', 'Bem-vindo')}</h1><p class="auth-subtitle">${t('auth.welcome_system', 'Entre na sua conta.')}</p>${savedHtml}<form id="login"><label>${t('auth.email', 'E-mail')}<input name="email" id="login-email" type="email" autocomplete="username" required maxlength="200" value="${e(prefillEmail)}"></label><label>${t('auth.password', 'Senha')}<div class="password-field"><input name="password" id="login-password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="toggle-pwd" aria-label="Mostrar senha">${t('action.show', 'Ver')}</button></div></label><label id="platform-otp" hidden>Código do autenticador<input name="otp" autocomplete="one-time-code" maxlength="40"></label><p role="alert" class="error">${e(message)}</p><button type="submit">${t('auth.sign_in_system', 'Entrar')}</button></form><button type="button" class="secondary" id="recover-access">Esqueci minha senha</button><footer class="auth-footer"><a class="subtle" href="/kids">Lagoinha Kids →</a><div class="aux-controls-bar"><button type="button" class="aux-btn" id="auth-qr-btn">${t('auth.install_app', 'Instalar app')}</button><button type="button" class="aux-btn" id="auth-theme-btn" title="Alternar tema">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="auth-lang-select" class="aux-lang-select" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></section></main>`;
  translateDOM(root);
 
  root.querySelector('#auth-qr-btn')?.addEventListener('click',()=>openAppDownloadQrModal());
@@ -179,6 +177,7 @@ function login(message='',prefillEmail=''){
    await load(true);
    realtime.connect(csrf,'');
   }catch(error){
+   if(error.code==='mfa'){const field=form.querySelector('#platform-otp');if(field){field.hidden=false;field.querySelector('input').focus();}}
    errEl.textContent=error.message;
    button.disabled=false;
    button.innerHTML=origText;
@@ -223,7 +222,7 @@ function portalHero(module,selected){
  if(module)return '';
  const ti=identity.platform_admin&&!['access','membro'].includes(selected);
  const actions=ti
-  ?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Backup</a>'
+  ?'<button type="button" data-switch-tab="permissions">Acessos</button><a class="button secondary" href="/membro">Área do membro</a><a class="button secondary" href="/api/platform/backup" download>Exportar dados</a>'
   :`<button type="button" data-switch-tab="gcs">Encontrar GC</button><button type="button" class="secondary" data-switch-tab="ministries">Servir em ministério</button>${identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled)?`<a class="button secondary" href="/membro#hall" id="open-hall-hero">${uiIcon('community',18)} Hall de Membros</a>`: ''}<button type="button" class="secondary" id="open-my-profile-hero">${uiIcon('identity',18)} Meu perfil</button>`;
  return `<section class="portal-heading"><h1>${ti?'Administração':'Minha área'}</h1><div class="sector-actions">${actions}</div></section>`;
 }
@@ -345,7 +344,7 @@ function memberCommunityPortal(tab='all'){
   <div class="section-title" style="margin-bottom:14px;">
    <h2>Grupos de Crescimento (${cells.length})</h2>
   </div>
-  <div class="gc-showcase-grid">
+  <form data-gc-search class="sector-search"><label>Bairro ou nome<input name="q" maxlength="80"></label><label>Dia<input name="day" maxlength="30" placeholder="Ex.: sexta"></label><button>Filtrar</button><button type="reset">Limpar</button></form><p data-gc-results role="status"></p><div class="gc-showcase-grid">
    ${cells.map(gc=>{
     const alreadyPending=myApps.some(a=>a.target_type==='gc'&&a.target_name.toLowerCase()===gc.name.toLowerCase()&&a.status==='pending');
     const banner=gc.banner_url||'/gc/gc-ide.webp';
@@ -506,6 +505,7 @@ async function openPublishAnnouncementModal(){
     <select name="audience"><option value="sector">Todos do setor</option><option value="leaders">Somente líderes</option><option value="people">Pessoas específicas</option></select>
    </label>
    <fieldset id="notice-people" hidden><legend>Selecione as pessoas</legend><div id="notice-recipients" style="max-height:180px;overflow:auto;"></div></fieldset>
+   <div class="form-grid-2"><label>Publicar em (opcional)<input type="datetime-local" name="publish_at"></label><label>Expirar em (opcional)<input type="datetime-local" name="expires_at"></label></div><label><input type="checkbox" name="require_ack"> Exigir confirmação de leitura</label><p id="notice-audience-count" role="status"></p>
    <label>Mensagem
     <textarea name="message" rows="4" required maxlength="1000" style="width:100%;padding:10px;border-radius:10px;font:inherit;"></textarea>
    </label>
@@ -515,22 +515,25 @@ async function openPublishAnnouncementModal(){
  `;
 
  const noticeForm=dialog.querySelector('#publish-announcement-form');
+ const announcementRequestId=crypto.randomUUID();
  let recipientRequest=0;
  async function loadNoticeRecipients(){
   const request=++recipientRequest;
   const people=noticeForm.elements.audience.value==='people';
   dialog.querySelector('#notice-people').hidden=!people;
-  if(!people)return;
+  if(!people){try{const result=await api('/platform/announcement-recipients?sector='+encodeURIComponent(noticeForm.elements.target_sector.value));if(request===recipientRequest){const count=noticeForm.elements.audience.value==='leaders'?result.filter(p=>p.leader).length:result.length;dialog.querySelector('#notice-audience-count').textContent=count+' pessoa(s) na audiência selecionada.';}}catch{}return;}
   const list=dialog.querySelector('#notice-recipients');
   list.textContent='Carregando...';
   try{
    const result=await api('/platform/announcement-recipients?sector='+encodeURIComponent(noticeForm.elements.target_sector.value));
    if(request!==recipientRequest)return;
+   dialog.querySelector('#notice-audience-count').textContent=result.length+' pessoa(s) disponíveis para seleção.';
    list.innerHTML=result.map(person=>`<label style="display:flex;gap:8px;align-items:center;min-height:44px;"><input type="checkbox" name="recipient_ids" value="${person.id}">${e(person.name)}</label>`).join('')||'Nenhuma pessoa disponível neste setor.';
   }catch(error){if(request===recipientRequest)list.textContent=error.message;}
  }
  noticeForm.elements.audience.onchange=()=>void loadNoticeRecipients();
  noticeForm.elements.target_sector.onchange=()=>void loadNoticeRecipients();
+ void loadNoticeRecipients();
  dialog.querySelector('#close-ann-modal').onclick=()=>dialog.close();
  dialog.querySelector('#publish-announcement-form').onsubmit=async ev=>{
   ev.preventDefault();
@@ -541,10 +544,12 @@ async function openPublishAnnouncementModal(){
    const res=await api('/platform/announcements',{
     method:'POST',
     body:{
+     request_id:announcementRequestId,
      title:fd.get('title'),
      target_sector:fd.get('target_sector'),
      audience:fd.get('audience'),
      recipient_ids:fd.getAll('recipient_ids').map(Number),
+     publish_at:fd.get('publish_at')||null,expires_at:fd.get('expires_at')||null,require_ack:fd.get('require_ack')==='on',
      event_date:fd.get('event_date')||null,
      location:fd.get('location')||null,
      message:fd.get('message')
@@ -570,7 +575,7 @@ function render(message=''){
  const areaKey=module?module.id:(isMemberPortal?'membro':'systems');
  const personalOnly=false;
  const canHall=identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled);
- const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>item.id!=='hall'||canHall);
+ const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>(item.id!=='hall'||canHall)&&(item.id!=='reception'||['teacher','admin'].includes(identity.user.role)&&identity.modules.some(m=>m.id==='kids'&&m.enabled))&&(item.id!=='operations'||areaKey==='systems'||identity.platform_admin||identity.pastor||['admin','editor'].includes(module?.role))&&(item.id!=='groups'||identity.gc_leader||identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled&&['admin','editor'].includes(m.role))));
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -593,7 +598,8 @@ function render(message=''){
   ${identity.modules.filter(m=>m.enabled).map(m=>`<a class="platform-nav-link ${module?.id===m.id?'active':''}" href="${m.url}"><span class="nav-btn-icon">${uiIcon(m.id)}</span><span>${e(m.name.replace('Lagoinha ',''))}</span></a>`).join('')}
  `;
 
- const bottomNavHtml=tabs.map(tItem=>`
+ const bottomTabs=[...tabs.slice(0,4),...tabs.filter(t=>t.id==='account'&&!tabs.slice(0,4).some(x=>x.id==='account'))];
+ const bottomNavHtml=bottomTabs.map(tItem=>`
   <button type="button" class="platform-bnav-item ${activeSectionTab===tItem.id?'active':''}" data-switch-tab="${e(tItem.id)}">
    <span class="bnav-emoji" aria-hidden="true">${uiIcon(tItem.icon,22)}</span>
    <span>${e(tItem.label)}</span>
@@ -655,6 +661,7 @@ function render(message=''){
    <div class="mobile-sector-switcher" aria-label="Atalhos de setores">
     ${sectorLinksHtml}
    </div>
+   <label class="mobile-section-picker">Seção<select data-mobile-section>${tabs.map(t=>`<option value="${e(t.id)}" ${t.id===activeSectionTab?'selected':''}>${e(t.label)}</option>`).join('')}</select></label>
    <main class="workspace page-enter">
     ${!module&&activeSectionTab==='all'?portalHero(module,selected):''}
     <p class="status" role="status">${e(message)}</p>
@@ -670,8 +677,8 @@ function render(message=''){
      ${isMemberPortal?memberCommunityPortal(activeSectionTab):''}
     `}
     ${identity.platform_admin&&!module&&!isMemberPortal?`
-     ${(activeSectionTab==='all'||activeSectionTab==='permissions')?permissions():''}
-     ${(activeSectionTab==='all'||activeSectionTab==='audit')?auditSection():''}
+     ${(activeSectionTab==='permissions')?permissions():''}
+     ${(activeSectionTab==='audit')?auditSection():''}
     `:''}
    </main>
    <nav class="platform-bottom-nav" aria-label="Navegação inferior">
@@ -680,12 +687,18 @@ function render(message=''){
   </div>
  </div>`;
 
+ root.querySelector('[data-gc-search]')?.addEventListener('submit',async event=>{event.preventDefault();const f=event.currentTarget,rows=await api('/workspace/groups/search?q='+encodeURIComponent(f.elements.q.value)+'&day='+encodeURIComponent(f.elements.day.value));const ids=new Set(rows.map(x=>String(x.id)));root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>{card.hidden=!ids.has(card.querySelector('[data-apply-gc]')?.dataset.applyGc);});root.querySelector('[data-gc-results]').textContent=rows.length+' GC(s) encontrado(s).';});
+ root.querySelector('[data-gc-search]')?.addEventListener('reset',()=>{root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>card.hidden=false);root.querySelector('[data-gc-results]').textContent='';});
+ if(WORK_TABS.has(activeSectionTab)){root.querySelector('.workspace').innerHTML='<div id="work-root"></div>';void operationsUI.mount(root.querySelector('#work-root'),activeSectionTab,areaKey);}
  if(isMemberPortal&&activeSectionTab==='hall'&&canHall)void portalHall.mount(root.querySelector('#member-hall-root'));
- if(module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
+ if(!WORK_TABS.has(activeSectionTab)&&module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
 
+ root.querySelector('[data-mobile-section]')?.addEventListener('change',event=>{root.querySelector('[data-switch-tab="'+event.target.value+'"]')?.click();event.target.value=activeSectionTab;});
  root.querySelectorAll('[data-switch-tab]').forEach(btn=>btn.addEventListener('click',()=>{
   const nextTab=btn.dataset.switchTab||'all';
+  const previousTab=activeSectionTab;
   activeSectionTab=nextTab;
+  if(WORK_TABS.has(nextTab)||WORK_TABS.has(previousTab)){history.replaceState({},'',location.pathname+location.search+'#'+nextTab);render();return;}
   const recordTools=root.querySelector('[data-record-tools]');if(recordTools)recordTools.style.display=nextTab==='hall'?'none':'flex';
   history.replaceState({},'',location.pathname+location.search+'#'+nextTab);
   if(module?.enabled&&module.id!=='kids'){
@@ -842,13 +855,13 @@ function render(message=''){
 
  root.querySelector('#create-identity')?.addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget;const b=form.querySelector('button');b.disabled=true;
-  try{const r=await api('/platform/users',{method:'POST',body:Object.fromEntries(new FormData(form))});await load();root.querySelector('.status').textContent=r.message;}catch(error){form.querySelector('[role=alert]').textContent=error.message;}finally{b.disabled=false;}
+  try{const r=await api('/workspace/invitations',{method:'POST',body:Object.fromEntries(new FormData(form))});await load();const status=root.querySelector('.status');status.textContent='Convite criado. Entregue este link somente à pessoa identificada: ';const input=document.createElement('input');input.readOnly=true;input.value=r.url;status.append(input);}catch(error){form.querySelector('[role=alert]').textContent=error.message;}finally{b.disabled=false;}
  });
 
  root.querySelectorAll('[data-grant]').forEach(form=>form.addEventListener('submit',async event=>{
   event.preventDefault();const b=form.querySelector('button');b.disabled=true;const d=new FormData(form);
   try{
-   await api(`/platform/users/${form.dataset.user}/modules/${form.dataset.grant}`,{method:'PUT',body:{role:d.get('role'),enabled:d.get('enabled')==='on',scope:d.get('scope')||''}});
+   await api(`/platform/users/${form.dataset.user}/modules/${form.dataset.grant}`,{method:'PUT',body:{role:d.get('role'),enabled:d.get('enabled')==='on',scopes:d.getAll('scope').includes('')?[]:d.getAll('scope')}});
    await load();root.querySelector('.status').textContent='Permissão atualizada.';
   }catch(error){form.querySelector('[role=alert]').textContent=error.message;}finally{b.disabled=false;}
  }));
@@ -863,12 +876,12 @@ function render(message=''){
     await load();root.querySelector('.status').textContent=!active?'Conta reativada.':'Conta bloqueada.';
    }else if(kind==='toggle-admin'){
     const isAdmin=btn.dataset.admin==='true';
-    if(!confirm(isAdmin?'Remover Admin Central?':'Tornar Admin Central?')){btn.disabled=false;return;}
+    if(!confirm(isAdmin?'Remover acesso de TI? A pessoa ficará limitada aos demais acessos atribuídos.':'Conceder acesso de TI? A pessoa poderá alterar todos os setores e permissões.')){btn.disabled=false;return;}
     await api(`/platform/users/${uid}`,{method:'PATCH',body:{platform_admin:!isAdmin}});
     await load();root.querySelector('.status').textContent='Privilégio atualizado.';
    }else if(kind==='toggle-pastor'){
     const isPastor=btn.dataset.pastor==='true';
-    if(!confirm(isPastor?'Remover cargo Pastor(a)?':'Definir como Pastor / Pastora?')){btn.disabled=false;return;}
+    if(!confirm(isPastor?'Remover acesso pastoral? Os acessos setoriais atribuídos permanecem.':'Conceder acesso pastoral? A pessoa poderá alterar todos os setores, exceto a área de TI.')){btn.disabled=false;return;}
     await api(`/platform/users/${uid}`,{method:'PATCH',body:{pastor:!isPastor}});
     await load();root.querySelector('.status').textContent=isPastor?'Cargo Pastoral removido.':'Cargo Pastor / Pastora concedido.';
    }else if(kind==='reset-pwd'){
@@ -898,7 +911,7 @@ function moduleView(m){if(!m.enabled)return `<section class="panel"><h2>Acesso r
 
 function permissions(){
  const filteredUsers=users.filter(u=>!userSearch||(u.name+' '+u.email).toLowerCase().includes(userSearch.toLowerCase()));
- return `<section class="permissions" id="permissions-section"><div class="permissions-header"><div><h2>Usuários e Permissões</h2></div><label style="min-width:240px;font-size:13px;font-weight:600;">Buscar<input id="user-filter-input" value="${e(userSearch)}" placeholder="Nome ou e-mail..." maxlength="100"></label></div><details class="panel"><summary><strong>+ Novo usuário</strong></summary><form id="create-identity" class="create-identity"><label>Nome<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label><label>E-mail<input name="email" type="email" required maxlength="200" autocomplete="email"></label><label>Senha inicial<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><p class="error" role="alert"></p><button>Criar usuário</button></form></details>${filteredUsers.map(u=>`<details class="panel"><summary><span class="avatar mini">${e(initials(u.name))}</span><strong>${e(u.name)}</strong><span>${e(u.email)}</span>${!u.active?'<span class="badge" style="background:#fee2e2;color:#991b1b;">Bloqueado</span>':''}${u.pastor?'<span class="badge" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">Pastor(a)</span>':''}${u.platform_admin?'<span class="badge">Admin TI</span>':`<span class="badge">${u.pastor?'Todos os setores':`${(u.grants||[]).filter(g=>g.enabled).length} setor(es)`}</span>`}</summary><div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:8px;"><button type="button" class="secondary" data-user-patch="reset-pwd" data-uid="${u.id}">Redefinir senha</button><button type="button" class="secondary" data-user-patch="toggle-pastor" data-uid="${u.id}" data-pastor="${Boolean(u.pastor)}">${u.pastor?'Remover Pastor(a)':'Definir Pastor(a)'}</button>${u.id!==identity.user.id?`<button type="button" class="secondary" data-user-patch="toggle-active" data-uid="${u.id}" data-active="${u.active}">${u.active?'Bloquear':'Reativar'}</button><button type="button" class="secondary" data-user-patch="toggle-admin" data-uid="${u.id}" data-admin="${u.platform_admin}">${u.platform_admin?'Remover Admin TI':'Tornar Admin TI'}</button>`:'<span class="subtle" style="align-self:center;">Sua conta</span>'}</div>${u.platform_admin?'':Object.entries(names).map(([id,name])=>{const g=u.grants.find(g=>g.module===id);const roles=id==='kids'?['admin','pastor','teacher','parent']:['admin','pastor','editor','viewer'];const scopeSelect=id==='ministries'?`<label>Escopo<select name="scope"><option value="">Todos os ministérios</option>${MINISTRY_CATALOG.map(m=>`<option value="${e(m)}" ${g?.scope===m?'selected':''}>Somente ${e(m)}</option>`).join('')}</select></label>`:'';return `<form class="grant" data-user="${u.id}" data-grant="${id}" style="${id==='ministries'?'grid-template-columns:minmax(160px,1.2fr) minmax(150px,1fr) minmax(180px,1fr) auto;':''}"><label class="check"><input name="enabled" type="checkbox" ${g?.enabled||u.pastor?'checked':''}>${e(name)}</label><label>Perfil<select name="role">${roles.map(role=>`<option value="${role}" ${role===(u.pastor?'pastor':(g?.role||(id==='kids'?'parent':'viewer')))?'selected':''}>${roleNames[role]}</option>`).join('')}</select></label>${scopeSelect}<button>Salvar</button><p role="alert" class="error"></p></form>`;}).join('')}</details>`).join('')}</section>`;
+ return `<section class="permissions" id="permissions-section"><div class="permissions-header"><div><h2>Usuários e Permissões</h2></div><label style="min-width:240px;font-size:13px;font-weight:600;">Buscar<input id="user-filter-input" value="${e(userSearch)}" placeholder="Nome ou e-mail..." maxlength="100"></label></div><details class="panel"><summary><strong>+ Novo usuário</strong></summary><form id="create-identity" class="create-identity"><label>Nome<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label><label>E-mail<input name="email" type="email" required maxlength="200" autocomplete="email"></label><p class="subtle">A pessoa define a própria senha por um link individual.</p><p class="error" role="alert"></p><button>Criar usuário</button></form></details>${filteredUsers.map(u=>`<details class="panel"><summary><span class="avatar mini">${e(initials(u.name))}</span><strong>${e(u.name)}</strong><span>${e(u.email)}</span>${!u.active?'<span class="badge" style="background:#fee2e2;color:#991b1b;">Bloqueado</span>':''}${u.pastor?'<span class="badge" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">Pastor(a)</span>':''}${u.platform_admin?'<span class="badge">Admin TI</span>':`<span class="badge">${u.pastor?'Todos os setores':`${(u.grants||[]).filter(g=>g.enabled).length} setor(es)`}</span>`}</summary><div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:8px;"><button type="button" class="secondary" data-user-patch="reset-pwd" data-uid="${u.id}">Redefinir senha</button><button type="button" class="secondary" data-user-patch="toggle-pastor" data-uid="${u.id}" data-pastor="${Boolean(u.pastor)}">${u.pastor?'Remover Pastor(a)':'Definir Pastor(a)'}</button>${u.id!==identity.user.id?`<button type="button" class="secondary" data-user-patch="toggle-active" data-uid="${u.id}" data-active="${u.active}">${u.active?'Bloquear':'Reativar'}</button><button type="button" class="secondary" data-user-patch="toggle-admin" data-uid="${u.id}" data-admin="${u.platform_admin}">${u.platform_admin?'Remover Admin TI':'Tornar Admin TI'}</button>`:'<span class="subtle" style="align-self:center;">Sua conta</span>'}</div>${u.platform_admin?'':Object.entries(names).map(([id,name])=>{const g=u.grants.find(g=>g.module===id);const roles=id==='kids'?['admin','pastor','teacher','parent']:['admin','pastor','editor','viewer'];const selectedScopes=(()=>{try{return g?.scope?.startsWith('[')?JSON.parse(g.scope):g?.scope?[g.scope]:[];}catch{return [];}})();const scopeSelect=id==='ministries'?`<label>Ministérios<select name="scope" multiple size="5"><option value="" ${!selectedScopes.length?'selected':''}>Todos os ministérios</option>${MINISTRY_CATALOG.map(m=>`<option value="${e(m)}" ${selectedScopes.includes(m)?'selected':''}>${e(m)}</option>`).join('')}</select></label>`:'';return `<form class="grant" data-user="${u.id}" data-grant="${id}" style="${id==='ministries'?'grid-template-columns:minmax(160px,1.2fr) minmax(150px,1fr) minmax(180px,1fr) auto;':''}"><label class="check"><input name="enabled" type="checkbox" ${g?.enabled||u.pastor?'checked':''}>${e(name)}</label><label>Perfil<select name="role">${roles.map(role=>`<option value="${role}" ${role===(u.pastor?'pastor':(g?.role||(id==='kids'?'parent':'viewer')))?'selected':''}>${roleNames[role]}</option>`).join('')}</select></label>${scopeSelect}<button>Salvar</button><p role="alert" class="error"></p></form>`;}).join('')}</details>`).join('')}</section>`;
 }
 
 function auditSection(){
@@ -907,7 +920,7 @@ function auditSection(){
    <h2>Auditoria e Backup</h2>
    <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button type="button" class="secondary" id="load-global-audit">${auditData?'Atualizar':'Carregar Auditoria'}</button>
-    <a class="button secondary" href="/api/platform/backup" download="lagoinha-systems-backup.json">Backup JSON</a>
+    <a class="button secondary" href="/api/platform/backup" download="lagoinha-systems-backup.json">Exportar dados JSON</a>
    </div>
   </div>
   ${auditData?`<div class="sector-insights-grid" style="margin-top:16px;margin-bottom:0;">

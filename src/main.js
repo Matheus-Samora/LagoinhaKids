@@ -1,3 +1,4 @@
+import {hasPendingForms} from './form-lifecycle.js';
 import {accountProfileUI} from './account-profile.js';
 import {realtime} from './platform/realtime.js';
 import {notificationCenterUI} from './notification-center.js';
@@ -60,15 +61,10 @@ async function api(path,options={}){
  if(!response.ok){if(response.status===401 && S.user){S.user=null;renderLogin();}const err=new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir a operação.');err.code=data.detail?.code;throw err;}
  return data;
 }
-function getSavedAccounts(){
- try{return JSON.parse(localStorage.getItem('kids_saved_accounts')||'[]');}catch{return [];}
-}
-function saveAccount(user){
- if(!user||!user.email)return;
- let accs=getSavedAccounts().filter(a=>a.email.toLowerCase()!==user.email.toLowerCase());
- accs.unshift({name:user.name,email:user.email.toLowerCase(),role:user.role,savedAt:Date.now()});
- try{localStorage.setItem('kids_saved_accounts',JSON.stringify(accs.slice(0,6)));}catch{}
-}
+function getSavedAccounts(){try{localStorage.removeItem('kids_saved_accounts');}catch{}return [];}
+
+function saveAccount(){try{localStorage.removeItem('kids_saved_accounts');}catch{}}
+
 function removeSavedAccount(email){
  let accs=getSavedAccounts().filter(a=>a.email.toLowerCase()!==email.toLowerCase());
  try{localStorage.setItem('kids_saved_accounts',JSON.stringify(accs));}catch{}
@@ -105,7 +101,7 @@ async function familyModal(ch){
 }
 async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
- const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamData]=await Promise.all([
+ const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamData,platform]=await Promise.all([
   api('/children'),
   api('/rooms'),
   api('/notifications'),
@@ -115,11 +111,12 @@ async function load(){
   S.user.platform_admin?api('/users'):[],
   S.user.platform_admin?api('/audit'):[],
   S.user.role!=='parent'?api('/guests/active'):[],
-  S.user.role!=='parent'?api('/team').catch(()=>({members:[],candidates:[]})):{members:[],candidates:[]}
+  S.user.role!=='parent'?api('/team').catch(()=>({members:[],candidates:[]})):{members:[],candidates:[]},
+  api('/platform/me')
  ]);
  const teamMembers=teamData?.members||[];
  const teamCandidates=teamData?.candidates||[];
- Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamMembers,teamCandidates});
+ Object.assign(S,{children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamMembers,teamCandidates,platform});
  render();
 }
 function navItems(){
@@ -219,6 +216,7 @@ window.addEventListener('popstate',()=>{
   const formattedDate = new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'}).format(new Date());
 
     app.innerHTML=`<div class="shell"><aside class="sidebar" data-role="${S.user.role}">${brand()}<div class="sidebar-caption">${t('brand.our_space', 'NOSSO ESPAÇO')}</div><nav aria-label="Navegação principal">${navItems().map(([page,label,i])=>`<button class="nav-link ${S.page===page?'active':''}" data-page="${page}">${icon(i)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-user-card"><button type="button" class="sidebar-user-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})">${userAvatar(S.user,'mini')}<div class="sidebar-user-text"><strong>${escape(S.user.name.split(' ')[0])}</strong><small>${roles[S.user.role]||'Acesso'}</small></div></button><button type="button" class="sidebar-logout-btn" data-action="logout" title="Sair do aplicativo" aria-label="Sair">${icon('out',16)}</button></div></div></aside><main><header class="topbar"><div class="topbar-left"><div class="topbar-brand" data-page="${initialPage()}" role="button" tabindex="0" title="Ir para a página inicial" aria-label="Lagoinha Kids"><div class="topbar-logo-badge"><img src="/logo.png" alt="Lagoinha Kids" class="topbar-logo"/></div><div class="topbar-brand-text"><span class="topbar-brand-name">Lagoinha <strong>Kids</strong></span><span class="topbar-brand-sub">${pageLabel}</span></div></div><div class="crumb-trail"><span class="crumb-prefix">${t('brand.our_space', 'NOSSO ESPAÇO')}</span><span class="crumb-sep">/</span><strong class="crumb-title">${pageLabel}</strong></div></div><div class="top-actions"><a class="topbar-action-pill secondary" href="/access" title="Ir para Área de Membros e Setores" aria-label="Meus acessos">${icon('rooms',15)}<span>${t('nav.access', 'Acessos')}</span></a><button type="button" class="topbar-action-pill secondary" data-action="install-modal" title="Baixar ou Instalar Aplicativo" aria-label="Baixar App">${icon('download',15)}<span>${t('nav.download_app', 'Baixar App')}</span></button><span class="topbar-date-chip" title="Data atual">${formattedDate}</span><button type="button" class="topbar-icon-btn bell-button" data-page="notifications" aria-label="Abrir notificações" title="Avisos e recados">${icon('bell',19)}${unread?`<span class="bell-badge">${unread>99?'99+':unread}</span>`:''}</button><button type="button" class="topbar-avatar-btn" data-page="settings" title="Minha conta (${escape(S.user.name)})" aria-label="Minha conta">${userAvatar(S.user,'mini')}</button><button type="button" class="topbar-icon-btn logout-top-btn" data-action="logout" title="Sair da conta" aria-label="Sair">${icon('out',16)}</button></div></header>${!isStandalone() && !sessionStorage.getItem('lagoinha_install_banner_dismissed') ? `<div class="mobile-install-banner" id="mobile-install-banner"><div class="mobile-install-banner-left"><span class="mobile-install-banner-badge">${icon('download', 16)}</span><div class="mobile-install-banner-text"><strong>Instale o Lagoinha Kids no celular</strong><small>Acesso rápido e notificações na tela de bloqueio</small></div></div><div class="mobile-install-banner-actions"><button type="button" class="btn-install-banner-cta" data-action="install-modal">${t('nav.download_app', 'Baixar App')}</button><button type="button" class="btn-install-banner-dismiss" data-action="dismiss-install-banner" aria-label="Dispensar">✕</button></div></div>` : ''}<div class="page-content">${pageContent()}</div><footer class="app-footer"><span>Lagoinha Kids · Cuidado que conecta — Igreja Batista da Lagoinha</span><div class="aux-controls-bar"><button type="button" class="aux-btn" data-action="toggle-theme" title="Alternar Modo Escuro / Claro">${getTheme()==='dark' ? t('theme.light', '☀️ Claro') : t('theme.dark', '🌙 Escuro')}</button><select id="kids-lang-select" class="aux-lang-select" data-lang-select="1" aria-label="Idioma">${SUPPORTED_LANGS.map(l=>`<option value="${l.code}" ${l.code===getLang()?'selected':''}>${l.flag} ${l.code.toUpperCase()}</option>`).join('')}</select></div></footer></main><nav class="mobile-bottom-nav" aria-label="Navegação móvel">${mobileNavItems().map(([page,label,i])=>`<button class="mobile-bottom-btn ${S.page===page?'active':''}" data-page="${page}">${icon(i,22)}<span>${label}</span>${page==='notifications'&&unread?`<b class="notification-count">${unread}</b>`:''}</button>`).join('')}</nav></div>`;
+    const sidebar=app.querySelector('.sidebar');if(sidebar&&S.platform){const picker=document.createElement('label');picker.className='kids-sector-picker';picker.textContent='Setor';const select=document.createElement('select');select.setAttribute('aria-label','Alternar setor');const links=[{url:'/kids',name:'Lagoinha Kids'},{url:'/membro',name:'Área do Membro'},{url:'/membro#tasks',name:'Minhas tarefas'},{url:'/membro#calendar',name:'Minha agenda'},{url:'/membro#account',name:'Minha conta'},...(S.platform.modules||[]).filter(m=>m.enabled&&m.id!=='kids'),...(S.platform.platform_admin?[{url:'/systems',name:'Painel TI'}]:[])];for(const item of links){const option=document.createElement('option');option.value=item.url;option.textContent=item.name;select.append(option);}select.onchange=()=>{if((!modal.open&&!hasPendingForms())||confirm('Descartar alterações não salvas e abrir outro setor?'))location.href=(S.apiOrigin||'')+select.value;};picker.append(select);sidebar.prepend(picker);}
     app.querySelectorAll('table').forEach(table=>{const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>cell.dataset.label=labels[i]||''));});
     translateDOM(app);
     const inboxHost=app.querySelector('#kids-notification-center');
@@ -462,17 +460,15 @@ async function privacyModal(){
   showModal('Política de Privacidade','Lagoinha Kids',`<p>O Lagoinha Kids trata dados com base no Art. 14 da LGPD para salvaguarda e cuidado dos menores durante os cultos. Nenhuma foto é armazenada no servidor.</p><button type="button" class="btn primary full" data-action="close">Fechar</button>`);
  }
 }
-function installModal(){
- const appUrl=location.origin;
+async function installModal(){
+ const appUrl=S.apiOrigin||location.origin;
+ const installQr=await generateQR(appUrl);
  showModal('Baixar ou Instalar o App','Tenha o aplicativo no seu celular com acesso rápido e notificações.',`<div class="install-guide">
   <div class="install-option-card" style="text-align:center;background:#09090b;color:#ffffff;border:1px solid #27272a;">
    <div class="install-option-head" style="justify-content:center;"><h3 style="color:#ffffff;">📱 Aponte a Câmera do Celular</h3></div>
    <p style="color:#d4d4d8;font-size:13px;margin:4px 0 12px;">Escaneie o QR Code abaixo com a câmera do seu celular para abrir e instalar o aplicativo:</p>
    <div style="background:#ffffff;padding:14px;border-radius:16px;display:inline-block;box-shadow:0 8px 24px rgba(0,0,0,0.4);margin-bottom:8px;">
-    <svg viewBox="0 0 100 100" style="width:160px;height:160px;display:block;" shape-rendering="crispEdges">
-     <rect width="100" height="100" fill="#ffffff"/>
-     <path fill="#09090b" d="M10 10h24v24h-24zM14 14h16v16h-16zM18 18h8v8h-8zM66 10h24v24h-24zM70 14h16v16h-16zM74 18h8v8h-8zM10 66h24v24h-24zM14 70h16v16h-16zM18 74h8v8h-8zM42 10h6v6h-6zM52 10h6v12h-6zM38 18h6v12h-6zM46 22h6v6h-6zM56 22h6v6h-6zM42 32h16v6h-16zM10 42h6v6h-6zM22 42h6v6h-6zM32 42h12v6h-12zM50 42h12v6h-12zM68 42h6v6h-6zM80 42h10v6h-10zM14 50h12v6h-12zM32 50h6v6h-6zM44 50h6v6h-6zM56 50h12v6h-12zM74 50h6v6h-6zM84 50h6v6h-6zM10 58h8v6h-8zM24 58h12v6h-12zM42 58h6v6h-6zM54 58h6v6h-6zM66 58h8v6h-8zM80 58h10v6h-10zM42 66h6v12h-6zM52 66h8v6h-8zM66 66h6v6h-6zM78 66h12v6h-12zM48 76h12v6h-12zM66 74h6v12h-6zM78 76h6v6h-6zM88 76h4v6h-4zM38 84h8v6h-8zM50 84h12v6h-12zM74 84h8v6h-8zM86 84h6v6h-6zM42 90h16v4h-16zM66 90h8v4h-8zM82 90h10v4h-10z"/>
-    </svg>
+    <img src="${escape(installQr)}" alt="QR Code para abrir o aplicativo" width="160" height="160">
    </div>
    <div style="font-size:12px;color:#a1a1aa;margin-top:4px;">Link direto: <strong style="color:#ffffff;">${escape(appUrl)}</strong></div>
   </div>
@@ -498,6 +494,7 @@ function installModal(){
 
 const optionsParents=()=>'<option value="">Vincular depois</option>'+S.users.filter(u=>u.role==='parent'&&u.active).map(u=>`<option value="${u.id}">${escape(u.name)} · ${escape(u.email)}</option>`).join('');
 async function attendanceModal(ch){
+ const pickupPeople=ch.status==='present'?await api('/workspace/children/'+ch.id+'/pickups').catch(()=>[]):[];
  if(!ch)return;
  if(!ch.parent_id)return toast('Peça à administração para vincular um responsável antes da entrada ou saída.',true);
  let family=[];
@@ -523,7 +520,7 @@ async function attendanceModal(ch){
   `<div class="guardian-box">${icon('shield',25)}<div><span>RESPONSÁVEL VINCULADO</span><strong>${escape(ch.parent_name||'Responsável')}</strong></div></div>
   ${ch.allergies?`<div class="allergy-alert-box" style="margin:10px 0;padding:10px;background:#18181b;border:1px solid #3f3f46;border-radius:8px;font-size:13px;"><strong style="color:#ffffff;">${icon('health',16)} Alergia / Cuidado Médico:</strong> <span style="color:#e4e4e7;">${escape(ch.allergies)}</span>${ch.emergency_medication?`<div style="color:#a1a1aa;margin-top:4px;"><small>Medicação de emergência: ${escape(ch.emergency_medication)}</small></div>`:''}</div>`:''}
   ${ch.authorized_pickups?`<div style="margin:8px 0;font-size:12px;color:#a1a1aa;"><span>Pessoas autorizadas a retirar: </span><strong style="color:#ffffff;">${escape(ch.authorized_pickups)}</strong></div>`:''}
-  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}"><label>Responsável presente<select name="guardian_id">${guardianOptions}</select></label>
+  <form data-form="attendance" data-id="${ch.id}" data-direction="${out?'out':'in'}"><label>Responsável presente<select name="guardian_id">${guardianOptions}${pickupPeople.map(p=>`<option value="pickup:${escape(p.id)}">${escape(p.name)} · ${escape(p.relationship||'Autorizado')} ${p.identity_hint?'· final '+escape(p.identity_hint):''}</option>`).join('')}</select></label>
    ${!out?`<div class="claim-info-note" style="margin:8px 0 12px;padding:8px 12px;background:#09090b;border:1px solid #27272a;border-radius:6px;font-size:12px;color:#a1a1aa;">Ao confirmar a entrada, o sistema gerará uma <strong>Etiqueta de Segurança (Claim Tag de 4 dígitos)</strong> pareada para a criança e para o responsável.</div>`:`<div class="claim-checkout-note" style="margin:8px 0 12px;padding:10px;background:#09090b;border:1px solid #27272a;border-radius:6px;"><div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#a1a1aa;margin-bottom:6px;">PROTOCOLO DE RETIRADA (NO TAG, NO CHILD)</div><label style="font-size:13px;display:block;margin-bottom:8px;">Código da Etiqueta do Responsável (4 caracteres):<input name="claim_code" type="text" maxlength="4" style="text-transform:uppercase;font-size:18px;font-weight:700;letter-spacing:4px;text-align:center;margin-top:4px;" placeholder="Código" ${S.user.role==='admin'?'':'required'}/></label>${S.user.role==='admin'?'<details class="child-extra"><summary>Exceção administrativa</summary><p class="soft-info">Use somente após conferir presencialmente o responsável. O motivo ficará registrado na auditoria.</p><label>Motivo da exceção<textarea name="exception_reason" minlength="15" maxlength="300"></textarea></label></details>':''}</div>`}
    <label class="checkbox-label"><input name="confirmed" type="checkbox" required/>Conferi presencialmente a identidade ${out?'e a Etiqueta de Segurança':'do responsável vinculado'} e autorizo este registro.</label>
    <p class="soft-info">A conferência presencial garante a segurança e o cuidado com cada criança.</p>
@@ -556,9 +553,7 @@ function teamMemberModal(member=null){
     <input name="phone" type="tel" value="${escape(member?.phone||'')}" maxlength="30"/>
   </label>
   ${!isEdit?`
-    <label>Senha inicial
-      <input name="password" type="password" required minlength="12" maxlength="128" placeholder="Mínimo 12 caracteres"/>
-    </label>
+    <p>A pessoa definirá a própria senha por um convite individual.</p>
   `:`
     <label>Nova senha (opcional)
       <input name="password" type="password" minlength="12" maxlength="128"/>
@@ -698,7 +693,7 @@ function digitalIdModal(ch){
    ${ch.avatar_url ? `<img src="${escape(ch.avatar_url)}" alt="${escape(ch.name)}" class="id-avatar-img"/>` : `<div class="id-avatar">${initials(ch.name)}</div>`}
    <div class="id-info">
     <h3>${escape(ch.name)}</h3>
-    <p>${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10)}</p>
+    <p>${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10).split('-').reverse().join('/')}</p>
     <p style="font-size:11px;color:#a1a1aa;margin-top:2px;">Resp.: ${escape(ch.parent_name||S.user.name)}</p>
    </div>
   </div>
@@ -724,6 +719,7 @@ function digitalIdModal(ch){
 function totemKioskModal(){
  const renderTotemList=(q='')=>{
   const term=q.trim().toLowerCase();
+  if(term.length<2)return '<p role="status">Busque pelo nome ou código para iniciar o atendimento.</p>';
   const list=S.children.filter(c=>!term||(c.name+' '+(c.parent_name||'')+' '+(c.room_name||'')).toLowerCase().includes(term)).slice(0,12);
   return list.length?list.map(c=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #27272a;border-radius:12px;background:#18181b;color:#fff;gap:10px;flex-wrap:wrap;">
    <div>
@@ -1045,7 +1041,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(action==='guest-checkout'){showModal('Saída do visitante','Confira o responsável e o código entregue na chegada.',`<form data-form="guest-checkout" data-id="${Number(el.dataset.id)}"><label>Código de retirada<input name="claim_code" autocomplete="off" required maxlength="30"/></label><label class="checkbox-label"><input type="checkbox" name="confirmed" required/>Conferi presencialmente o responsável.</label><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar saída</button></form>`);return;}
- if(action==='open-scanner'){return;}
+ if(action==='open-scanner'){await openScannerModal({S,api,load,toast,showModal,modal,escape,icon,age,attendanceModal});return;}
  if(action==='clear-event-banner'){setEventBannerPreview('');toast('Banner removido.');return;}
  if(action==='toggle-event-presets'){const d=document.getElementById('event-presets-drawer');if(d)d.hidden=!d.hidden;return;}
  if(action==='toggle-event-url'){const d=document.getElementById('event-url-drawer');if(d)d.hidden=!d.hidden;return;}
@@ -1270,15 +1266,14 @@ document.addEventListener('submit',async e=>{
     const body={
      name:values.name.trim(),
      email:values.email.trim(),
-     password:values.password.trim(),
      staff_role:values.staff_role||'teacher',
      phone:values.phone?.trim()||'',
      rooms
     };
-    await api('/team/member',{method:'POST',body});
+    const invitation=await api('/workspace/team-invitations',{method:'POST',body});
     modal.close();
     await load();
-    toast('Novo membro da equipe cadastrado com sucesso! 🎉');
+    showModal('Convite individual','Entregue o link somente à pessoa identificada. Válido por 48 horas.',`<label>Link de ativação<input readonly value="${escape(invitation.url)}"></label><button type="button" class="btn primary" data-action="close">Concluir</button>`);
     return;
    }
   }
@@ -1364,7 +1359,7 @@ document.addEventListener('submit',async e=>{
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){
-    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:Number(values.guardian_id)||(child?.parent_id||0),exception_reason:values.exception_reason||'',lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
+    const attRes=await api(`/children/${cid}/attendance`,{method:'POST',body:{action:form.dataset.direction,guardian_confirmed:values.confirmed==='on',guardian_id:Number(values.guardian_id)||(child?.parent_id||0),pickup_authorization_id:values.guardian_id?.startsWith('pickup:')?values.guardian_id.slice(7):null,exception_reason:values.exception_reason||'',lesson_id:S.page==='attendance'?(S.selectedLesson||null):null,claim_code:values.claim_code?values.claim_code.toUpperCase().trim():undefined}});
     modal.close();await load();
     if(form.dataset.direction==='in'&&attRes.claim_code)toast(`Entrada confirmada! Etiqueta de Segurança (TAG): ${attRes.claim_code}`);
     else toast('Saída conferida e registrada com sucesso.');

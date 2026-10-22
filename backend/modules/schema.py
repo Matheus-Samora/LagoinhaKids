@@ -180,3 +180,6 @@ def migrate(c):
     ensure_column(c,'notifications','context_id',"TEXT NOT NULL DEFAULT ''")
     from ..hall_schema import migrate as migrate_hall
     migrate_hall(c)
+
+    from ..evolution_schema import migrate as evolve
+    evolve(c)

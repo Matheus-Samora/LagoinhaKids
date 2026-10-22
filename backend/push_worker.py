@@ -83,9 +83,22 @@ def deliver_batch(limit=50):
             count=row['attempts']+1
             with s.db() as c:c.execute('UPDATE outbox SET attempts=?,status=?,next_attempt=?,last_error=? WHERE id=?',(count,'failed' if count>=5 else 'pending',int(time.time())+min(3600,30*2**count),'Falha no provedor de push; consulte a configuração.',row['id']))
     return {'configured':True,'sent':sent}
+def dispatch_operations():
+    # Load the HTTP module first: workspace routes depend on its session helpers.
+    from .app import app as application
+    from .evolution import dispatch_due
+    return dispatch_due()
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--once',action='store_true');args=parser.parse_args()
+    last_operations=0
     while True:
+        if time.time()-last_operations>=30:
+            try:
+                dispatch_operations()
+            except Exception as exc:
+                __import__('logging').getLogger(__name__).error('scheduled_operations_failed type=%s',type(exc).__name__)
+            last_operations=time.time()
         print(json.dumps(deliver_batch()))
         if args.once:break
         time.sleep(3)

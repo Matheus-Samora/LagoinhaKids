@@ -55,6 +55,26 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r backend/requirements.txt
       - run: python -m pytest -q
+      - name: Restore isolated PostgreSQL backup
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG_CONTAINER" pg_dump -U kids -d kids_test -Fc -f /tmp/isolated.dump
+          docker exec "$PG_CONTAINER" createdb -U kids kids_restored
+          docker exec "$PG_CONTAINER" pg_restore --exit-on-error -U kids -d kids_restored /tmp/isolated.dump
+          python - <<'PY'
+          import psycopg
+          source=psycopg.connect('postgresql://kids:ci-only-password@127.0.0.1:5432/kids_test')
+          restored=psycopg.connect('postgresql://kids:ci-only-password@127.0.0.1:5432/kids_restored')
+          tables=[r[0] for r in source.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")]
+          from psycopg import sql
+          for table in tables:
+              query=sql.SQL('SELECT count(*) FROM {}').format(sql.Identifier(table))
+              assert source.execute(query).fetchone()==restored.execute(query).fetchone(),table
+          constraints="SELECT count(*) FROM pg_constraint WHERE contype IN ('f','p','u') AND connamespace='public'::regnamespace"
+          assert source.execute(constraints).fetchone()==restored.execute(constraints).fetchone()
+          print('Isolated restore: tables, row counts and constraints verified.')
+          PY
   verify:
     runs-on: ubuntu-latest
     steps:

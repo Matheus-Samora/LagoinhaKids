@@ -18,6 +18,8 @@ class ProfileUpdate(BaseModel):
     marital_status:str|None=Field(default=None,max_length=40)
     profession:str|None=Field(default=None,max_length=100)
     address:str|None=Field(default=None,max_length=240)
+    public_bio:bool|None=None
+    public_profession:bool|None=None
     bio:str|None=Field(default=None,max_length=500)
     family_id:str|None=Field(default=None,max_length=40)
     new_family_name:str|None=Field(default=None,max_length=120)
@@ -28,7 +30,7 @@ def account(c,user):
     value=dict(row);value['role']=user['role']
     res=public_user(value,connection=c)
     from .modules.common import decrypt_text
-    p_row=c.execute('SELECT * FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 ORDER BY id LIMIT 1',(user['id'],user['email'])).fetchone()
+    p_row=c.execute('SELECT * FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 ORDER BY id LIMIT 1',(user['id'],user['email'])).fetchone()
     if p_row:
         p_dict=dict(p_row)
         res['birthday']=p_dict.get('birthday')
@@ -83,7 +85,7 @@ def persist(data,user,prepared=None):
             if not media or media['created_by']!=user['id'] or not media['content_type'].startswith('image/'):fail('image','Selecione uma foto enviada pela sua conta.')
         elif values.get('avatar_url') and not values['avatar_url'].startswith('https://'):fail('image','Use uma foto enviada pelo aplicativo ou um endereço HTTPS.')
         
-        user_fields={k:v for k,v in values.items() if k in ('name','phone','avatar_url','bio')}
+        user_fields={k:v for k,v in values.items() if k in ('name','phone','avatar_url','bio','public_bio','public_profession')}
         if user_fields:
             result=c.execute('UPDATE users SET '+','.join(k+'=?' for k in user_fields)+',profile_version=profile_version+1 WHERE id=? AND profile_version=?',(*user_fields.values(),user['id'],data.version))
             if result.rowcount!=1:fail('conflict','O perfil mudou durante o salvamento. Reabra para conferir.',409)
@@ -115,7 +117,7 @@ def persist(data,user,prepared=None):
 
         # Synchronize with members_people without requiring pastoral approval
         p_row=c.execute(
-            'SELECT * FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 ORDER BY id LIMIT 1',
+            'SELECT * FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 ORDER BY id LIMIT 1',
             (user['id'],user['email'])
         ).fetchone()
 
@@ -154,6 +156,8 @@ def persist(data,user,prepared=None):
                 'account_user_id':user['id']
             },user)
 
+        if any(key in values for key in ('name','phone','birthday','address')):
+            c.execute("UPDATE members_people SET confirmed_at=?,data_source='self_confirmed' WHERE account_user_id=? AND active=1",(s.now(),user['id']))
         s.audit(c,user['id'],'own_profile_updated')
         saved_user=account(c,user)
         from .realtime import publish
@@ -179,6 +183,8 @@ async def update_profile_photo(
     bio:str=Form(default='',max_length=500),
     family_id:str|None=Form(default=None,max_length=40),
     new_family_name:str|None=Form(default=None,max_length=120),
+    public_bio:bool|None=Form(default=None),
+    public_profession:bool|None=Form(default=None),
     photo:UploadFile|None=File(default=None),
     user=Depends(session)
 ):
@@ -186,7 +192,7 @@ async def update_profile_photo(
         version=version,name=name,phone=phone,avatar_url=avatar_url,
         birthday=birthday,marital_status=marital_status,
         profession=profession,address=address,bio=bio,
-        family_id=family_id,new_family_name=new_family_name
+        family_id=family_id,new_family_name=new_family_name,public_bio=public_bio,public_profession=public_profession
     )
     prepared=None
     if photo:

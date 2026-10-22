@@ -37,3 +37,11 @@ def module_url(module):
         if key==module:return 'https://'+host
     return '/'+module
 
+
+
+def scope_values(value):
+    if not value:return set()
+    if value.startswith('['):
+        try:return set(json.loads(value))
+        except (ValueError,TypeError):return {'__invalid_scope__'}
+    return {value}

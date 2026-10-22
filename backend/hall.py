@@ -112,6 +112,7 @@ def archive(rid:str,version:int=Query(ge=1),user=Depends(participant)):
         c.execute('BEGIN IMMEDIATE');old=post(c,rid);can_edit(c,user,old)
         if old['version']!=version:fail('conflict','A publicação mudou. Reabra para conferir.',409)
         c.execute('UPDATE hall_posts SET active=0,version=version+1,updated_at=? WHERE id=?',(s.now(),rid))
+        moderation_receipt(c,rid,user)
         c.execute('UPDATE hall_reports SET resolved=1 WHERE post_id=?',(rid,))
         s.audit(c,user['id'],'hall:post_archived:'+rid)
         from .realtime import publish
@@ -199,6 +200,7 @@ def resolve(rid:str,user=Depends(participant)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         if not moderate(c,user):fail('moderation','Acesso exclusivo da coordenação de Members.',403)
+        moderation_receipt(c,rid,user)
         c.execute('UPDATE hall_reports SET resolved=1 WHERE post_id=?',(rid,));s.audit(c,user['id'],'hall:reports_resolved:'+rid)
     return {'ok':True}
 
@@ -206,11 +208,11 @@ def resolve(rid:str,user=Depends(participant)):
 def directory(q:str=Query('',max_length=100),ministry:str=Query('',max_length=50),page:int=Query(1,ge=1,le=5000),user=Depends(participant)):
     with s.db() as c:
         clauses=['p.active=1'];params=[]
-        if q.strip():clauses.append('(lower(p.name) LIKE ? OR lower(p.profession) LIKE ?)');params.extend(['%'+q.strip().lower()+'%']*2)
+        if q.strip():clauses.append('(lower(p.name) LIKE ? OR (coalesce((SELECT public_profession FROM users WHERE id=p.account_user_id),1)=1 AND lower(p.profession) LIKE ?))');params.extend(['%'+q.strip().lower()+'%']*2)
         if ministry:clauses.append('EXISTS(SELECT 1 FROM ministries_assignments a WHERE a.person_id=p.id AND a.active=1 AND a.ministry=?)');params.append(ministry)
         where=' AND '.join(clauses)
         # Directory data is deliberately separate from administrative registration.
-        rows=c.execute("SELECT p.id,p.name,p.profession,p.bio,p.account_user_id,coalesce(nullif(u.avatar_url,''),p.avatar_url,'') avatar_url,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN users u ON u.id=p.account_user_id AND u.active=1 LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE "+where+' ORDER BY p.name,p.id LIMIT 25 OFFSET ?',(*params,(page-1)*24)).fetchall()
+        rows=c.execute("SELECT p.id,p.name,CASE WHEN coalesce(u.public_profession,1)=1 THEN p.profession ELSE '' END profession,CASE WHEN coalesce(u.public_bio,1)=1 THEN p.bio ELSE '' END bio,p.account_user_id,coalesce(nullif(u.avatar_url,''),p.avatar_url,'') avatar_url,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN users u ON u.id=p.account_user_id AND u.active=1 LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE "+where+' ORDER BY p.name,p.id LIMIT 25 OFFSET ?',(*params,(page-1)*24)).fetchall()
         result=[];assignments={}
         ids=[r['id'] for r in rows[:24]]
         if ids:
@@ -223,3 +225,13 @@ def directory(q:str=Query('',max_length=100),ministry:str=Query('',max_length=50
         total=c.execute('SELECT count(*) FROM members_people p WHERE '+where,params).fetchone()[0]
         catalog=[r[0] for r in c.execute('SELECT DISTINCT ministry FROM ministries_assignments WHERE active=1 ORDER BY ministry')]
         return {'members':result,'total':total,'has_more':len(rows)>24,'page':page,'catalog':catalog}
+
+
+def moderation_receipt(c,rid,user):
+    from .realtime import dispatch_notification_event
+    for report in c.execute('SELECT user_id FROM hall_reports WHERE post_id=? AND resolved=0',(rid,)).fetchall():
+        uid=report['user_id']
+        if not allowed(c,{'id':uid},'members'):continue
+        title='Sinalização analisada';message='A coordenação concluiu a análise da sua sinalização no Hall. Obrigado por ajudar a cuidar da comunidade.'
+        nid=c.execute('INSERT INTO notifications(user_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?)',(uid,'hall_moderation',title,message,user['id'],s.now(),'members')).lastrowid
+        dispatch_notification_event(c,uid,'hall_moderation',title,message,sector='members',notification_id=nid)

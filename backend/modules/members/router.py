@@ -8,7 +8,7 @@ from ...app import fail,session
 from ..common import Record,save,archive,current,check_date,change,encrypt_text,decrypt_text,merge_existing
 router=APIRouter(prefix='/api/members',tags=['Members'])
 read=module_access('members');write=module_access('members',('admin','editor'));admin=module_access('members',('admin',))
-STAGES=('visitor','new_convert','baptized','in_training','active_member','leader')
+STAGES=('visitor','welcoming','new_convert','gc','baptized','in_training','active_member','serving','leader')
 
 class Cell(Record):
     name:str=Field(min_length=2,max_length=120)
@@ -67,7 +67,7 @@ def _decrypt_person(d:dict)->dict:
     return d
 
 @router.get('')
-def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('members'))):
+def listing(q:str=Query(default='',max_length=100),page:int=Query(default=1,ge=1),limit:int=Query(default=50,ge=1,le=200),user=Depends(module_access('members'))):
     from ..schema import ensure_official_gcs
     with s.db() as c:
         from ...record_policy import manager,personal_records
@@ -77,7 +77,8 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')]
         families=[dict(r) for r in c.execute("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE f.id=p.family_id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")]
-        people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name LIMIT 200",('%'+q.lower()+'%',))]
+        people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name,p.id LIMIT ? OFFSET ?",('%'+q.lower()+'%',limit+1,(page-1)*limit))]
+        has_more=len(people)>limit;people=people[:limit]
         from ...record_policy import global_manager
         if not global_manager(c,user):
             from ...privacy import operational_person
@@ -94,9 +95,11 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             if not global_manager(c,user) and d.get('user_id')!=user['id']:
                 for key in ('email','phone','notes'):d.pop(key,None)
             gc_apps.append(d)
-        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'pastoral_notes_allowed':bool(global_manager(c,user)),
+            'page':page,'has_more':has_more,
+            'statistics':{'stages':{r['integration_stage']:r['n'] for r in c.execute('SELECT integration_stage,count(*) n FROM members_people WHERE active=1 GROUP BY integration_stage')},'birthdays_month':c.execute("SELECT count(*) FROM members_people WHERE active=1 AND substr(birthday,6,2)=?",(s.today()[5:7],)).fetchone()[0] if global_manager(c,user) else None},
             'cells':cells,
             'families':families,
             'people':people,

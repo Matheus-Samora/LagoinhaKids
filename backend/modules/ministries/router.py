@@ -1,9 +1,10 @@
+from contextlib import nullcontext
 from datetime import date,time
 from urllib.parse import urlsplit
 from fastapi import APIRouter,Depends,Query
 from pydantic import BaseModel,Field
 from ...module_security import module_access
-from ...platform_access import platform_admin,is_pastor
+from ...platform_access import platform_admin,is_pastor,scope_values
 from ... import store as s
 from ...app import fail,session
 from ..common import merge_existing,Record,save,archive,current,check_date,encrypt_text,decrypt_text
@@ -31,6 +32,9 @@ class Schedule(Record):
     service_date:date
     service_time:str=Field(default='18:00',max_length=20)
     status:str=Field(default='confirmed',max_length=30)
+    duration_minutes:int=Field(default=60,ge=15,le=480)
+    response_due_at:str=Field(default='',max_length=40)
+    reminder_enabled:bool=False
 
 class Resource(Record):
     ministry:str=Field(max_length=40)
@@ -56,7 +60,7 @@ def check_ministry_scope(c,user,ministry):
     if platform_admin(c,user['id']) or is_pastor(c,user['id']):return
     row=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
     scope=(row['scope'] or '').strip() if row else ''
-    if scope and scope!=ministry:
+    if scope and ministry not in scope_values(scope):
         fail('ministry_scope',f'Seu perfil está restrito à coordenação do ministério {scope}.',403)
 
 @router.get('/people')
@@ -71,33 +75,35 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
         is_mgr=manager(c,user,'ministries')
         rows=[dict(r) for r in c.execute('SELECT a.*,p.name person_name,coalesce(p.phone,\'\') person_phone FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE a.active=1 AND p.active=1 AND lower(p.name) LIKE ? ORDER BY a.ministry,a.is_leader DESC,p.name LIMIT 300',('%'+q.lower()+'%',))]
         schedules=[dict(r) for r in c.execute('SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.active=1 AND p.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC,ms.ministry ASC LIMIT 300')]
-        resources=[dict(r) for r in c.execute('SELECT * FROM ministries_resources WHERE active=1 ORDER BY ministry ASC,created_at DESC LIMIT 200')]
+        resources=[dict(r,notes=decrypt_text(r['notes'])) for r in c.execute('SELECT * FROM ministries_resources WHERE active=1 ORDER BY ministry ASC,created_at DESC LIMIT 200')]
         counts=[dict(r) for r in c.execute('SELECT ministry,count(*) total,sum(CASE WHEN is_leader=1 THEN 1 ELSE 0 END) leaders FROM ministries_assignments WHERE active=1 GROUP BY ministry')]
         row=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
         scope=(row['scope'] or '').strip() if row and not platform_admin(c,user['id']) and not is_pastor(c,user['id']) else ''
         apps=[]
         if is_mgr:
             for r in c.execute("SELECT * FROM sector_applications WHERE target_type='ministry' AND status='pending' ORDER BY created_at DESC LIMIT 100"):
-                if scope and r['target_name']!=scope:continue
+                if scope and r['target_name'] not in scope_values(scope):continue
                 d=dict(r);d['notes']=decrypt_text(d.get('notes',''));apps.append(d)
         if scope:
-            rows=[r for r in rows if r['ministry']==scope]
-            schedules=[r for r in schedules if r['ministry']==scope]
-            resources=[r for r in resources if r['ministry']==scope]
-            counts=[r for r in counts if r['ministry']==scope]
+            rows=[r for r in rows if r['ministry'] in scope_values(scope)]
+            schedules=[r for r in schedules if r['ministry'] in scope_values(scope)]
+            resources=[r for r in resources if r['ministry'] in scope_values(scope)]
+            counts=[r for r in counts if r['ministry'] in scope_values(scope)]
         if not (platform_admin(c,user['id']) or is_pastor(c,user['id'])):
             for row in rows:row.pop('person_phone',None)
             for item in apps:
                 if item.get('user_id')!=user['id']:
                     for key in ('email','phone','notes'):item.pop(key,None)
-        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         return {
             'assignments':rows,
             'schedules':schedules,
             'resources':resources,
-            'catalog':(scope,) if scope else CATALOG,
+            'catalog':tuple(m for m in CATALOG if m in scope_values(scope)) if scope else CATALOG,
             'worship_roles':WORSHIP_ROLES,
+            'service_templates':[dict(r) for r in c.execute('SELECT * FROM service_templates WHERE active=1 ORDER BY weekday,service_time')],
             'counts':counts,
+            'statistics':{'assignments':sum(r['total'] for r in counts),'leaders':sum(r['leaders'] or 0 for r in counts)},
             'user_scope':scope,
             'applications':apps,
             'my_person_id':my_p['id'] if my_p else None
@@ -129,34 +135,35 @@ def remove(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         check_ministry_scope(c,user,old['ministry'])
         return archive(c,'ministries_assignments','ministries',rid,version,user)
 
-def persist_schedule(data:Schedule,user,rid=None):
+def persist_schedule(data:Schedule,user,rid=None,connection=None):
     if data.ministry not in CATALOG:fail('ministry','Selecione um ministério disponível.')
     if not data.title.strip():fail('title','Informe o culto ou evento da escala.')
     try:time.fromisoformat(data.service_time)
     except ValueError:fail('time','Informe um horário válido.')
     if data.status not in SCHEDULE_STATUSES:fail('status','Status de escala inválido.')
-    with s.db() as c:
-        c.execute('BEGIN IMMEDIATE')
+    with (nullcontext(connection) if connection is not None else s.db()) as c:
+        if connection is None:c.execute('BEGIN IMMEDIATE')
         data=merge_existing(c,'ministries_schedules',data,user,rid)
         check_ministry_scope(c,user,data.ministry)
         if rid:check_ministry_scope(c,user,current(c,'ministries_schedules',rid)['ministry'])
         current(c,'members_people',data.person_id)
         if data.status!='declined':
-            conflict=c.execute(
-                "SELECT ministry,title FROM ministries_schedules WHERE person_id=? AND service_date=? AND service_time=? AND active=1 AND status!='declined' AND id!=?",
-                (data.person_id,str(data.service_date),data.service_time.strip(),rid or str(data.request_id or ''))
-            ).fetchone()
-            if conflict:
-                fail('schedule_conflict',f"Conflito de escala: voluntário já escalado em {conflict['ministry']} ({conflict['title']}) neste mesmo dia e horário.",409)
+            from datetime import datetime,timedelta
+            from ...evolution import date_time
+            start=datetime.combine(data.service_date,time.fromisoformat(data.service_time))
+            validate_time_slot(c,data.person_id,data.service_date,data.service_time,data.duration_minutes,rid or str(data.request_id or ''))
+            if data.response_due_at and date_time(data.response_due_at).replace(tzinfo=None)>start:fail('deadline','O prazo de resposta deve anteceder a escala.')
         vals={
             'title':data.title.strip(),'ministry':data.ministry,'person_id':data.person_id,
             'role_notes':data.role_notes.strip(),'service_date':str(data.service_date),
-            'service_time':data.service_time.strip() or '18:00','status':data.status
+            'service_time':data.service_time.strip() or '18:00','status':data.status,'duration_minutes':data.duration_minutes,'response_due_at':data.response_due_at,'reminder_enabled':int(data.reminder_enabled)
         }
+        retried=not rid and data.request_id and c.execute('SELECT 1 FROM ministries_schedules WHERE id=?',(str(data.request_id),)).fetchone()
         res=save(c,'ministries_schedules','ministries',data,vals,user,rid)
+        if retried:return res
         p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(data.person_id,)).fetchone()
         if p_row:
-            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
             if u_row and u_row['id']!=user['id']:
                 s_parts=str(data.service_date).split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(data.service_date)
@@ -184,7 +191,7 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         check_ministry_scope(c,user,old['ministry'])
         p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
         if p_row:
-            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
             if u_row and u_row['id']!=user['id']:
                 s_parts=str(old['service_date']).split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(old['service_date'])
@@ -210,11 +217,15 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
         old=current(c,'ministries_schedules',rid)
         p_row=c.execute('SELECT id,name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
         if not p_row:fail('not_found','Pessoa da escala não encontrada.',404)
-        is_self=(p_row['account_user_id']==user['id'] or (p_row['email'] and p_row['email'].lower()==user['email'].lower()))
+        is_self=(p_row['account_user_id']==user['id'] or (p_row['account_user_id'] is None and p_row['email'] and p_row['email'].lower()==user['email'].lower()))
         from ...record_policy import manager
         is_mgr=manager(c,user,'ministries')
         if not is_self and not is_mgr:
             fail('forbidden','Você só pode confirmar ou declarar indisponibilidade nas suas próprias escalas.',403)
+        if not is_self:check_ministry_scope(c,user,old['ministry'])
+        if old['status']==data.status:return {'ok':True,'id':rid,'status':data.status}
+        if data.status=='confirmed':validate_time_slot(c,old['person_id'],date.fromisoformat(old['service_date']),old['service_time'],old['duration_minutes'],rid)
+        c.execute('INSERT INTO schedule_responses VALUES(?,?,?,?,?,?,?)',(__import__('secrets').token_hex(16),rid,user['id'],old['status'],data.status,encrypt_text(data.reason or ''),s.now()))
         import re
         base_notes=re.sub(r'\s*\[Obs:[^\]]*\]', '', old['role_notes'] or '').strip()
         notes=base_notes
@@ -296,7 +307,7 @@ def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):
                 'role_notes':inst,'service_date':s_date,'service_time':s_time,'status':'confirmed'
             },user)
             created_ids.append(res['id'])
-            u_row=c.execute('SELECT id FROM users WHERE (id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1',(p_row.get('account_user_id'),p_row.get('email') or '')).fetchone()
+            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row.get('account_user_id'),p_row.get('email') or '')).fetchone()
             if u_row and u_row['id']!=user['id']:
                 s_parts=s_date.split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else s_date
@@ -404,3 +415,18 @@ def remove_resource(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         return archive(c,'ministries_resources','ministries',rid,version,user)
 
 
+
+
+def validate_time_slot(c,person_id,service_date,service_time,duration_minutes,exclude_id=''):
+    from datetime import datetime,timedelta
+    from ...evolution import date_time
+    clock=time.fromisoformat(service_time)
+    if clock.tzinfo is not None:fail('time','Informe o horário local da igreja, sem fuso no campo de horário.')
+    start=datetime.combine(service_date,clock);end=start+timedelta(minutes=duration_minutes)
+    for row in c.execute("SELECT * FROM ministries_schedules WHERE person_id=? AND service_date>=? AND service_date<=? AND active=1 AND status!='declined' AND id!=?",(person_id,str(service_date-timedelta(days=1)),str(end.date()),exclude_id)):
+        other=datetime.combine(date.fromisoformat(row['service_date']),time.fromisoformat(row['service_time']))
+        if other<end and other+timedelta(minutes=row['duration_minutes'])>start:fail('schedule_conflict','O voluntário possui uma escala com horário sobreposto.',409)
+    person=current(c,'members_people',person_id)
+    if person.get('account_user_id'):
+        for item in c.execute('SELECT starts_at,ends_at FROM personal_availability WHERE user_id=?',(person['account_user_id'],)):
+            if date_time(item['starts_at']).replace(tzinfo=None)<end and date_time(item['ends_at']).replace(tzinfo=None)>start:fail('availability','A pessoa informou indisponibilidade neste horário.',409)

@@ -50,9 +50,9 @@ def reset(data:Reset):
     validate_password(data.password)
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        row=c.execute('SELECT * FROM auth_tokens WHERE token=? AND kind="reset" AND expires>?',(s.digest(data.token),time.time())).fetchone()
+        row=c.execute('SELECT * FROM auth_tokens WHERE token=? AND kind IN ("reset","activation") AND expires>?',(s.digest(data.token),time.time())).fetchone()
         if not row:fail('token','Link inválido ou expirado.',400)
-        c.execute('UPDATE users SET password=? WHERE id=?',(s.password_hash(data.password),row['user_id']))
+        c.execute('UPDATE users SET password=?,activation_required=0,email_verified=1 WHERE id=?',(s.password_hash(data.password),row['user_id']))
         c.execute('DELETE FROM web_subscriptions WHERE user_id=?',(row['user_id'],))
         c.execute('DELETE FROM sessions WHERE user_id=?',(row['user_id'],));c.execute('DELETE FROM device_tokens WHERE user_id=?',(row['user_id'],));c.execute('DELETE FROM auth_tokens WHERE user_id=?',(row['user_id'],))
         s.audit(c,row['user_id'],'password_recovered')

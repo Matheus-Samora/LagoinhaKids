@@ -459,7 +459,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
     </div>
     <div class="scanner-desk-action">
       <input id="desk-barcode-input" aria-label="Código da carteirinha ou nome da criança" type="text" placeholder="Digite o nome ou código da criança..." autocomplete="off" />
-      <button type="button" class="btn primary" data-action="desk-barcode-search">Buscar / Check-in</button>
+      <button type="button" class="btn primary" data-action="desk-barcode-search">Buscar aluno</button>
     </div>
   </div>
   ${lessonDetails}
@@ -515,7 +515,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
                       ${ch.status==='present'?'🟢 Na salinha':ch.status==='departed'?'🏁 Saída registrada':'⚪ Não chegou'}
                     </span>
                   </div>
-                  <p class="student-meta">${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10)} · <span class="room-name-tag">${e(ch.room_name||room?.name||'Salinha')}</span></p>
+                  <p class="student-meta">${age(ch.birthday)} anos · Nasc. ${ch.birthday.slice(0,10).split('-').reverse().join('/')} · <span class="room-name-tag">${e(ch.room_name||room?.name||'Salinha')}</span></p>
                   ${ch.claim_code && ch.status==='present' ? `<div class="claim-tag-highlight">ETIQUETA DE SEGURANÇA · CÓDIGO: <strong>${e(ch.claim_code)}</strong></div>` : ''}
                   ${pagingBadge}
                 </div>
@@ -523,13 +523,13 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
             </div>
 
             ${(ch.allergies || ch.medical_conditions || ch.emergency_medication || ch.special_needs || ch.authorized_pickups) ? `
-              <div class="student-health-box">
+              <details class="student-health-box"><summary>${ch.allergies?'Alergia registrada · conferir orientações':'Orientações de saúde ou retirada · conferir'}</summary>
                 ${ch.allergies ? `<span class="allergy-badge warning">⚠️ <strong>ALERGIA:</strong> ${e(ch.allergies)}</span>` : ''}
                 ${ch.medical_conditions ? `<span class="allergy-badge medical">${icon('health',14)} <strong>SAÚDE:</strong> ${e(ch.medical_conditions)}</span>` : ''}
                 ${ch.emergency_medication ? `<span class="allergy-badge med">💊 <strong>MEDICAÇÃO:</strong> ${e(ch.emergency_medication)}</span>` : ''}
                 ${ch.special_needs ? `<span class="allergy-badge special">♿ <strong>CUIDADO:</strong> ${e(ch.special_needs)}</span>` : ''}
                 ${ch.authorized_pickups ? `<div class="pickup-text"><span>👥 Autorizados para buscar:</span> <strong>${e(ch.authorized_pickups)}</strong></div>` : ''}
-              </div>
+              </details>
             ` : ''}
 
             <div class="student-family-info">
@@ -672,20 +672,15 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='refresh-school'){await changed('Horários atualizados.');return true;}
   if(action==='open-scanner'){return true;}
   if(action==='desk-barcode-search'){
-   const inp=document.getElementById('desk-barcode-input');
-   const val=inp?inp.value.trim():'';
-   if(openScanner){
-    openScanner();
-    if(val){
-     setTimeout(()=>{
-      const usbInp=document.getElementById('scanner-usb-input');
-      if(usbInp){usbInp.value=val;document.getElementById('scanner-usb-submit')?.click();}
-     },150);
-    }
-   }
-   return true;
+    const inp=document.getElementById('desk-barcode-input'),value=inp?.value.trim();
+    if(!value)return true;
+    const code=value.toUpperCase().match(/^LK-?0*(\d+)$/);
+    const rows=S.children.filter(ch=>code?ch.id===Number(code[1]):ch.name.toLowerCase().includes(value.toLowerCase())||String(ch.id)===value).slice(0,20);
+    if(inp)inp.value='';
+    showModal('Resultado da busca','Selecione a criança e confira o responsável antes de registrar a presença.',rows.length?rows.map(ch=>`<section class="panel"><strong>${e(ch.name)}</strong><p>${e(ch.room_name||'Sem turma')}</p><button type="button" class="btn primary" data-action="attendance" data-id="${ch.id}">Conferir ${ch.status==='present'?'saída':'entrada'}</button></section>`).join(''):'<p>Nenhum aluno encontrado. Confira o nome ou código.</p>');
+    return true;
   }
-  const lesson=S.lessons.find(l=>l.id===id),room=S.rooms.find(r=>r.id===id);
+    const lesson=S.lessons.find(l=>l.id===id),room=S.rooms.find(r=>r.id===id);
   if(action==='new-child'){
     if(S.user.role!=='parent'&&!S.rooms.length){toast('Crie uma turma primeiro.');return true;}
     const defRoom=el.dataset.room?Number(el.dataset.room):(Number(S.room)||null);

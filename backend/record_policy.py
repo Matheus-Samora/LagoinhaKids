@@ -1,6 +1,6 @@
 """Server-side sector authority and immutable ownership of business records."""
 import json
-from .platform_access import allowed,platform_admin,is_pastor
+from .platform_access import allowed,platform_admin,is_pastor,scope_values
 from .app import fail
 
 TABLES={
@@ -18,13 +18,13 @@ def manager(c,user,module):
 def check_scope(c,user,module,row):
  if module=='ministries' and not global_manager(c,user):
   grant=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
-  if grant and grant['scope'] and row.get('ministry')!=grant['scope']:fail('scope','Registro de outro ministério.',403)
+  if grant and grant['scope'] and row.get('ministry') not in scope_values(grant['scope']):fail('scope','Registro de outro ministério.',403)
 
 def can_change(c,user,module,row):
  if not allowed(c,user,module) and not (module=='members' and row.get('created_by')==user['id']):fail('module_access','Acesso ao setor não autorizado.',403)
  check_scope(c,user,module,row)
  if not manager(c,user,module) and row.get('created_by')!=user['id']:
-  if module=='members' and (row.get('account_user_id')==user['id'] or (row.get('email') and row.get('email').lower()==(user.get('email') or '').lower())):
+  if module=='members' and (row.get('account_user_id')==user['id'] or (row.get('account_user_id') is None and row.get('email') and row.get('email').lower()==(user.get('email') or '').lower())):
    return
   fail('owner','Você pode alterar ou arquivar somente os seus próprios registros.',403)
 
@@ -51,6 +51,7 @@ def visible_announcement(c,user,row):
  scope=row.get('target_scope','')
  if not scope:return True
  own_scope=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
- if own_scope and own_scope['scope']==scope:return True
+ if own_scope and scope_values(own_scope['scope']) & scope_values(scope):return True
  if manager(c,user,'ministries') and (not own_scope or not own_scope['scope']):return True
- return bool(c.execute("SELECT 1 FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE p.created_by=? AND p.active=1 AND a.active=1 AND a.ministry=?",(user['id'],scope)).fetchone())
+ permitted=scope_values(scope)
+ return any(r['ministry'] in permitted for r in c.execute("SELECT a.ministry FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id WHERE p.account_user_id=? AND p.active=1 AND a.active=1",(user['id'],)))

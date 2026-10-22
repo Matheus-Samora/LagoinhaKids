@@ -54,6 +54,7 @@ def change(c,module,rid,action,user,before,after):
 def save(c,table,module,data,values,user,rid=None):
     if rid:
         old=current(c,table,rid)
+        protect_transfer(c,table,rid)
         from ..record_policy import can_change
         can_change(c,user,module,old)
         if data.version is None or old['version']!=data.version:fail('conflict','Este registro mudou. Atualize a tela antes de salvar.',409)
@@ -75,6 +76,11 @@ def save(c,table,module,data,values,user,rid=None):
 
 def archive(c,table,module,rid,version,user):
     old=current(c,table,rid)
+    protect_transfer(c,table,rid)
+    from ..record_policy import global_manager
+    from ..privacy import own_person
+    if not global_manager(c,user) and old.get('created_by')!=user['id'] and not (table=='members_people' and own_person(old,user)):
+        fail('owner','Somente TI e pastores podem arquivar registros de outras pessoas.',403)
     from ..record_policy import can_change
     can_change(c,user,module,old)
     if old['version']!=version:fail('conflict','Registro alterado. Atualize a tela.',409)
@@ -110,3 +116,7 @@ def merge_existing(c,table,data,user,rid):
         elif isinstance(value,str):value=decrypt_text(value)
         payload[field]=value
     return type(data).model_validate(payload)
+
+
+def protect_transfer(c,table,rid):
+    if table=='finance_entries' and c.execute('SELECT 1 FROM finance_transfers WHERE active=1 AND (out_entry=? OR in_entry=?)',(rid,rid)).fetchone():fail('transfer','Use o cancelamento da transferência para manter as duas contas consistentes.',409)

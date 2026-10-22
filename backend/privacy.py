@@ -18,7 +18,7 @@ def hide_emails(value, own_email=''):
     return value
 
 def own_person(row,user):
-    return row.get('account_user_id')==user['id'] or bool(row.get('email') and row['email'].casefold()==user['email'].casefold())
+    return row.get('account_user_id')==user['id'] or bool(row.get('account_user_id') is None and row.get('email') and row['email'].casefold()==user['email'].casefold())
 
 def operational_person(row,user):
     if own_person(row,user):return row

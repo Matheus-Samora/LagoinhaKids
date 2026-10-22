@@ -873,3 +873,8 @@
 .btn-install-banner-dismiss:active {
   color: #ffffff;
 }
+
+.kids-sector-picker{display:grid;gap:6px;padding:12px;font-size:12px}.kids-sector-picker select{width:100%;min-height:44px;background:var(--surface,#fff);color:var(--text,#09090b);border:1px solid var(--border,#e4e4e7);border-radius:10px}
+:focus-visible{outline:2px solid #d97706;outline-offset:3px}
+
+[hidden]{display:none!important}

@@ -68,12 +68,18 @@ def table_for(module,kind):
 def validate_links(c,module,kind,row,restoring=False):
  rid=row['id']
  if restoring:
+  if module=='finance' and kind=='entries':
+   if c.execute('SELECT 1 FROM finance_transfers WHERE out_entry=? OR in_entry=?',(rid,rid)).fetchone():fail('transfer','Restaure a transferência inteira, sem separar as duas contas.',409)
+   if row.get('payment_status')=='paid' and c.execute('SELECT 1 FROM finance_accounts WHERE id=? AND require_approval=1',(row['account_id'],)).fetchone():fail('approval','Esta conta exige conferência. Solicite revisão administrativa antes de restaurar uma baixa antiga.',409)
   if module=='members' and kind=='people' and row.get('account_user_id') and c.execute('SELECT 1 FROM members_people WHERE account_user_id=? AND active=1',(row['account_user_id'],)).fetchone():fail('duplicate','Esta conta já possui outro cadastro pessoal ativo.',409)
   links={'members':{'people':(('family_id','members_families'),('cell_id','members_cells')),'families':(('cell_id','members_cells'),)},'ministries':{'assignments':(('person_id','members_people'),),'schedules':(('person_id','members_people'),)},'finance':{'entries':(('account_id','finance_accounts'),('cost_center_id','finance_cost_centers')),'closings':(('account_id','finance_accounts'),),'invoices':(('entry_id','finance_entries'),)}}
   for field,parent in links.get(module,{}).get(kind,()):
    if row.get(field) and not c.execute(f'SELECT 1 FROM {parent} WHERE id=? AND active=1',(row[field],)).fetchone():fail('reference','Restaure primeiro o cadastro relacionado.',409)
   if module=='ministries' and kind=='assignments' and c.execute('SELECT 1 FROM ministries_assignments WHERE person_id=? AND ministry=? AND active=1',(row['person_id'],row['ministry'])).fetchone():fail('duplicate','Este vínculo já está ativo.',409)
-  if module=='ministries' and kind=='schedules' and c.execute("SELECT 1 FROM ministries_schedules WHERE person_id=? AND service_date=? AND service_time=? AND active=1 AND status!='declined'",(row['person_id'],row['service_date'],row['service_time'])).fetchone():fail('schedule','Já existe uma escala ativa nesse horário.',409)
+  if module=='ministries' and kind=='schedules' and row['status']!='declined':
+   from .modules.ministries.router import validate_time_slot
+   from datetime import date
+   validate_time_slot(c,row['person_id'],date.fromisoformat(row['service_date']),row['service_time'],row['duration_minutes'],rid)
  else:
   links={('members','cells'):(('members_people','cell_id'),('members_families','cell_id')),('members','families'):(('members_people','family_id'),),('members','people'):(('ministries_assignments','person_id'),('ministries_schedules','person_id')),('finance','accounts'):(('finance_entries','account_id'),('finance_service_closings','account_id')),('finance','cost-centers'):(('finance_entries','cost_center_id'),),('finance','entries'):(('finance_service_closings','entry_id'),('finance_invoices','entry_id'))}
   for child,field in links.get((module,kind),()):
@@ -90,7 +96,9 @@ def archived(module:str,page:int=Query(1,ge=1,le=100000),user=Depends(session)):
    if not manager(c,user,module):clauses+=['created_by=?'];params.append(user['id'])
    if module=='ministries' and not global_manager(c,user):
     scope=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(user['id'],)).fetchone()
-    if scope and scope['scope']:clauses+=['ministry=?'];params.append(scope['scope'])
+    if scope and scope['scope']:
+     from .platform_access import scope_values
+     selected=sorted(scope_values(scope['scope']));clauses+=['ministry IN ('+','.join('?' for _ in selected)+')'];params.extend(selected)
    for r in c.execute(f"SELECT * FROM {table} WHERE "+' AND '.join(clauses)+' ORDER BY created_at DESC LIMIT 50 OFFSET ?',(*params,(page-1)*50)):
     d=dict(r);result.append({'id':d['id'],'kind':kind,'version':d['version'],'label':d.get('name') or d.get('title') or d.get('description') or d.get('service_name') or d.get('number') or kind})
   return {'items':result,'page':page,'has_more':len(result)>=50}

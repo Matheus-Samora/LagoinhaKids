@@ -64,8 +64,6 @@ class Invoice(Record):
 
 def compute_financial_engine(c,accounts,cost_centers,entries,totals):
     today_str=s.today()
-    selected={a['id'] for a in accounts}
-    entries=[dict(r) for r in c.execute('SELECT * FROM finance_entries WHERE active=1') if r['account_id'] in selected]
     current_balance=sum(int(a.get('balance_cents') or 0) for a in accounts)
     income_paid=int(totals.get('income_cents') or 0)
     expense_paid=int(totals.get('expense_cents') or 0)
@@ -161,7 +159,7 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('f
     with s.db() as c:
         from ...record_policy import manager,personal_records
         if not manager(c,user,'finance'):return personal_records(c,user,'finance')
-        cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name LIMIT 200")]
+        cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name LIMIT 200")]
         accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name LIMIT 500")]
         entries=[dict(r) for r in c.execute("SELECT e.*,a.name account_name,coalesce(a.bank,'') account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1 AND lower(e.description) LIKE ? ORDER BY e.occurred_on DESC,e.created_at DESC LIMIT 200",('%'+q.lower()+'%',))]
         closings=[]
@@ -169,7 +167,8 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('f
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));closings.append(d)
         invoices=[dict(r) for r in c.execute('SELECT * FROM finance_invoices WHERE active=1 AND (lower(supplier) LIKE ? OR lower(number) LIKE ?) ORDER BY issued_on DESC LIMIT 200',('%'+q.lower()+'%','%'+q.lower()+'%'))]
         totals=dict(c.execute("SELECT coalesce(sum(CASE WHEN direction='income' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) income_cents,coalesce(sum(CASE WHEN direction='expense' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) expense_cents,coalesce(sum(CASE WHEN direction='income' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_income_cents,coalesce(sum(CASE WHEN direction='expense' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_expense_cents FROM finance_entries WHERE active=1").fetchone())
-        engine=compute_financial_engine(c,accounts,cost_centers,entries,totals)
+        analytics=[dict(r) for r in c.execute("SELECT e.*,a.bank account_bank,coalesce(cc.name,'') cost_center_name FROM finance_entries e JOIN finance_accounts a ON a.id=e.account_id LEFT JOIN finance_cost_centers cc ON cc.id=e.cost_center_id WHERE e.active=1")]
+        engine=compute_financial_engine(c,accounts,cost_centers,analytics,totals)
         return {'cost_centers':cost_centers,'accounts':accounts,'entries':entries,'closings':closings,'invoices':invoices,'totals':totals,'engine':engine,'mode':'predictive_engine'}
 
 def persist(kind,data,user,rid=None):
@@ -178,6 +177,9 @@ def persist(kind,data,user,rid=None):
         data=merge_existing(c,'finance_'+kind,data,user,rid)
         if kind=='cost_centers':
             if not data.name.strip():fail('name','Informe o nome do centro de custo.')
+            from ..ministries.router import CATALOG
+            if data.ministry and data.ministry not in CATALOG:fail('ministry','Selecione um ministério válido.')
+            if money(data.budget_value)<0:fail('budget','O orçamento não pode ser negativo.')
             values={'name':data.name.strip(),'ministry':data.ministry.strip(),'budget_cents':money(data.budget_value)}
         elif kind=='accounts':
             if not data.name.strip():fail('name','Informe o nome da conta.')
@@ -188,6 +190,14 @@ def persist(kind,data,user,rid=None):
             if data.cost_center_id:current(c,'finance_cost_centers',data.cost_center_id)
             if data.payment_status=='paid':check_date(data.occurred_on)
             if not data.description.strip():fail('description','Informe a descrição.')
+            account=current(c,'finance_accounts',data.account_id)
+            if data.payment_status=='paid' and account['require_approval']:
+                review=c.execute("SELECT * FROM finance_approvals WHERE entry_id=? AND status='approved'",(rid or '',)).fetchone()
+                old=current(c,'finance_entries',rid) if rid else None
+                if not review or not old or review['entry_version']!=old['version']:fail('approval','Salve como pendente e solicite conferência de outra pessoa.',409)
+                if money(data.amount,True)!=old['amount_cents'] or data.direction!=old['direction'] or data.account_id!=old['account_id']:fail('approval','O valor ou a conta mudou. Solicite nova conferência.',409)
+            if not rid and (data.category=='Borderô de Culto' or data.description.strip().lower().startswith('borderô:')):
+                fail('closing','Use Fechamento do culto para evitar dupla contabilização.',409)
             values={
                 'account_id':data.account_id,'direction':data.direction,'description':data.description.strip(),
                 'occurred_on':str(data.occurred_on),'amount_cents':money(data.amount,True),'category':data.category.strip(),
@@ -219,6 +229,9 @@ def persist(kind,data,user,rid=None):
             if rid:
                 old_sc=current(c,'finance_service_closings',rid)
                 existing_entry_id=old_sc.get('entry_id')
+                if existing_entry_id and current(c,'finance_accounts',data.account_id)['require_approval']:
+                    linked=c.execute('SELECT payment_status FROM finance_entries WHERE id=?',(existing_entry_id,)).fetchone()
+                    if linked and linked['payment_status']=='paid':fail('approval','Fechamento liquidado sob conferência exige revisão administrativa antes de alterar valores.',409)
             if existing_entry_id and c.execute('SELECT 1 FROM finance_entries WHERE id=? AND active=1',(existing_entry_id,)).fetchone():
                 linked=current(c,'finance_entries',existing_entry_id)
                 save(c,'finance_entries','finance',Record(version=linked['version']),{'account_id':data.account_id,'description':entry_desc,'occurred_on':str(data.service_date),'amount_cents':tot_cents},user,existing_entry_id)
@@ -227,7 +240,7 @@ def persist(kind,data,user,rid=None):
                 entry_res=save(c,'finance_entries','finance',Record(),{
                     'account_id':data.account_id,'direction':'income','description':entry_desc,
                     'occurred_on':str(data.service_date),'amount_cents':tot_cents,'category':'Borderô de Culto',
-                    'payment_status':'paid','due_date':None,'payment_method':'multi','cost_center_id':None
+                    'payment_status':'pending' if current(c,'finance_accounts',data.account_id)['require_approval'] else 'paid','due_date':None,'payment_method':'multi','cost_center_id':None
                 },user)
                 entry_id=entry_res['id']
             values={
@@ -262,6 +275,11 @@ def settle_entry(rid:str,user=Depends(write)):
         c.execute('BEGIN IMMEDIATE')
         old=current(c,'finance_entries',rid)
         if old['payment_status']=='paid':return {'ok':True,'id':rid}
+        account=current(c,'finance_accounts',old['account_id'])
+        if account['require_approval']:
+            approved=c.execute("SELECT * FROM finance_approvals WHERE entry_id=? AND status='approved'",(rid,)).fetchone()
+            if not approved or approved['entry_version']!=old['version']:fail('approval','Aguardando conferência de outra pessoa.',409)
+
         c.execute("UPDATE finance_entries SET payment_status='paid',occurred_on=?,version=version+1 WHERE id=?",(s.today(),rid))
         change(c,'finance',rid,'settled',user,old,current(c,'finance_entries',rid))
         return {'ok':True,'id':rid}
@@ -309,6 +327,9 @@ def generate_custom_report(
     payment_status:str=Query(default='all',pattern='^(all|paid|pending)$'),
     user=Depends(read)
 ):
+    from ...record_policy import manager
+    with s.db() as c:
+        if not manager(c,user,'finance'):fail('forbidden','Relatórios consolidados exigem permissão de gestão financeira.',403)
     for value in (start_date,end_date):
         if value:
             try:date.fromisoformat(value)
@@ -316,7 +337,7 @@ def generate_custom_report(
     if start_date and end_date and start_date>end_date:fail('date','A data inicial deve vir antes da final.')
     with s.db() as c:
         accounts=[dict(r) for r in c.execute("SELECT a.*,a.opening_cents+coalesce((SELECT sum(CASE WHEN e.direction='income' THEN e.amount_cents ELSE -e.amount_cents END) FROM finance_entries e WHERE e.account_id=a.id AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) balance_cents FROM finance_accounts a WHERE a.active=1 ORDER BY a.name")]
-        cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name")]
+        cost_centers=[dict(r) for r in c.execute("SELECT cc.*,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='expense' AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) spent_cents,coalesce((SELECT sum(e.amount_cents) FROM finance_entries e WHERE e.cost_center_id=cc.id AND e.direction='income' AND e.active=1 AND coalesce(e.payment_status,'paid')='paid'),0) income_cents FROM finance_cost_centers cc WHERE cc.active=1 ORDER BY cc.name")]
         closings=[dict(r) for r in c.execute('SELECT sc.*,a.name account_name,coalesce(a.bank,\'\') account_bank FROM finance_service_closings sc JOIN finance_accounts a ON a.id=sc.account_id WHERE sc.active=1 ORDER BY sc.service_date DESC')]
         for sc in closings:sc['notes']=decrypt_text(sc.get('notes',''))
         if account_id:accounts=[a for a in accounts if a['id']==account_id]
@@ -342,11 +363,14 @@ def generate_custom_report(
             sql+=" AND coalesce(e.payment_status,'paid')=?";params.append(payment_status)
         sql+=" ORDER BY e.occurred_on DESC,e.created_at DESC"
         entries=[dict(r) for r in c.execute(sql,params).fetchall()]
-        totals=dict(c.execute("SELECT coalesce(sum(CASE WHEN direction='income' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) income_cents,coalesce(sum(CASE WHEN direction='expense' AND coalesce(payment_status,'paid')='paid' THEN amount_cents ELSE 0 END),0) expense_cents,coalesce(sum(CASE WHEN direction='income' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_income_cents,coalesce(sum(CASE WHEN direction='expense' AND payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_expense_cents FROM finance_entries WHERE active=1").fetchone())
+        totals={key:sum(e['amount_cents'] for e in entries if e['direction']==direction and (e.get('payment_status') or 'paid')==status) for key,direction,status in [('income_cents','income','paid'),('expense_cents','expense','paid'),('pending_income_cents','income','pending'),('pending_expense_cents','expense','pending')]}
+        for cc in cost_centers:
+            cc['spent_cents']=sum(e['amount_cents'] for e in entries if e['cost_center_id']==cc['id'] and e['direction']=='expense' and (e.get('payment_status') or 'paid')=='paid')
+            cc['income_cents']=sum(e['amount_cents'] for e in entries if e['cost_center_id']==cc['id'] and e['direction']=='income' and (e.get('payment_status') or 'paid')=='paid')
         engine=compute_financial_engine(c,accounts,cost_centers,entries,totals)
 
     if format=='json':
-        payload={'generated_at':s.now(),'report_type':report_type,'filters':{'start_date':start_date,'end_date':end_date,'account_id':account_id,'bank':bank,'cost_center_id':cost_center_id,'direction':direction,'payment_status':payment_status},'engine':engine,'accounts':accounts,'cost_centers':cost_centers,'entries':entries,'closings':closings}
+        payload={'generated_at':s.now(),'report_type':report_type,'filters':{'start_date':start_date,'end_date':end_date,'account_id':account_id,'bank':bank,'cost_center_id':cost_center_id,'direction':direction,'payment_status':payment_status},'engine':engine,'totals':totals,'accounts':accounts,'cost_centers':cost_centers,'entries':entries,'closings':closings}
         return Response(json.dumps(payload,ensure_ascii=False,indent=2,default=json_number).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="lagoinha-finance-{report_type}.json"'})
 
     if format=='csv':

@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='2.7.2',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='3.0.0',lifespan=lifespan)
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
@@ -52,9 +52,12 @@ def public_user(row,connection=None):
         'staff_role': staff_r,
         'email_verified':bool(row['email_verified']) if 'email_verified' in keys else False,
         'mfa_enabled':bool(row['mfa_secret']) if 'mfa_secret' in keys else False,
+        'mfa_required':bool(row['mfa_required']) if 'mfa_required' in keys else False,
         'phone': row['phone'] if 'phone' in keys else '',
         'avatar_url': row['avatar_url'] if 'avatar_url' in keys else '',
         'profile_version':row['profile_version'] if 'profile_version' in keys else 1,
+        'public_bio':bool(row['public_bio']) if 'public_bio' in keys else True,
+        'public_profession':bool(row['public_profession']) if 'public_profession' in keys else True,
         'google_linked': bool(row['google_sub'])
     }
 
@@ -129,7 +132,7 @@ def session(request:Request):
     if not row:fail('login','Entre para continuar.',401)
     if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer_authenticated and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
     from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
+    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime','/api/workspace/')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
     if not shared:
         requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
         requested=requested if requested in PLATFORM_MODULES else 'kids'
@@ -172,7 +175,7 @@ def child_visible(c,user,row):
     from .platform_access import is_pastor
     allowed=user['role']=='admin' or is_pastor(c,user['id']) or (user['role']=='parent' and (row['parent_id']==user['id'] or c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',(row['id'],user['id'])).fetchone()))
     if user['role']=='teacher' and not allowed:
-        linked_rooms=[r[0] for r in c.execute('SELECT DISTINCT l.room_id FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1',(row['id'],))]
+        linked_rooms=[r[0] for r in c.execute('SELECT DISTINCT l.room_id FROM reservations b JOIN lessons l ON l.id=b.lesson_id WHERE b.child_id=? AND b.confirmed=1 AND l.active=1 AND l.ends_at>=?',(row['id'],s.now()))]
         allowed=room_allowed(c,user,row['room_id']) or any(room_allowed(c,user,rid) for rid in linked_rooms)
     return allowed
 
@@ -221,6 +224,8 @@ def login(data:Login,request:Request,response:Response):
         if attempt and attempt['expires']>time.time() and attempt['failures']>=6: fail('rate','Muitas tentativas. Aguarde 15 minutos.',429)
         row=c.execute('SELECT * FROM users WHERE email=?',(data.email.strip().lower(),)).fetchone()
         valid=row and row['active'] and s.password_ok(data.password,row['password'])
+        if row and row['activation_required']:
+            valid=False
         if not row: s.password_ok(data.password,s.password_hash('dummy-auth-value'))
         if not valid:
             failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
@@ -352,6 +357,7 @@ class Attendance(BaseModel):
     lesson_id:int|None=None
     claim_code:str|None=None
     exception_reason:str=Field(default='',max_length=300)
+    pickup_authorization_id:str|None=Field(default=None,max_length=40)
 
 @app.post('/api/children/{cid}/attendance')
 def attendance(cid:int,data:Attendance,user=Depends(staff)):
@@ -366,20 +372,34 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
             lesson=c.execute('SELECT * FROM lessons WHERE id=? AND active=1',(data.lesson_id,)).fetchone()
             if not lesson or lesson['starts_at'][:10]!=s.today() or not room_allowed(c,user,lesson['room_id']):fail('lesson','Registre a chegada no dia da aula, na sua turma.',403)
             if not c.execute('SELECT 1 FROM reservations WHERE child_id=? AND lesson_id=? AND confirmed=1',(cid,data.lesson_id)).fetchone():fail('lesson','O aluno não está confirmado nesta aula.',409)
-        if not ch['parent_id'] or (data.guardian_id!=ch['parent_id'] and not c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1 AND can_pickup=1',(cid,data.guardian_id)).fetchone()): fail('guardian','Responsável não autorizado.',403)
-        guardian=c.execute('SELECT name FROM users WHERE id=? AND active=1',(data.guardian_id,)).fetchone()
-        if not guardian: fail('guardian','Responsável indisponível.')
+        pickup=None
+        if data.pickup_authorization_id:
+            if data.action!='out':fail('guardian','A autorização é exclusiva para retirada.',403)
+            pickup=c.execute('SELECT * FROM pickup_authorizations WHERE id=? AND child_id=? AND active=1 AND (expires_on IS NULL OR expires_on>=?)',(data.pickup_authorization_id,cid,s.today())).fetchone()
+            if not pickup:fail('guardian','Autorização de retirada inválida ou expirada.',403)
+        if pickup:
+            guardian={'name':pickup['name']}
+            s.audit(c,user['id'],'pickup_authorization_used:'+pickup['id'],cid)
+        else:
+            if not ch['parent_id'] or (data.guardian_id!=ch['parent_id'] and not c.execute('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1 AND can_pickup=1',(cid,data.guardian_id)).fetchone()): fail('guardian','Responsável não autorizado.',403)
+            guardian=c.execute('SELECT name FROM users WHERE id=? AND active=1',(data.guardian_id,)).fetchone()
+            if not guardian: fail('guardian','Responsável indisponível.')
         old=c.execute('SELECT * FROM attendance WHERE child_id=? AND day=?',(cid,s.today())).fetchone()
         if data.action=='in':
             if old and old['status']=='present': fail('already','Entrada já registrada.',409)
             claim=s.generate_claim_code(4)
             c.execute('INSERT INTO attendance(child_id,day,status,in_at,out_at,guardian,actor,claim_code,checkout_guardian) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(child_id,day) DO UPDATE SET status="present",in_at=excluded.in_at,out_at=NULL,guardian=excluded.guardian,actor=excluded.actor,claim_code=excluded.claim_code,checkout_guardian=""',(cid,s.today(),'present',s.now(),None,guardian['name'],user['id'],claim,""))
+            from datetime import datetime,timedelta
+            expiry=(datetime.fromisoformat(lesson['ends_at'])+timedelta(hours=2)).isoformat(timespec='seconds') if data.lesson_id is not None else (datetime.fromisoformat(s.now())+timedelta(hours=12)).isoformat(timespec='seconds')
+            c.execute('UPDATE attendance SET lesson_context=?,claim_expires_at=? WHERE child_id=? AND day=?',(data.lesson_id,expiry,cid,s.today()))
             title='Entrada registrada'
             msg=f'{ch["name"]}: entrada registrada. Código de Segurança (Claim Tag): {claim}. Apresente este código na retirada da criança.'
         else:
             if not old or old['status']!='present': fail('state','Registre a entrada antes da saída.',409)
+            if data.lesson_id is not None and old['lesson_context'] not in (None,data.lesson_id):fail('lesson_context','A criança entrou em outra aula. Confira a presença ativa.',409)
             supplied=(data.claim_code or '').strip().upper()
-            if not old['claim_code'] or not supplied or not hmac.compare_digest(supplied,old['claim_code']):
+            expired=bool(old['claim_expires_at'] and old['claim_expires_at']<s.now())
+            if expired or not old['claim_code'] or not supplied or not hmac.compare_digest(supplied,old['claim_code']):
                 if user['role']!='admin' or len(data.exception_reason.strip())<15:
                     failures=(attempt['failures'] if attempt and attempt['expires']>time.time() else 0)+1
                     c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(attempt_key,failures,int(time.time())+900));c.commit()
@@ -387,6 +407,7 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
                 s.audit(c,user['id'],'checkout_exception',cid)
             claim=old['claim_code'] if old and old['claim_code'] else ''
             c.execute('UPDATE attendance SET status="departed",out_at=?,guardian=?,actor=?,checkout_guardian=? WHERE child_id=? AND day=?',(s.now(),guardian['name'],user['id'],guardian['name'],cid,s.today()))
+            c.execute("UPDATE attendance SET claim_code='',claim_expires_at='' WHERE child_id=? AND day=?",(cid,s.today()))
             title='Saída registrada'
             msg=f'{ch["name"]}: saída conferida pela equipe com responsável {guardian["name"]}.'
         c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(ch['parent_id'],cid,'attendance',title,msg,user['id'],s.now()))
@@ -395,7 +416,7 @@ def attendance(cid:int,data:Attendance,user=Depends(staff)):
         publish('kids:attendance', {'action': data.action}, sector='kids')
         publish('kids:sync', {'action': data.action}, sector='kids')
         c.execute('DELETE FROM attempts WHERE key=?',(attempt_key,))
-        c.execute('INSERT INTO attendance_events(child_id,lesson_id,action,guardian_id,guardian_name,actor,created_at,exception_reason) VALUES(?,?,?,?,?,?,?,?)',(cid,data.lesson_id,data.action,data.guardian_id,guardian['name'],user['id'],s.now(),data.exception_reason.strip() if data.action=='out' else ''))
+        c.execute('INSERT INTO attendance_events(child_id,lesson_id,action,guardian_id,guardian_name,actor,created_at,exception_reason) VALUES(?,?,?,?,?,?,?,?)',(cid,data.lesson_id,data.action,None if pickup else data.guardian_id,guardian['name'],user['id'],s.now(),data.exception_reason.strip() if data.action=='out' else ''))
         s.audit(c,user['id'],'check_in' if data.action=='in' else 'check_out',cid)
     return {'ok':True,'claim_code':claim}
 
@@ -546,7 +567,7 @@ def get_team(user=Depends(staff)):
         ''').fetchall()
         members = []
         for r in staff_rows:
-            rooms = [x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]
+            rooms = [x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=? UNION SELECT id FROM rooms WHERE active=1 AND (teacher_id=? OR monitor_id=? OR created_by=?) UNION SELECT room_id FROM lessons WHERE active=1 AND ends_at>? AND (teacher_id=? OR monitor_id=?)',(r['id'],r['id'],r['id'],r['id'],s.now(),r['id'],r['id']))]
             if user['role']!='admin' and r['id']!=user['id'] and not any(room_allowed(c,user,rid) for rid in rooms):
                 continue
             visible=public_user(r)
@@ -858,6 +879,8 @@ from .notification_center import router as notification_center_router
 app.include_router(notification_center_router)
 from .realtime import router as realtime_router
 app.include_router(realtime_router)
+from .evolution import router as evolution_router
+app.include_router(evolution_router)
 
 
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel,Field
 from . import store as s
 from .app import session,fail,public_user,validate_password,email
 import sqlite3
-from .platform_access import MODULES,ROLES,allowed,platform_admin,is_pastor
+from .platform_access import MODULES,ROLES,allowed,platform_admin,is_pastor,scope_values
 from .modules.common import encrypt_text,decrypt_text
 from .record_policy import visible_announcement
 from .modules.ministries.router import CATALOG as MINISTRY_CATALOG
@@ -29,6 +29,7 @@ def me(request:Request,user=Depends(session)):
             'user':public_user(user),
             'platform_admin':root,
             'pastor':pastor,
+            'gc_leader':bool(c.execute('SELECT 1 FROM gc_leaders WHERE user_id=?',(user['id'],)).fetchone()),
             'encryption':'AES-128-Fernet-HMAC-SHA256',
             'notifications':notifs,
             'notification_unread_count':c.execute('SELECT count(*) n FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()['n'],
@@ -48,12 +49,17 @@ def community_catalog(user=Depends(session)):
         if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
             ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name')]
+        if not (platform_admin(c,user['id']) or is_pastor(c,user['id'])):
+            for cell in cells:
+                member=c.execute('SELECT 1 FROM members_people WHERE cell_id=? AND account_user_id=? AND active=1',(cell['id'],user['id'])).fetchone()
+                leader=c.execute('SELECT 1 FROM gc_leaders WHERE cell_id=? AND user_id=?',(cell['id'],user['id'])).fetchone()
+                if not member and not leader:cell.pop('address',None)
         counts={r['ministry']:dict(r) for r in c.execute('SELECT ministry,count(*) total,sum(CASE WHEN is_leader=1 THEN 1 ELSE 0 END) leaders FROM ministries_assignments WHERE active=1 GROUP BY ministry')}
         my_apps=[]
         for r in c.execute('SELECT * FROM sector_applications WHERE user_id=? OR (email!=? AND lower(email)=?) ORDER BY created_at DESC LIMIT 50',(user['id'],'',user['email'].lower() if user.get('email_verified') else '')):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
-        announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 200') if visible_announcement(c,user,dict(r))][:40]
+        announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 AND (publish_at IS NULL OR publish_at<=?) AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 200',(s.now(),s.now())) if visible_announcement(c,user,dict(r))][:40]
         p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         my_schedules=[]
         if p_row:
@@ -104,7 +110,7 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
         leaders=set()
         if data.target_type=='ministry':
             for r in c.execute("SELECT ma.user_id, coalesce(ms.scope,'') scope FROM module_access ma LEFT JOIN module_scopes ms ON ms.user_id=ma.user_id AND ms.module='ministries' WHERE ma.module='ministries' AND ma.enabled=1 AND ma.role IN ('admin','pastor','editor')"):
-                if not r['scope'] or r['scope'].lower()==t_name.lower():
+                if not r['scope'] or t_name in scope_values(r['scope']):
                     leaders.add(r['user_id'])
             n_title=f'🙌 Nova Candidatura · Ministério {t_name}'
             n_msg=f"{user['name']} ({phone or user['email']}) candidatou-se ao ministério {t_name} na função '{role_des}'. Entre em contato para preparar e aprovar!"
@@ -136,6 +142,7 @@ def mark_notification_read(nid:int,user=Depends(session)):
     return {'ok':True}
 
 class PlatformAnnouncementCreate(BaseModel):
+    request_id:__import__('uuid').UUID|None=None
     title:str=Field(min_length=2,max_length=140)
     message:str=Field(min_length=2,max_length=1200)
     target_sector:str=Field(default='all',max_length=40)
@@ -144,6 +151,9 @@ class PlatformAnnouncementCreate(BaseModel):
     event_date:str|None=Field(default=None,max_length=40)
     location:str|None=Field(default=None,max_length=140)
     banner_url:str|None=Field(default=None,max_length=300)
+    publish_at:str|None=Field(default=None,max_length=40)
+    expires_at:str|None=Field(default=None,max_length=40)
+    require_ack:bool=False
 
 def announcement_people(c,user,sector):
     if sector not in ('all','kids','members','ministries','finance'):fail('sector','Setor inválido.')
@@ -165,8 +175,9 @@ def announcement_people(c,user,sector):
     if scope:
         scopes={row['user_id']:row['scope'] for row in c.execute("SELECT user_id,scope FROM module_scopes WHERE module='ministries'")}
         managers={g['user_id'] for g in grants if g['module']=='ministries' and g['role'] in ('admin','editor')}
-        assigned={r['user_id'] for r in c.execute('SELECT coalesce(p.account_user_id,u.id) user_id FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id LEFT JOIN users u ON lower(u.email)=lower(p.email) WHERE a.active=1 AND p.active=1 AND a.ministry=?',(scope,)) if r['user_id']}
-        eligible={uid for uid in eligible if uid in global_ids or scopes.get(uid)==scope or (uid in managers and not scopes.get(uid)) or uid in assigned}
+        selected=scope_values(scope)
+        assigned={r['user_id'] for r in c.execute("SELECT coalesce(p.account_user_id,u.id) user_id,a.ministry FROM ministries_assignments a JOIN members_people p ON p.id=a.person_id LEFT JOIN users u ON lower(u.email)=lower(p.email) WHERE a.active=1 AND p.active=1") if r['user_id'] and r['ministry'] in selected}
+        eligible={uid for uid in eligible if uid in global_ids or scope_values(scopes.get(uid,'')) & selected or (uid in managers and not scopes.get(uid)) or uid in assigned}
     result=[{'id':p['id'],'name':p['name'],'leader':p['id'] in leaders} for p in people if p['id'] in eligible]
     return result
 
@@ -177,17 +188,26 @@ def announcement_recipients(sector:str='all',user=Depends(session)):
 @router.get('/announcements')
 def list_announcements(user=Depends(session)):
     with s.db() as c:
-        return [dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 ORDER BY created_at DESC LIMIT 200') if visible_announcement(c,user,dict(r))][:50]
+        return [dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 AND (publish_at IS NULL OR publish_at<=?) AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 200',(s.now(),s.now())) if visible_announcement(c,user,dict(r))][:50]
 
 @router.post('/announcements')
 def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
     t_sector=data.target_sector.strip()
     valid_targets=('all','kids','members','ministries','finance')
     if t_sector not in valid_targets:fail('target_sector','Setor de destino inválido.')
-    aid=secrets.token_hex(16)
+    from .evolution import date_time
+    publish=date_time(data.publish_at).isoformat(timespec='seconds') if data.publish_at else None
+    expiry=date_time(data.expires_at).isoformat(timespec='seconds') if data.expires_at else None
+    if expiry and date_time(expiry)<=date_time(publish or s.now()):fail('expiry','A expiração deve ser posterior à publicação.')
+    aid=str(data.request_id) if data.request_id else secrets.token_hex(16)
+    request_digest=s.digest(str(user['id'])+'|'+json.dumps(data.model_dump(mode='json',exclude={'request_id'}),sort_keys=True))
     now=s.now()
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        old_request=c.execute('SELECT * FROM platform_announcements WHERE id=?',(aid,)).fetchone()
+        if old_request:
+            if old_request['author_id']==user['id'] and old_request['request_digest']==request_digest:return {'id':aid,'ok':True,'message':'Comunicado já recebido.','scheduled':not bool(old_request['dispatched']),'recipient_count':len(set(json.loads(old_request['audience_ids']))-{user['id']})}
+            fail('duplicate','Solicitação já utilizada.',409)
         is_root=platform_admin(c,user['id'])
         pastor=is_pastor(c,user['id'])
         leader_grants={r['module']:r['role'] for r in c.execute("SELECT module,role FROM module_access WHERE user_id=? AND enabled=1 AND role IN ('admin','pastor','editor')",(user['id'],))}
@@ -218,18 +238,13 @@ def create_announcement(data:PlatformAnnouncementCreate,user=Depends(session)):
             recipients=permitted & sector_users
         selected=json.dumps(sorted(recipients)) if data.audience!='sector' else ''
         c.execute('UPDATE platform_announcements SET target_scope=?,target_user_ids=? WHERE id=?',(target_scope,selected,aid))
-        n_title=f'📢 Novo Comunicado Oficial · {data.title.strip()}'
-        n_msg=f"{user['name']} publicou um novo comunicado para {t_sector.upper() if t_sector!='all' else 'TODOS'}: {data.message.strip()[:200]}"
-        from .realtime import publish, dispatch_notification_event
-        for uid in recipients:
-            if uid==user['id']:continue
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(uid,None,'announcement',n_title,n_msg,user['id'],now,t_sector))
-            dispatch_notification_event(c, uid, 'announcement', n_title, n_msg, sector=t_sector, context_id=aid)
-
-        for uid in recipients:
-            publish('announcement:new', {'id': aid, 'title': data.title, 'sector': t_sector}, user_id=uid)
+        scheduled=bool(publish and date_time(publish)>date_time(now))
+        c.execute('UPDATE platform_announcements SET publish_at=?,expires_at=?,require_ack=?,dispatched=?,audience_ids=?,request_digest=? WHERE id=?',(publish,expiry,int(data.require_ack),0 if scheduled else 1,json.dumps(sorted(recipients)),request_digest,aid))
+        if not scheduled:
+            from .evolution import emit_announcement
+            emit_announcement(c,aid,recipients,user['id'],data.title.strip(),data.message.strip(),t_sector)
         s.audit(c,user['id'],f'platform_announcement_created:{aid}:{t_sector}')
-        return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']})}
+        return {'id':aid,'ok':True,'message':'Comunicado enviado pelo aplicativo.','recipient_count':len(recipients-{user['id']}),'scheduled':scheduled}
 
 @router.delete('/announcements/{aid}')
 def remove_announcement(aid:str,user=Depends(session)):
@@ -291,6 +306,7 @@ def update_identity(uid:int,data:PlatformUserPatch,user=Depends(central_admin)):
         c.execute('BEGIN IMMEDIATE')
         target=c.execute('SELECT id,active FROM users WHERE id=?',(uid,)).fetchone()
         if not target:fail('user','Usuário não encontrado.',404)
+        before={'active':target['active'],'platform_admin':bool(platform_admin(c,uid)),'pastor':bool(is_pastor(c,uid))}
         if uid==user['id'] and (data.active is False or data.platform_admin is False):
             fail('self_lockout','Você não pode bloquear ou remover seu próprio acesso central.',409)
         if data.password:
@@ -319,16 +335,25 @@ def update_identity(uid:int,data:PlatformUserPatch,user=Depends(central_admin)):
                 c.execute('DELETE FROM pastoral_users WHERE user_id=?',(uid,))
                 c.execute("UPDATE users SET staff_role='' WHERE id=? AND staff_role IN ('pastor','pastora')",(uid,))
                 s.audit(c,user['id'],'pastor_role_revoked:'+str(uid))
+        from .modules.common import change
+        after={'active':c.execute('SELECT active FROM users WHERE id=?',(uid,)).fetchone()[0],'platform_admin':bool(platform_admin(c,uid)),'pastor':bool(is_pastor(c,uid))}
+        change(c,'systems',str(uid),'access_updated',user,before,after)
     return {'ok':True,'message':'Conta atualizada com sucesso.'}
 
 class Grant(BaseModel):
     role:str=Field(max_length=20)
     enabled:bool
-    scope:str=Field(default='',max_length=60)
+    scope:str=Field(default='',max_length=500)
+    scopes:list[str]|None=Field(default=None,max_length=16)
 
 @router.put('/users/{uid}/modules/{module}')
 def set_grant(uid:int,module:str,data:Grant,user=Depends(central_admin)):
     if module not in MODULES or data.role not in ROLES[module]:fail('role','Sistema ou perfil inválido.')
+    if data.scopes is not None:
+        if module!='ministries' and data.scopes:fail('scope','Escopo inválido.')
+        if any(v not in MINISTRY_CATALOG for v in data.scopes):fail('scope','Ministério inválido.')
+        data=data.model_copy(update={'scope':json.dumps(sorted(set(data.scopes)),ensure_ascii=False) if data.scopes else ''})
+    if data.scope and not scope_values(data.scope)<=set(MINISTRY_CATALOG):fail('scope','Ministério inválido.')
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         if not c.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone():fail('user','Usuário não encontrado.',404)
@@ -384,6 +409,10 @@ def export_backup(user=Depends(central_admin)):
             'hall_reactions':[dict(r) for r in c.execute('SELECT * FROM hall_reactions')],
             'hall_reports':[dict(r) for r in c.execute('SELECT * FROM hall_reports')]
         }
+        payload['format']='lagoinha-operational-export-v2'
+        payload['full_database_backup']=False
+        for table in ('service_templates','gc_leaders','gc_meetings','gc_attendance','member_journey','personal_availability','schedule_responses','pickup_authorizations','notice_acknowledgements','workflow_reviews','finance_approvals','finance_statement_lines','finance_transfers','finance_recurrences'):
+            payload[table]=[dict(r) for r in c.execute('SELECT * FROM '+table)]
         s.audit(c,user['id'],'platform:backup_exported')
     return Response(json.dumps(payload,ensure_ascii=False,indent=2).encode('utf-8'),media_type='application/json',headers={'Content-Disposition':'attachment; filename="lagoinha-systems-backup.json"'})
 

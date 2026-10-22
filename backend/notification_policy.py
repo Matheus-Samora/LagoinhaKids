@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 from . import store as s
 
 CATEGORIES={'urgent':('Chamados da salinha','high',1800),'tasks':('Solicitações e respostas','normal',604800),'announcements':('Comunicados','normal',604800),'activity':('Presenças e atualizações','low',86400),'system':('Conta e sistema','normal',86400)}
-KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','ministry_approved','gc_approved','ministry_schedule','ministry_schedule_update','arriving','consent_request','hall_reply'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
+KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','ministry_approved','gc_approved','ministry_schedule','ministry_schedule_update','arriving','consent_request','hall_reply','hall_moderation'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
 DEFAULTS={'push_enabled':True,'urgent':True,'tasks':True,'announcements':True,'activity':False,'system':True,'quiet_enabled':False,'quiet_start':'22:00','quiet_end':'07:00'}
 
 
@@ -17,6 +17,7 @@ def metadata(notice):
     if kind in ('event_announcement','event_registration'):route='/kids#events'
     elif kind in ('ministry_approved','ministry_schedule','ministry_schedule_update'):route='/ministries'
     elif kind=='gc_approved':route='/members'
+    if kind=='hall_moderation':route='/membro#hall'
     if kind=='hall_reply':route='/membro#hall/'+notice.get('context_id','')
     return {'category':category,'category_label':label,'priority':priority,'url':route,'ttl':ttl,'channel':'lagoinha_'+category}
 
@@ -39,6 +40,9 @@ def push_policy(c,notice,now=None):
     meta=metadata(notice)
     if not c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(notice['user_id'],)).fetchone():return False,0,'inactive_user'
     if notice.get('kind')=='urgent_call' and not c.execute("SELECT 1 FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way')",(notice.get('child_id'),)).fetchone():return False,0,'resolved_call'
+    if notice.get('kind')=='announcement' and notice.get('context_id'):
+        item=c.execute('SELECT active,expires_at FROM platform_announcements WHERE id=?',(notice['context_id'],)).fetchone()
+        if not item or not item['active'] or (item['expires_at'] and item['expires_at']<=s.now()):return False,0,'announcement_unavailable'
     if notice.get('read_at'):return False,0,'already_read'
     try:
         created=datetime.fromisoformat(notice['created_at'])

@@ -7,7 +7,7 @@ import {t, translateDOM} from './i18n.js';
 
 export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileSaved}){
  const hall=communityHallUI({api,e,identity,onProfileSaved});
- let key='',data={},directory=[],query='',ministryFilter='',activeTab='all',generation=0,host;
+ let key='',data={},directory=[],query='',ministryFilter='',activeTab='all',generation=0,host,peoplePage=1;
  const cash=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
  const date=v=>v?v.slice(0,10).split('-').reverse().join('/'):'—';
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
@@ -35,6 +35,9 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
  };
  const stageLabels={
   visitor:'Visitante',
+  welcoming:'Acolhimento',
+  gc:'Participação em GC',
+  serving:'Serviço',
   new_convert:'Novo Convertido',
   baptized:'Batizado',
   in_training:'Trilha DNA',
@@ -78,7 +81,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
  ];
 
  const button=(action,text,extra='')=>`<button type="button" data-sector-action="${action}" ${extra}>${text}</button>`;
- const options=(rows,field='name')=>rows.map(r=>[r.id,r[field]]);
+ const options=(rows,field='name')=>rows.map(r=>[r.id,r[field]+(rows.filter(x=>x[field]===r[field]).length>1?' · '+String(r.id).slice(-6):'')]);
 
  function cleanPhone(p){
   const digits=String(p||'').replace(/\D/g,'');
@@ -159,7 +162,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(key!=='ministries')return '';
   if(ministryFilter&&ministryFilter!=='Music')return '';
   const musicMembers=(data.assignments||[]).filter(a=>a.ministry==='Music');
-  const musicSchedules=(data.schedules||[]).filter(s=>s.ministry==='Music');
+  const musicSchedules=(data.schedules||[]).filter(s=>s.ministry==='Music' && new Date(s.service_date+'T'+s.service_time+':00-03:00')>=new Date());
   const groupedByService={};
   for(const s of musicSchedules){
    const k=`${s.service_date}|${s.service_time}|${s.title}`;
@@ -295,13 +298,13 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    const currentMonth=today().slice(5,7);
    const birthdaysMonth=people.filter(p=>p.birthday&&p.birthday.slice(5,7)===currentMonth);
    const visitors=people.filter(p=>['visitor','new_convert'].includes(p.integration_stage));
-   const stageCounts=Object.keys(stageLabels).map(k=>({key:k,label:stageLabels[k],count:people.filter(p=>(p.integration_stage||'active_member')===k).length}));
+   const stageCounts=Object.keys(stageLabels).map(k=>({key:k,label:stageLabels[k],count:data.statistics?.stages?.[k]??people.filter(p=>(p.integration_stage||'active_member')===k).length}));
 
    return `<div class="stats metrics">
     ${statCard('Membros',data.total_people||0)}
     ${statCard('Famílias',data.total_families||0)}
     ${statCard('GCs ativos',data.total_cells||cells.length)}
-    ${statCard('Aniversariantes',birthdaysMonth.length)}
+    ${statCard('Aniversariantes do mês',data.statistics?.birthdays_month??birthdaysMonth.length)}
    </div>
 
    <details class="panel"><summary>Integração e aniversários</summary><div class="sector-insights-grid">
@@ -368,7 +371,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   const pendingExpense=Number(data.totals?.pending_expense_cents||0);
   const totalBalance=(data.accounts||[]).reduce((n,a)=>n+Number(a.balance_cents||0),0);
   const flowTotal=incomeCents+expenseCents;
-  const incomePct=flowTotal>0?Math.round((incomeCents/flowTotal)*100):50;
+  const incomePct=flowTotal>0?Math.round((incomeCents/flowTotal)*100):0;
   const netFlow=incomeCents-expenseCents;
 
   return `${financialEnginePanel()}
@@ -380,7 +383,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    </div>
    <div class="sector-insights-grid">
     <section class="insight-card">
-     <div class="insight-head"><h3>Balanço</h3><span class="badge">${netFlow>=0?'Superávit':'Atenção'}</span></div>
+     <div class="insight-head"><h3>Balanço</h3><span class="badge">${!flowTotal?'Sem movimentação':netFlow>0?'Superávit':netFlow<0?'Déficit':'Equilibrado'}</span></div>
      <div>
       <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:4px;">
        <span class="income">Entradas: ${cash(incomeCents)} (${flowTotal?incomePct:0}%)</span>
@@ -454,36 +457,38 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    invoices:['Nota / Fornecedor','Emissão','Valor']
   }[kind];
   const filterSuffix=['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'';
-  return `<section class="panel sector-section" id="section-${kind}"><div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'&&!r.profile_restricted?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button success-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):(kind==='schedules'&&r.person_id===data.my_person_id?'':'<span>Consulta</span>')}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
+  const pager=kind==='people'?`<div class="work-actions">${data.page>1?button('people-prev','Anterior'):''}<span>Página ${data.page||1}</span>${data.has_more?button('people-next','Próxima'):''}</div>`:'';
+  return `<section class="panel sector-section" id="section-${kind}">${pager}<div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'&&!r.profile_restricted?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button success-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):(kind==='schedules'&&r.person_id===data.my_person_id?'':'<span>Consulta</span>')}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
  }
 
  function paint(message=''){
   const allKinds=key==='members'?['people','families','cells']:key==='ministries'?['schedules','assignments','resources']:['entries','closings','accounts','cost-centers','invoices'];
   const isHallTab=key==='members'&&activeTab==='hall';
   if(isHallTab){host.innerHTML='<div data-hall-root></div>';void hall.mount(host.querySelector('[data-hall-root]'));return;}
-  const visibleKinds=activeTab==='all'?allKinds:activeTab==='worship'?['schedules']:allKinds.filter(k=>k===activeTab);
+  const visibleKinds=activeTab==='all'?[]:activeTab==='worship'?['schedules']:allKinds.filter(k=>k===activeTab);
   const showSummary=activeTab==='all';
   const showWorshipOnly=key==='ministries'&&activeTab==='worship';
-  const showGcCards=key==='members'&&(activeTab==='all'||activeTab==='cells');
+  const showGcCards=key==='members'&&activeTab==='cells';
 
-  host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search"><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
-  host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');void refresh();};
+  host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}<section class="panel"><h2>Continuar</h2><div class="work-actions">${allKinds.map(kind=>`<a class="button secondary" href="/${key}#${kind}">${labels[kind]}</a>`).join('')}</div>${key==='finance'&&!data.accounts?.length?'<p>Comece criando uma conta. Depois cadastre um centro de custo e seu primeiro lançamento para conferir o saldo.</p>':''}</section>`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search" ${showSummary?'hidden':''}><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
+  host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');peoplePage=1;void refresh();};
   host.querySelectorAll('[data-sector-action], [data-respond-schedule]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();void action(b);});
   translateDOM(host);
  }
 
  async function refresh(message=''){
   const n=++generation;
-  if(key==='members'&&activeTab==='hall'){paint(message);return;}
+  const loadingTarget=host;if(loadingTarget){loadingTarget.inert=true;loadingTarget.setAttribute('aria-busy','true');}
+  if(key==='members'&&activeTab==='hall'){paint(message);if(host){host.inert=false;host.setAttribute('aria-busy','false');}return;}
   try{
-   const result=await api('/'+key+'?q='+encodeURIComponent(query));
+   const result=await api('/'+key+'?q='+encodeURIComponent(query)+(key==='members'?'&page='+peoplePage:''));
    if(n!==generation)return;
    data=result;
    paint(message);
-  }catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}
+  }catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}finally{if(n===generation&&host===loadingTarget){host.inert=false;host.setAttribute('aria-busy','false');}}
  }
 
- async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';if(host)await refresh();}
+ async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';peoplePage=1;if(host)await refresh();}
 
  function setTab(tab){
   activeTab=tab||'all';
@@ -836,13 +841,16 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   }
   if(kind==='schedules'){
    directory=await api('/ministries/people');
-   html=`<div class="lookup"><label>Buscar voluntário<input id="person-search" maxlength="100"></label>${button('lookup','Buscar','class="secondary"')}</div>`
+   html=field('template','Horário cadastrado (opcional)','','text',false,[['','Preencher manualmente'],...(data.service_templates||[]).map(s=>[s.id,s.title+' · '+s.service_time])])+`<div class="lookup"><label>Buscar voluntário<input id="person-search" maxlength="100"></label>${button('lookup','Buscar','class="secondary"')}</div>`
     +field('title','Culto / Evento',r.title||'Culto de Celebração','text',true)
     +field('ministry','Ministério',r.ministry||ministryFilter||data.user_scope||data.catalog[0],'text',true,data.catalog.map(x=>[x,x]))
     +field('person_id','Voluntário',r.person_id,'text',true,opt(directory,r.person_id,r.person_name))
     +field('role_notes','Função no culto',r.role_notes)
     +field('service_date','Data',r.service_date||today(),'date',true,null,true)
-    +field('service_time','Horário',r.service_time||'18:00','text',true,[['09:00','09:00'],['10:00','10:00'],['17:00','17:00'],['18:00','18:00'],['19:30','19:30'],['20:00','20:00']])
+    +field('service_time','Horário',r.service_time||'18:00','time',true)
+    +field('duration_minutes','Duração em minutos',r.duration_minutes||60,'number',true)
+    +field('response_due_at','Responder até (opcional)',r.response_due_at?.slice(0,16)||'','datetime-local')
+    +field('reminder_enabled','Lembrete de resposta',r.reminder_enabled?'true':'false','text',true,[['false','Desativado'],['true','Ativado']])
     +field('status','Status',r.status||'confirmed','text',true,Object.entries(scheduleStatusLabels));
   }
   if(kind==='resources'){
@@ -854,7 +862,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   }
   if(kind==='cost-centers'){
    html=field('name','Nome',r.name,'text',true)
-    +field('ministry','Ministério',r.ministry)
+    +field('ministry','Ministério',r.ministry,'text',false,[['','Sem vínculo'],...Object.keys(MINISTRY_META).map(x=>[x,x])])
     +field('budget_value','Orçamento (R$)',r.budget_cents!==undefined?(r.budget_cents/100).toFixed(2):'0','text',true);
   }
   if(kind==='accounts'){
@@ -898,6 +906,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   dialog.querySelector('.sector-modal').innerHTML=`<div class="section-title"><h2>${record?'Editar':'Adicionar'} · ${labels[kind]}</h2>${button('close','Fechar','class="secondary"')}</div><form class="record-form"><input name="request_id" type="hidden" value="${id()}">${html}<p class="error" role="alert"></p><button type="submit">Salvar</button></form>`;
   const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
+  dialog.querySelector('[name=template]')?.addEventListener('change',event=>{const model=(data.service_templates||[]).find(s=>s.id===event.target.value);if(!model)return;const f=dialog.querySelector('form');f.elements.title.value=model.title;f.elements.service_time.value=model.service_time;f.elements.duration_minutes.value=model.duration_minutes;});
   dialog.querySelector('[data-sector-action="lookup"]')?.addEventListener('click',async()=>{
    try{
     directory=await api('/ministries/people?q='+encodeURIComponent(dialog.querySelector('#person-search').value));
@@ -918,6 +927,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
      if(name in body&&!body[name])body[name]=null;
     }
     if('is_leader' in body)body.is_leader=body.is_leader==='true';
+    if('reminder_enabled' in body)body.reminder_enabled=body.reminder_enabled==='true';
+    if('duration_minutes' in body)body.duration_minutes=Number(body.duration_minutes);
     await api('/'+key+'/'+kind+(record?'/'+r.id:''),{method:record?'PUT':'POST',body});
     lifecycle.complete();dialog.close();await refresh('Registro salvo.');
    }catch(err){f.querySelector('.error').textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;}
@@ -992,6 +1003,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    const r=list.find(x=>x.id===b.dataset.id);
    if(b.dataset.sectorAction==='open-qr'){if(openQrModal)openQrModal();return;}
    if(b.dataset.sectorAction==='filter-ministry'){ministryFilter=ministryFilter===b.dataset.ministry?'':b.dataset.ministry;paint();return;}
+   if(b.dataset.sectorAction==='people-next'||b.dataset.sectorAction==='people-prev'){peoplePage+=b.dataset.sectorAction==='people-next'?1:-1;await refresh();return;}
    if(b.dataset.sectorAction==='clear'){query='';ministryFilter='';await refresh();return;}
    if(b.dataset.sectorAction==='self-reg-modal'){openSelfRegModal();return;}
    if(b.dataset.sectorAction==='worship-scale-modal'){await openWorshipScaleModal();return;}
