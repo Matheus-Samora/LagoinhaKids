@@ -27,7 +27,8 @@ export function guardForm(form,dialog=form.closest('dialog')){
  }
  return guard;
 }
-window.addEventListener('beforeunload',ev=>{if([...guards].some(g=>g.busy||g.dirty)){ev.preventDefault();ev.returnValue='';}});
+export const hasPendingForms=()=>[...guards].some(g=>g.busy||g.dirty);
+window.addEventListener('beforeunload',ev=>{if(hasPendingForms()){ev.preventDefault();ev.returnValue='';}});
 document.addEventListener('click',ev=>{
  const nav=ev.target.closest('a[href],button[data-page],[data-switch-tab],#sidebar-logout,#logout,[data-action="logout"]');
  if(!nav||nav.closest('dialog')||nav.target==='_blank'||nav.hasAttribute('download'))return;

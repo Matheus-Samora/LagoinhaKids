@@ -1,3 +1,5 @@
+import {hasPendingForms} from '../form-lifecycle.js';
+import {deferredRefresh} from './live-refresh.js';
 import {communityHallUI} from './hall.js';
 import {accountProfileUI} from '../account-profile.js';
 import {realtime, showRealtimeToast} from './realtime.js';
@@ -175,6 +177,7 @@ function login(message='',prefillEmail=''){
    sessionStorage.removeItem('lagoinha_login_redirected');
    await welcome(currentAreaKey());
    await load(true);
+   realtime.connect(csrf,'');
   }catch(error){
    errEl.textContent=error.message;
    button.disabled=false;
@@ -968,23 +971,18 @@ realtime.on('notification:count', ({ unread_count }) => {
  updateTopBadge(unread_count);
 });
 
-realtime.on('ministries:my_schedule', async () => {
- try {
-  communityData = await api('/platform/community');
-  render();
- } catch {}
+const editedForms=new WeakSet();
+for(const name of ['input','change'])root.addEventListener(name,event=>{
+ if(event.target.form)editedForms.add(event.target.form);
 });
-
-realtime.on('announcement:new', async ann => {
- try {
-  communityData = await api('/platform/community');
-  render();
-  showRealtimeToast({
-   title: '📢 Novo Comunicado Oficial',
-   message: ann.title || '',
-   url: '#announcements'
-  });
- } catch {}
+const communityRefresh=deferredRefresh({
+ blocked:()=>!identity||document.hidden||hasPendingForms()||[...root.querySelectorAll('form')].some(form=>editedForms.has(form))||Boolean(document.querySelector('dialog[open]'))||Boolean(root.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,[contenteditable="true"]')),
+ key:()=>identity?.user?.id,
+ read:()=>api('/platform/community'),
+ apply:data=>{communityData=data;render();}
 });
+realtime.on('ministries:my_schedule',()=>void communityRefresh.request());
+realtime.on('announcement:new',()=>void communityRefresh.request());
+setInterval(()=>void communityRefresh.flush(),5000);
 
 window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});

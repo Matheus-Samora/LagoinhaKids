@@ -53,3 +53,27 @@ const {RealtimeClient, realtime} = await import('../src/platform/realtime.js');
   assert.equal(client.reconnectTimer,null);
   assert.equal(client.es,null);
  });
+
+
+const {deferredRefresh}=await import('../src/platform/live-refresh.js');
+test('background updates wait for drafts and never apply across accounts',async()=>{
+ let blocked=true,account=3,applied=[],reads=0;
+ const refresh=deferredRefresh({blocked:()=>blocked,key:()=>account,read:async()=>{reads++;return 'fresh';},apply:data=>applied.push(data)});
+ await refresh.request();
+ assert.equal(reads,0);
+ blocked=false;
+ await refresh.flush();
+ assert.deepEqual(applied,['fresh']);
+ let resolve;
+ const pending=deferredRefresh({blocked:()=>false,key:()=>account,read:()=>new Promise(done=>resolve=done),apply:data=>applied.push(data)});
+ const request=pending.request();account=4;resolve('previous-account');await request;
+ assert.deepEqual(applied,['fresh']);
+});
+test('opening a form during fetch defers application until the form is safe',async()=>{
+ let blocked=false,resolve,applied=0;
+ const refresh=deferredRefresh({blocked:()=>blocked,key:()=>3,read:()=>new Promise(done=>resolve=done),apply:()=>applied++});
+ const pending=refresh.request();blocked=true;resolve('data');await pending;
+ assert.equal(applied,0);
+ blocked=false;const retry=refresh.flush();resolve('updated');await retry;
+ assert.equal(applied,1);
+});

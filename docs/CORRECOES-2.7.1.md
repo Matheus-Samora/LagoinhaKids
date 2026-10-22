@@ -6,6 +6,8 @@
 - Eventos de Kids e perfil carregam apenas sinais de atualização; comunicados personalizados chegam somente aos destinatários.
 - Hall consulta dados e permissões do próprio leitor, preservando filtros, contagens e estado de reações entre dispositivos.
 - Leitura individual de notificações sincroniza o contador e valida a propriedade nas três rotas existentes.
+- Atualizações de comunicados/escalas aguardam formulários e diálogos, sem apagar rascunhos nem aplicar respostas de outra conta. Comunicados não repetem o toast da notificação.
+- Conexão em tempo real inicia também após login/cadastro; aplicativo nativo usa o token de sessão retornado pelo servidor.
 - Heartbeat explícito evita reconexões em sessões ociosas. Logout impede conexões atrasadas e reconexões automáticas.
 
 Validação: suíte Python SQLite, testes JavaScript de conexão/logout/heartbeat, build e auditoria de dependências. CI inclui PostgreSQL e smoke do container. Testes usam dados sintéticos isolados; nenhum cadastro real é alterado.
