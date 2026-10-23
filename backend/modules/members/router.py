@@ -245,46 +245,17 @@ def reject_self_registration(rid:str,user=Depends(write)):
 
 @router.post('/gc-applications/{rid}/approve')
 def approve_gc_application(rid:str,user=Depends(write)):
+    from ...application_workflow import decide
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='gc' AND status='pending'",(rid,)).fetchone()
-        if not app:fail('missing','Solicitação de GC pendente não encontrada.',404)
-        cell=c.execute('SELECT id,name FROM members_cells WHERE (id=? OR lower(name)=?) AND active=1',(app['target_id'],app['target_name'].lower())).fetchone()
-        cell_id=cell['id'] if cell else None
-        person=None
-        if app['email']:
-            person=c.execute('SELECT * FROM members_people WHERE lower(email)=? AND active=1',(app['email'].lower(),)).fetchone()
-        if not person:
-            person=c.execute('SELECT * FROM members_people WHERE lower(name)=? AND active=1',(app['member_name'].lower(),)).fetchone()
-        if person:
-            c.execute('UPDATE members_people SET cell_id=?,phone=coalesce(nullif(?, \'\'),phone),version=version+1 WHERE id=?',(cell_id,app['phone'] or '',person['id']))
-            pid=person['id']
-        else:
-            person_vals={
-                'name':app['member_name'],'joined_on':s.today(),'family_id':None,'cell_id':cell_id,
-                'relationship':'Titular','birthday':None,'phone':app['phone'] or '',
-                'email':app['email'] or '','integration_stage':'active_member',
-                'baptism_date':None,'origin_church':'','marital_status':'',
-                'profession':'','address':'','pastoral_notes':encrypt_text(f"Integrado ao {app['target_name']} via inscrição por banner")
-            }
-            p_res=save(c,'members_people','members',Person(name=app['member_name']),person_vals,user)
-            pid=p_res['id']
-        c.execute("UPDATE sector_applications SET status='approved',reviewed_by=? WHERE id=?",(user['id'],rid))
-        if app['user_id']:
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(app['user_id'],None,'gc_approved',f"🎉 Bem-vindo(a) ao {app['target_name']}!",f"Sua inscrição para participar do {app['target_name']} foi aprovada pela liderança! Esperamos você no próximo encontro.",user['id'],s.now()))
-        s.audit(c,user['id'],'members:gc_app_approved:'+rid)
-        return {'ok':True,'person_id':pid,'cell_id':cell_id}
+        return decide(c,user,rid,True)
 
 @router.delete('/gc-applications/{rid}')
 def reject_gc_application(rid:str,user=Depends(write)):
+    from ...application_workflow import decide
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='gc'",(rid,)).fetchone()
-        if app and app['user_id']:
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(app['user_id'],None,'sector_application',f"Atualização · Inscrição em GC",f"Olá {app['member_name']}! Sua solicitação para o {app['target_name']} foi analisada pela coordenação. Fale com a liderança para mais orientações.",user['id'],s.now(),'members'))
-        c.execute("UPDATE sector_applications SET status='rejected',reviewed_by=? WHERE id=? AND target_type='gc'",(user['id'],rid))
-        s.audit(c,user['id'],'members:gc_app_rejected:'+rid)
-        return {'ok':True}
+        return decide(c,user,rid,False)
 
 @router.delete('/families/{rid}')
 def delete_family(rid:str,version:int=Query(ge=1),user=Depends(admin)):

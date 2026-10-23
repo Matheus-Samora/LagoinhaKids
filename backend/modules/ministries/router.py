@@ -327,32 +327,18 @@ def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):
 def approve_ministry_application(rid:str,user=Depends(write)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
-        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='ministry' AND status='pending'",(rid,)).fetchone()
+        app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='ministry'",(rid,)).fetchone()
         if not app:fail('missing','Candidatura pendente não encontrada.',404)
         ministry=app['target_name']
         check_ministry_scope(c,user,ministry)
-        person=None
-        if app['email']:
-            person=c.execute('SELECT * FROM members_people WHERE lower(email)=? AND active=1',(app['email'].lower(),)).fetchone()
-        if not person:
-            person=c.execute('SELECT * FROM members_people WHERE lower(name)=? AND active=1',(app['member_name'].lower(),)).fetchone()
-        if person:
-            pid=person['id']
-            if app['phone'] and not person.get('phone'):
-                c.execute('UPDATE members_people SET phone=?,version=version+1 WHERE id=?',(app['phone'],pid))
-        else:
-            p_res=save(c,'members_people','members',Record(),{
-                'name':app['member_name'],'joined_on':s.today(),'family_id':None,'cell_id':None,
-                'relationship':'Titular','birthday':None,'phone':app['phone'] or '',
-                'email':app['email'] or '','integration_stage':'active_member',
-                'baptism_date':None,'origin_church':'','marital_status':'',
-                'profession':'','address':'','pastoral_notes':encrypt_text(f'Aprovado para o ministério {ministry}')
-            },user)
-            pid=p_res['id']
+        if app['status']=='approved':return {'ok':True,'already_processed':True}
+        if app['status']!='pending':fail('state','A candidatura já foi concluída.',409)
+        from ...application_workflow import application_person
+        person=application_person(c,user,app)
+        pid=person['id']
         role_pos=(app['role_desired'] or 'Integrante').strip()
         existing_assign=c.execute('SELECT id,version FROM ministries_assignments WHERE person_id=? AND ministry=? AND active=1',(pid,ministry)).fetchone()
         if existing_assign:
-            c.execute('UPDATE ministries_assignments SET position=?,version=version+1 WHERE id=?',(role_pos,existing_assign['id']))
             assign_id=existing_assign['id']
         else:
             a_res=save(c,'ministries_assignments','ministries',Record(),{
@@ -362,12 +348,20 @@ def approve_ministry_application(rid:str,user=Depends(write)):
             assign_id=a_res['id']
         c.execute("UPDATE sector_applications SET status='approved',reviewed_by=? WHERE id=?",(user['id'],rid))
         if app['user_id']:
-            c.execute("INSERT INTO module_access(user_id,module,role,enabled) VALUES(?,'ministries','viewer',1) ON CONFLICT(user_id,module) DO UPDATE SET enabled=1",(app['user_id'],))
-            c.execute("INSERT INTO module_scopes(user_id,module,scope) VALUES(?,'ministries',?) ON CONFLICT(user_id,module) DO NOTHING",(app['user_id'],ministry))
+            grant=c.execute("SELECT role,enabled FROM module_access WHERE user_id=? AND module='ministries'",(app['user_id'],)).fetchone()
+            if not grant:
+                c.execute("INSERT INTO module_access(user_id,module,role,enabled) VALUES(?,'ministries','viewer',1)",(app['user_id'],))
+                c.execute("INSERT INTO module_scopes(user_id,module,scope) VALUES(?,'ministries',?) ON CONFLICT(user_id,module) DO UPDATE SET scope=excluded.scope",(app['user_id'],ministry))
+            elif grant['enabled'] and grant['role']=='viewer':
+                old_scope=c.execute("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'",(app['user_id'],)).fetchone()
+                if old_scope and old_scope['scope']:
+                    import json
+                    selected=scope_values(old_scope['scope']);selected.add(ministry)
+                    c.execute("UPDATE module_scopes SET scope=? WHERE user_id=? AND module='ministries'",(json.dumps(sorted(selected),ensure_ascii=False),app['user_id']))
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?,?)',(
                 app['user_id'],None,'ministry_approved',
                 f'🙌 Candidatura Aprovada · Ministério {ministry}',
-                f"Parabéns, {app['member_name']}! Sua participação no ministério {ministry} ({role_pos}) foi aprovada pela liderança. Seu acesso ao setor já está liberado!",
+                f"Parabéns, {app['member_name']}! Sua participação no ministério {ministry} ({role_pos}) foi aprovada pela liderança. Seu acesso ao setor segue as permissões definidas pela administração.",
                 user['id'],s.now()
             ))
         s.audit(c,user['id'],f'ministries:app_approved:{ministry}:{rid}')
@@ -378,8 +372,10 @@ def reject_ministry_application(rid:str,user=Depends(write)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         app=c.execute("SELECT * FROM sector_applications WHERE id=? AND target_type='ministry'",(rid,)).fetchone()
-        if app:
-            check_ministry_scope(c,user,app['target_name'])
+        if not app:fail('missing','Candidatura não encontrada.',404)
+        check_ministry_scope(c,user,app['target_name'])
+        if app['status']=='rejected':return {'ok':True,'already_processed':True}
+        if app['status']!='pending':fail('state','A candidatura já foi concluída.',409)
         if app and app['user_id']:
             c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(app['user_id'],None,'sector_application',f"Atualização · Candidatura a {app['target_name']}",f"Olá {app['member_name']}! Sua solicitação para o ministério {app['target_name']} foi analisada pela coordenação. Fale com a liderança para mais orientações.",user['id'],s.now(),'ministries'))
         c.execute("UPDATE sector_applications SET status='rejected',reviewed_by=? WHERE id=? AND target_type='ministry'",(user['id'],rid))

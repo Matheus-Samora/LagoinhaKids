@@ -346,7 +346,7 @@ function memberCommunityPortal(tab='all'){
   </div>
   <form data-gc-search class="sector-search"><label>Bairro ou nome<input name="q" maxlength="80"></label><label>Dia<input name="day" maxlength="30" placeholder="Ex.: sexta"></label><button>Filtrar</button><button type="reset">Limpar</button></form><p data-gc-results role="status"></p><div class="gc-showcase-grid">
    ${cells.map(gc=>{
-    const alreadyPending=myApps.some(a=>a.target_type==='gc'&&a.target_name.toLowerCase()===gc.name.toLowerCase()&&a.status==='pending');
+    const alreadyPending=myApps.some(a=>a.target_type==='gc'&&(a.target_id?String(a.target_id)===String(gc.id):a.target_name.toLowerCase()===gc.name.toLowerCase())&&a.status==='pending');
     const banner=gc.banner_url||'/gc/gc-ide.webp';
     return `<article class="gc-banner-card">
      <div class="gc-banner-media">

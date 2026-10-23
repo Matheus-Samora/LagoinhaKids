@@ -66,7 +66,7 @@ TI mantém poder global; pastores mantêm poder global fora de TI; responsáveis
 | G01 | Vocabulário de jornada inclui acolhimento, GC, formação, membro e serviço; diretório mantém privacidade dos campos. |
 | G02 | Acompanhamento com etapas, responsável, prazo, ação seguinte e histórico; conclusão remove tarefa. |
 | G03 | Liderança de GC vinculada a conta e grupo, sem conceder permissão global de Members. |
-| G04 | Registro de encontros e presenças limitado aos participantes do GC; pedidos continuam no fluxo existente de aprovação. |
+| G04 | Registro de encontros e presenças limitado aos participantes do GC; na 3.0.1, líderes também analisam pedidos do próprio GC, sem acesso global a Members. |
 | G05 | Busca de GCs por nome/bairro/dia; endereço residencial só é exibido a gestão e participantes/líderes autorizados. |
 | G06 | Participante acompanha etapas e pode desistir de candidatura pendente; respostas de aprovação/recusa existentes mantidas. |
 | C01 | Formulário explica quais campos aparecem no Hall e quais continuam privados. |
@@ -91,3 +91,10 @@ TI mantém poder global; pastores mantêm poder global fora de TI; responsáveis
 ## Evidência
 
 Testes automatizados com dados sintéticos isolados, verificação visual desktop/390 px, build e auditoria de dependências. A execução final da CI, revisão publicada e smoke pós-publicação são registrados no relatório de entrega, separadamente do desenvolvimento local. Nenhum teste de escrita é executado sobre dados reais de produção.
+
+## Complemento 3.0.1
+
+- Líderes de GC aprovam ou recusam pedidos apenas do próprio grupo e recebem aviso sem contatos privados; retirada da liderança revoga essas ações.
+- GC e ministério vinculam solicitações pela conta. Homônimos nunca são fundidos automaticamente; legado ambíguo ou e-mail não confirmado exige revisão. Datas desconhecidas permanecem vazias.
+- Pedido por ID de GC prevalece sobre nomes repetidos; reenvio não repete decisão nem notificação.
+- Aprovação ministerial preserva acesso bloqueado por TI e não altera cargo nem escopo administrativo existente. Responsável e prazo podem ser definidos na triagem.

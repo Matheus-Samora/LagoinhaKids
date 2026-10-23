@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 from . import store as s
 
 CATEGORIES={'urgent':('Chamados da salinha','high',1800),'tasks':('Solicitações e respostas','normal',604800),'announcements':('Comunicados','normal',604800),'activity':('Presenças e atualizações','low',86400),'system':('Conta e sistema','normal',86400)}
-KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','ministry_approved','gc_approved','ministry_schedule','ministry_schedule_update','arriving','consent_request','hall_reply','hall_moderation'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
+KINDS={'urgent':('urgent_call','please_pickup','pickup_ready'),'tasks':('sector_application','gc_application','gc_application_result','ministry_approved','gc_approved','ministry_schedule','ministry_schedule_update','arriving','consent_request','hall_reply','hall_moderation'),'announcements':('announcement','event_announcement'),'activity':('attendance','lesson_update','discipleship','event_registration')}
 DEFAULTS={'push_enabled':True,'urgent':True,'tasks':True,'announcements':True,'activity':False,'system':True,'quiet_enabled':False,'quiet_start':'22:00','quiet_end':'07:00'}
 
 
@@ -16,7 +16,8 @@ def metadata(notice):
     route='/'+sector if sector in ('finance','members','ministries') else '/membro' if notice.get('child_id') is None and category in ('tasks','announcements') else '/kids#notifications'
     if kind in ('event_announcement','event_registration'):route='/kids#events'
     elif kind in ('ministry_approved','ministry_schedule','ministry_schedule_update'):route='/ministries'
-    elif kind=='gc_approved':route='/members'
+    elif kind in ('gc_approved','gc_application_result'):route='/membro#tasks'
+    elif kind=='gc_application':route='/membro#groups'
     if kind=='hall_moderation':route='/membro#hall'
     if kind=='hall_reply':route='/membro#hall/'+notice.get('context_id','')
     return {'category':category,'category_label':label,'priority':priority,'url':route,'ttl':ttl,'channel':'lagoinha_'+category}
@@ -43,6 +44,10 @@ def push_policy(c,notice,now=None):
     if notice.get('kind')=='announcement' and notice.get('context_id'):
         item=c.execute('SELECT active,expires_at FROM platform_announcements WHERE id=?',(notice['context_id'],)).fetchone()
         if not item or not item['active'] or (item['expires_at'] and item['expires_at']<=s.now()):return False,0,'announcement_unavailable'
+    if notice.get('kind')=='gc_application':
+        item=c.execute("SELECT target_id,status FROM sector_applications WHERE id=? AND target_type='gc'",(notice.get('context_id',''),)).fetchone()
+        from .record_policy import manager
+        if not item or item['status']!='pending' or not (manager(c,{'id':notice['user_id']},'members') or c.execute('SELECT 1 FROM gc_leaders WHERE cell_id=? AND user_id=?',(item['target_id'],notice['user_id'])).fetchone()):return False,0,'gc_request_unavailable'
     if notice.get('read_at'):return False,0,'already_read'
     try:
         created=datetime.fromisoformat(notice['created_at'])

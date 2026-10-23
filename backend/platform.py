@@ -60,7 +60,7 @@ def community_catalog(user=Depends(session)):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
         announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 AND (publish_at IS NULL OR publish_at<=?) AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 200',(s.now(),s.now())) if visible_announcement(c,user,dict(r))][:40]
-        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
         my_schedules=[]
         if p_row:
             my_schedules=[dict(r) for r in c.execute("SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.person_id=? AND ms.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC LIMIT 30",(p_row['id'],)).fetchall()]
@@ -93,12 +93,16 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
         if data.target_type=='gc':
-            cell=c.execute('SELECT id,name FROM members_cells WHERE (id=? OR lower(name)=?) AND active=1',(data.target_id.strip(),t_name.lower())).fetchone()
+            if data.target_id.strip():cell=c.execute('SELECT id,name FROM members_cells WHERE id=? AND active=1',(data.target_id.strip(),)).fetchone()
+            else:
+                matches=c.execute('SELECT id,name FROM members_cells WHERE lower(name)=? AND active=1',(t_name.lower(),)).fetchall()
+                if len(matches)>1:fail('gc','Selecione o GC pelo cartão correspondente.',409)
+                cell=matches[0] if matches else None
             if not cell:fail('gc','GC não encontrado.',404)
             t_id=cell['id'];t_name=cell['name']
         else:
             t_id=t_name
-        dup=c.execute("SELECT id FROM sector_applications WHERE user_id=? AND target_type=? AND lower(target_name)=? AND status='pending'",(user['id'],data.target_type,t_name.lower())).fetchone()
+        dup=c.execute("SELECT id FROM sector_applications WHERE user_id=? AND target_type=? AND target_id=? AND status='pending'",(user['id'],data.target_type,t_id)).fetchone()
         if dup:return {'id':dup['id'],'ok':True,'message':f'Sua solicitação para {t_name} já está em análise pelo líder do setor!'}
         c.execute(
             'INSERT INTO sector_applications(id,user_id,member_name,phone,email,target_type,target_id,target_name,role_desired,notes,status,reviewed_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -113,12 +117,13 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
                 if not r['scope'] or t_name in scope_values(r['scope']):
                     leaders.add(r['user_id'])
             n_title=f'🙌 Nova Candidatura · Ministério {t_name}'
-            n_msg=f"{user['name']} ({phone or user['email']}) candidatou-se ao ministério {t_name} na função '{role_des}'. Entre em contato para preparar e aprovar!"
+            n_msg=f"{user['name']} candidatou-se ao ministério {t_name} na função '{role_des}'. Entre em contato para preparar e aprovar!"
         else:
             for r in c.execute("SELECT user_id FROM module_access WHERE module='members' AND enabled=1 AND role IN ('admin','pastor','editor')"):
                 leaders.add(r['user_id'])
+            leaders.update(r['user_id'] for r in c.execute('SELECT user_id FROM gc_leaders WHERE cell_id=?',(t_id,)))
             n_title=f'🏠 Novo Pedido de GC · {t_name}'
-            n_msg=f"{user['name']} ({phone or user['email']}) deseja participar do {t_name}. Entre em contato para acolher e integrar ao grupo!"
+            n_msg=f"{user['name']} deseja participar do {t_name}. Entre em contato para acolher e integrar ao grupo!"
         leaders={lid for lid in leaders if c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(lid,)).fetchone()}
         # Notify the responsible team first. Pastoral/TI is an escalation fallback.
         if not leaders:
@@ -126,7 +131,9 @@ def apply_to_sector(data:CommunityApplication,user=Depends(session)):
         if not leaders:leaders.update(r['user_id'] for r in c.execute('SELECT user_id FROM platform_admins'))
         leaders={lid for lid in leaders if c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(lid,)).fetchone()}
         for lid in leaders:
-            c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?,?)',(lid,None,'sector_application',n_title,n_msg,user['id'],now,'ministries' if data.target_type=='ministry' else 'members'))
+            nid=c.execute('INSERT INTO notifications(user_id,child_id,kind,title,message,sender,created_at,sector,context_id) VALUES(?,?,?,?,?,?,?,?,?)',(lid,None,'sector_application' if data.target_type=='ministry' else 'gc_application',n_title,n_msg,user['id'],now,'ministries' if data.target_type=='ministry' else 'members',rid)).lastrowid
+            from .realtime import dispatch_notification_event
+            dispatch_notification_event(c,lid,'sector_application' if data.target_type=='ministry' else 'gc_application',n_title,n_msg,sector='ministries' if data.target_type=='ministry' else 'members',context_id=rid,notification_id=nid)
         s.audit(c,user['id'],f'sector_apply:{data.target_type}:{t_name}')
     return {'id':rid,'ok':True,'message':f'Inscrição enviada! O responsável por {t_name} foi notificado e entrará em contato.'}
 

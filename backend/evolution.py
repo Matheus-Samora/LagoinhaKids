@@ -146,7 +146,20 @@ def search_groups(q:str=Query('',max_length=80),day:str=Query('',max_length=30),
 def group_detail(gid:str,u=Depends(session)):
     with s.db() as c:
         group_access(c,u,gid)
-        return {'people':[dict(r) for r in c.execute('SELECT id,name FROM members_people WHERE cell_id=? AND active=1 ORDER BY name',(gid,))],'meetings':[dict(r,notes=decrypt_text(r['notes'])) for r in c.execute('SELECT m.*,(SELECT count(*) FROM gc_attendance a WHERE a.meeting_id=m.id AND a.present=1) present_count FROM gc_meetings m WHERE m.cell_id=? ORDER BY m.held_on DESC LIMIT 100',(gid,))],'leaders':[dict(r) for r in c.execute('SELECT u.id,u.name FROM gc_leaders l JOIN users u ON u.id=l.user_id WHERE l.cell_id=? AND u.active=1',(gid,))]}
+        group=current(c,'members_cells',gid)
+        return {'people':[dict(r) for r in c.execute('SELECT id,name FROM members_people WHERE cell_id=? AND active=1 ORDER BY name',(gid,))],
+          'meetings':[dict(r,notes=decrypt_text(r['notes'])) for r in c.execute('SELECT m.*,(SELECT count(*) FROM gc_attendance a WHERE a.meeting_id=m.id AND a.present=1) present_count FROM gc_meetings m WHERE m.cell_id=? ORDER BY m.held_on DESC LIMIT 100',(gid,))],
+          'leaders':[dict(r) for r in c.execute('SELECT u.id,u.name FROM gc_leaders l JOIN users u ON u.id=l.user_id WHERE l.cell_id=? AND u.active=1',(gid,))],
+          'applications':[dict(r) for r in c.execute("SELECT id,member_name,status,created_at FROM sector_applications WHERE target_type='gc' AND status='pending' AND (target_id=? OR (target_id='' AND lower(target_name)=?)) ORDER BY created_at LIMIT 100",(gid,group['name'].lower()))]}
+
+class GroupDecision(BaseModel):approve:bool
+@router.post('/groups/{gid}/applications/{rid}/decision')
+def group_decision(gid:str,rid:str,data:GroupDecision,u=Depends(session)):
+    from .application_workflow import decide
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE');group_access(c,u,gid,True)
+        return decide(c,u,rid,data.approve,group_id=gid)
+
 
 class Meeting(BaseModel):
     request_id:UUID

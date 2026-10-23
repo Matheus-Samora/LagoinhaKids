@@ -317,3 +317,71 @@ def test_confirming_declined_schedule_rechecks_overlap(records):
     old=a.post('/api/ministries/schedules',json={**body,'status':'declined'});assert old.status_code==200
     assert a.post('/api/ministries/schedules',json={**body,'service_time':'11:00'}).status_code==200
     assert a.post('/api/ministries/schedules/'+old.json()['id']+'/respond',json={'status':'confirmed'}).status_code==409
+
+def test_gc_leader_decisions_scope_identity_and_duplicate_delivery(records):
+    a=client(1);gid=a.post('/api/members/cells',json={'name':'GC Homônimo'}).json()['id'];other=a.post('/api/members/cells',json={'name':'GC Homônimo'}).json()['id']
+    homonym=a.post('/api/members/people',json={'name':'User 4','account_user_id':3}).json()['id']
+    assert a.put('/api/workspace/groups/'+gid+'/leaders',json={'user_id':2}).status_code==200
+    applicant=client(4);r=applicant.post('/api/platform/apply',json={'target_type':'gc','target_id':gid,'target_name':'GC Homônimo'});assert r.status_code==200,r.text
+    rid=r.json()['id'];leader=client(2)
+    details=leader.get('/api/workspace/groups/'+gid).json();assert details['applications'][0]['id']==rid
+    assert not {'email','phone','notes'} & details['applications'][0].keys()
+    assert leader.post('/api/workspace/groups/'+other+'/applications/'+rid+'/decision',json={'approve':True}).status_code==403
+    assert leader.post('/api/members/gc-applications/'+rid+'/approve').status_code==403
+    for _ in range(2):assert leader.post('/api/workspace/groups/'+gid+'/applications/'+rid+'/decision',json={'approve':True}).status_code==200
+    with s.db() as c:
+        original=c.execute('SELECT cell_id,account_user_id FROM members_people WHERE id=?',(homonym,)).fetchone();assert original['cell_id'] is None and original['account_user_id']==3
+        person=c.execute('SELECT * FROM members_people WHERE account_user_id=4 AND active=1').fetchone();assert person['cell_id']==gid and person['joined_on'] is None
+        assert c.execute("SELECT count(*) FROM notifications WHERE user_id=4 AND kind='gc_approved'").fetchone()[0]==1
+        assert c.execute("SELECT count(*) FROM notifications WHERE user_id=2 AND kind='gc_application'").fetchone()[0]==1
+    assert a.delete('/api/workspace/groups/'+gid+'/leaders/2').status_code==200
+    assert leader.get('/api/workspace/groups/'+gid).status_code==403
+
+
+def test_gc_leader_cannot_silently_transfer_from_another_group(records):
+    a=client(1);gid=a.post('/api/members/cells',json={'name':'Novo GC'}).json()['id'];old=a.post('/api/members/cells',json={'name':'GC Atual'}).json()['id']
+    pid=a.post('/api/members/people',json={'name':'User 3','account_user_id':3,'cell_id':old}).json()['id']
+    a.put('/api/workspace/groups/'+gid+'/leaders',json={'user_id':2})
+    r=client(3).post('/api/platform/apply',json={'target_type':'gc','target_id':gid,'target_name':'Novo GC'});rid=r.json()['id']
+    assert client(2).post('/api/workspace/groups/'+gid+'/applications/'+rid+'/decision',json={'approve':True}).status_code==409
+    with s.db() as c:assert c.execute('SELECT cell_id FROM members_people WHERE id=?',(pid,)).fetchone()[0]==old
+    assert a.post('/api/members/gc-applications/'+rid+'/approve').status_code==200
+
+
+def test_gc_legacy_identity_requires_verified_email_or_manual_review(records):
+    a=client(1);gid=a.post('/api/members/cells',json={'name':'GC Legado'}).json()['id']
+    pid=a.post('/api/members/people',json={'name':'Cadastro legado','email':'user4@example.test','phone':'Dados preservados'}).json()['id']
+    r=client(4).post('/api/platform/apply',json={'target_type':'gc','target_id':gid,'target_name':'GC Legado'});rid=r.json()['id']
+    assert a.post('/api/members/gc-applications/'+rid+'/approve').status_code==409
+    with s.db() as c:c.execute('UPDATE users SET email_verified=1 WHERE id=4')
+    assert a.post('/api/members/gc-applications/'+rid+'/approve').status_code==200
+    with s.db() as c:
+        row=c.execute('SELECT * FROM members_people WHERE id=?',(pid,)).fetchone();assert row['account_user_id']==4 and row['phone']=='Dados preservados'
+
+
+def test_gc_reject_is_idempotent_and_request_id_wins_over_duplicate_names(records):
+    a=client(1);gid=a.post('/api/members/cells',json={'name':'GC Repetido'}).json()['id'];a.post('/api/members/cells',json={'name':'GC Repetido'})
+    u=client(3)
+    assert u.post('/api/platform/apply',json={'target_type':'gc','target_name':'GC Repetido'}).status_code==409
+    r=u.post('/api/platform/apply',json={'target_type':'gc','target_id':gid,'target_name':'GC Repetido'});rid=r.json()['id']
+    for _ in range(2):assert a.delete('/api/members/gc-applications/'+rid).status_code==200
+    assert a.post('/api/members/gc-applications/'+rid+'/approve').status_code==409
+    with s.db() as c:assert c.execute("SELECT count(*) FROM notifications WHERE user_id=3 AND kind='gc_application_result'").fetchone()[0]==1
+
+def test_ministry_approval_never_merges_homonyms_or_reenables_blocked_access(records):
+    a=client(1);homonym=a.post('/api/members/people',json={'name':'User 4','account_user_id':3}).json()['id']
+    grant(4,'ministries','viewer')
+    with s.db() as c:c.execute("UPDATE module_access SET enabled=0 WHERE user_id=4 AND module='ministries'")
+    r=client(4).post('/api/platform/apply',json={'target_type':'ministry','target_name':'Music'});rid=r.json()['id']
+    for _ in range(2):assert a.post('/api/ministries/applications/'+rid+'/approve').status_code==200
+    with s.db() as c:
+        p=c.execute('SELECT * FROM members_people WHERE account_user_id=4 AND active=1').fetchone();assert p and p['id']!=homonym and p['joined_on'] is None
+        assert c.execute("SELECT enabled FROM module_access WHERE user_id=4 AND module='ministries'").fetchone()[0]==0
+        assert c.execute("SELECT count(*) FROM notifications WHERE user_id=4 AND kind='ministry_approved'").fetchone()[0]==1
+    assert a.delete('/api/ministries/applications/'+rid).status_code==409
+
+
+def test_gc_same_name_groups_keep_requests_distinct(records):
+    a=client(1);one=a.post('/api/members/cells',json={'name':'Mesmo Nome'}).json()['id'];two=a.post('/api/members/cells',json={'name':'Mesmo Nome'}).json()['id'];u=client(3)
+    requests=[u.post('/api/platform/apply',json={'target_type':'gc','target_id':gid,'target_name':'Mesmo Nome'}).json()['id'] for gid in (one,two)]
+    assert requests[0]!=requests[1]
