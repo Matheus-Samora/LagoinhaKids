@@ -3737,3 +3737,22 @@ button.mini-button.success-button:hover {
 
 [hidden]{display:none!important} :focus-visible{outline:2px solid #f59e0b;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* Consistent editors across Members, Ministries and Finance. */
+.sector-section.pending-registrations{border-color:var(--line);border-left:3px solid #ad8740;background:var(--surface)}
+.pending-registrations .section-title h2{color:var(--ink)}
+.sector-modal .section-title{padding-bottom:18px;margin-bottom:23px;border-bottom:1px solid var(--line);align-items:start;gap:16px}
+.sector-modal .section-title h2{font-size:22px;letter-spacing:-.035em;line-height:1.4;margin:0}
+.sector-modal .record-form{gap:18px}
+.sector-modal .record-form label{font-size:12px;font-weight:500;line-height:1.6;color:var(--muted);gap:7px}
+.sector-modal .record-form :is(input:not([type=checkbox]):not([type=hidden]),select,textarea){border:1px solid var(--line);border-radius:10px;padding:11px 13px;min-height:46px;font-size:14px;background:var(--surface);color:var(--ink)}
+.sector-modal .record-form input[type=checkbox]{width:19px;height:19px;min-height:19px;accent-color:#9c772e}
+.sector-modal .record-form textarea{min-height:105px;line-height:1.7;resize:vertical}
+.sector-modal .record-form>button[type=submit]{margin-top:8px;min-height:46px}
+.sector-modal .record-form small{font-size:11px;line-height:1.7;color:var(--muted)}
+.sector-modal .form-grid-2{gap:18px}
+.sector-table{border:1px solid var(--line);border-radius:12px;scrollbar-width:thin}
+.sector-table th{font-size:11px;font-weight:600;letter-spacing:.02em;line-height:1.5;background:color-mix(in srgb,var(--surface) 94%,#a1a1aa)}
+.sector-table td{line-height:1.6}
+.sector-table tbody tr:last-child td{border-bottom:0}
+.account-close-icon{font-size:23px;font-weight:400;line-height:1}
+@media(max-width:600px){.sector-modal .section-title h2{font-size:20px}.sector-modal .record-form :is(input:not([type=checkbox]):not([type=hidden]),select,textarea){font-size:16px}.sector-modal .section-title{gap:10px;padding-bottom:15px}.sector-modal .record-form{gap:17px}}

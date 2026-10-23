@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='3.0.2',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='3.1.0',lifespan=lifespan)
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024
