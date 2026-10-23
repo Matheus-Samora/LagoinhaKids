@@ -44,10 +44,7 @@ def me(request:Request,user=Depends(session)):
 
 @router.get('/community')
 def community_catalog(user=Depends(session)):
-    from .modules.schema import ensure_official_gcs
     with s.db() as c:
-        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
-            ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name')]
         if not (platform_admin(c,user['id']) or is_pastor(c,user['id'])):
             for cell in cells:

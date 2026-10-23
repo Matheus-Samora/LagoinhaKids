@@ -264,7 +264,7 @@ def lessons(user=Depends(session)):
             JOIN rooms r ON r.id=l.room_id
             LEFT JOIN users u ON u.id=r.created_by
             LEFT JOIN users ut ON ut.id=coalesce(l.teacher_id, r.teacher_id, r.created_by)
-            LEFT JOIN users um ON um.id=coalesce(l.monitor_id, r.monitor_id)
+            LEFT JOIN users um ON um.id=l.monitor_id
             WHERE l.active=1 AND r.active=1 AND l.ends_at>?
             ORDER BY l.starts_at
         ''',(s.now(),)).fetchall()
@@ -282,7 +282,7 @@ def create_lesson(data:LessonIn,user=Depends(staff)):
         c.execute('BEGIN IMMEDIATE')
         target_room=c.execute('SELECT teacher_id, created_by, monitor_id FROM rooms WHERE id=?',(data.room_id,)).fetchone()
         t_id=data.teacher_id or (target_room['teacher_id'] if target_room else None) or (target_room['created_by'] if target_room else None) or user['id']
-        m_id=data.monitor_id or (target_room['monitor_id'] if target_room else None)
+        m_id=data.monitor_id if 'monitor_id' in data.model_fields_set else (target_room['monitor_id'] if target_room else None)
         ids=[]
         for week in range(data.repeat_weeks):
             occurrence=data.model_copy(update={'starts_at':data.starts_at+timedelta(weeks=week),'ends_at':data.ends_at+timedelta(weeks=week)})
@@ -309,7 +309,7 @@ def edit_lesson(lid:int,data:LessonIn,user=Depends(staff)):
             if not room['min_age']<=age_on(ch['birthday'],start)<=room['max_age']:fail('age','A nova data é incompatível com a idade de um aluno confirmado.',409)
         target_room=c.execute('SELECT teacher_id, created_by, monitor_id FROM rooms WHERE id=?',(data.room_id,)).fetchone()
         t_id=data.teacher_id or (target_room['teacher_id'] if target_room else None) or old['teacher_id'] or user['id']
-        m_id=data.monitor_id if data.monitor_id is not None else old['monitor_id']
+        m_id=data.monitor_id
         c.execute('''
             UPDATE lessons
             SET room_id=?,title=?,starts_at=?,ends_at=?,teacher_id=?,monitor_id=?,materials_url=?,notes=?

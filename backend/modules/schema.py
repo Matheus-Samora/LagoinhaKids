@@ -30,10 +30,7 @@ def ensure_official_gcs(c):
             (gc_id, gc_name.lower(), gc_name.lower().replace('gc ', ''))
         ).fetchone()
         if existing:
-            c.execute(
-                "UPDATE members_cells SET name=?, neighborhood=?, address=?, meeting_day=?, banner_url=?, active=1 WHERE id=?",
-                (gc_name, neigh, addr, m_day, banner, existing[0])
-            )
+            continue
         else:
             c.execute(
                 "INSERT INTO members_cells(id,name,leader_name,neighborhood,meeting_day,banner_url,address,active,version,created_at) VALUES(?,?,?,?,?,?,?,1,1,?)",
@@ -110,7 +107,7 @@ def migrate(c):
     c.execute("UPDATE sector_applications SET target_name='Future', target_id='Future' WHERE target_type='ministry' AND target_name='Sonoplastia'")
 
     if not c.execute("SELECT 1 FROM platform_migrations WHERE name='official_gcs_v230'").fetchone():
-        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0]==0:
+        if os.getenv('KIDS_SEED_OFFICIAL_GCS')=='1' and c.execute('SELECT count(*) FROM members_cells').fetchone()[0]==0:
             ensure_official_gcs(c)
         c.execute("INSERT INTO platform_migrations VALUES('official_gcs_v230')")
 

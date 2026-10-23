@@ -143,7 +143,10 @@ def test_finance_cost_centers_closings_settle_and_csv():
 
 def test_v230_worship_scale_candidacies_pastor_and_encryption():
     admin=client(1);member=client(3)
-    # 1. Verify official GCs are seeded with banners & Link and Future are separate
+    # 1. Explicit catalog import; reads must never seed records.
+    from backend.modules.schema import ensure_official_gcs
+    with s.db() as c:ensure_official_gcs(c)
+    # Verify banners and separate Link/Future ministries.
     comm=member.get('/api/platform/community').json()
     gc_names={g['name'] for g in comm['cells']}
     assert {'GC Ide','GC Emanuel','GC Fé','GC Betel','GC Rocket','GC Legacy','GC Propósito','GC Aviva'}.issubset(gc_names)

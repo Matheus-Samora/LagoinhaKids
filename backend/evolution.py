@@ -217,6 +217,7 @@ def add_journey(data:Journey,u=Depends(session)):
     return {'ok':True,'id':rid}
 
 class Review(BaseModel):
+    request_id:UUID|None=None
     stage:str=Field(pattern='^(triage|conversation|training|ready|withdrawn)$')
     responsible_id:int|None=None
     due_on:date|None=None
@@ -225,16 +226,30 @@ class Review(BaseModel):
 @router.post('/applications/{rid}/review')
 def review(rid:str,data:Review,u=Depends(session)):
     with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         row=c.execute('SELECT * FROM sector_applications WHERE id=?',(rid,)).fetchone()
         if not row:fail('missing','Candidatura não encontrada.',404)
-        if data.stage=='withdrawn' and row['user_id']==u['id']:
-            if row['status']!='pending':fail('state','A candidatura já foi concluída.',409)
-            c.execute("UPDATE sector_applications SET status='withdrawn' WHERE id=?",(rid,))
-        else:
-            mod='members' if row['target_type']=='gc' else 'ministries';authority(c,u,mod)
-            if mod=='ministries':check_scope(c,u,mod,{'ministry':row['target_name']})
+        withdrawing=data.stage=='withdrawn' and row['user_id']==u['id']
+        if not withdrawing:
+            mod='members' if row['target_type']=='gc' else 'ministries'
+            if mod=='members':
+                from .application_workflow import application_group
+                group_access(c,u,application_group(c,row)['id'],write=True)
+            else:
+                authority(c,u,mod);check_scope(c,u,mod,{'ministry':row['target_name']})
+            if data.stage=='withdrawn':fail('state','Somente o solicitante pode desistir. Use a decisão da candidatura.',409)
+        review_id=str(data.request_id or secrets.token_hex(16))
+        previous=c.execute('SELECT * FROM workflow_reviews WHERE id=?',(review_id,)).fetchone()
+        if previous:
+            same=(previous['application_id']==rid and previous['created_by']==u['id'] and previous['stage']==data.stage and previous['responsible_id']==data.responsible_id and previous['due_on']==(str(data.due_on) if data.due_on else None) and decrypt_text(previous['note'])==data.note)
+            if not same:fail('duplicate','Esta solicitação já foi utilizada. Reabra a tela.',409)
+            return {'ok':True}
+        if row['status']!='pending':
+            if withdrawing and row['status']=='withdrawn':return {'ok':True}
+            fail('state','A candidatura já foi concluída.',409)
+        if withdrawing:c.execute("UPDATE sector_applications SET status='withdrawn' WHERE id=?",(rid,))
         if data.responsible_id and not c.execute('SELECT 1 FROM users WHERE id=? AND active=1',(data.responsible_id,)).fetchone():fail('responsible','Conta inválida.')
-        c.execute('INSERT INTO workflow_reviews VALUES(?,?,?,?,?,?,?,?)',(secrets.token_hex(16),rid,data.stage,data.responsible_id,str(data.due_on) if data.due_on else None,encrypt_text(data.note),u['id'],s.now()))
+        c.execute('INSERT INTO workflow_reviews VALUES(?,?,?,?,?,?,?,?)',(review_id,rid,data.stage,data.responsible_id,str(data.due_on) if data.due_on else None,encrypt_text(data.note),u['id'],s.now()))
         s.audit(c,u['id'],'application_review:'+rid+':'+data.stage)
     return {'ok':True}
 
@@ -244,8 +259,12 @@ def application_history(rid:str,u=Depends(session)):
         row=c.execute('SELECT * FROM sector_applications WHERE id=?',(rid,)).fetchone()
         if not row:fail('missing','Candidatura não encontrada.',404)
         if row['user_id']!=u['id']:
-            mod='members' if row['target_type']=='gc' else 'ministries';authority(c,u,mod)
-            if mod=='ministries':check_scope(c,u,mod,{'ministry':row['target_name']})
+            mod='members' if row['target_type']=='gc' else 'ministries'
+            if mod=='members':
+                from .application_workflow import application_group
+                group_access(c,u,application_group(c,row)['id'])
+            else:
+                authority(c,u,mod);check_scope(c,u,mod,{'ministry':row['target_name']})
         return [{'stage':r['stage'],'due_on':r['due_on'],'created_at':r['created_at']} for r in c.execute('SELECT * FROM workflow_reviews WHERE application_id=? ORDER BY created_at',(rid,))]
 
 @router.post('/announcements/{rid}/acknowledge')

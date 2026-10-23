@@ -147,17 +147,21 @@ def persist_schedule(data:Schedule,user,rid=None,connection=None):
         check_ministry_scope(c,user,data.ministry)
         if rid:check_ministry_scope(c,user,current(c,'ministries_schedules',rid)['ministry'])
         current(c,'members_people',data.person_id)
+        from datetime import datetime
+        from ...evolution import date_time
+        start=datetime.combine(data.service_date,time.fromisoformat(data.service_time))
+        if data.response_due_at and date_time(data.response_due_at).replace(tzinfo=None)>start:fail('deadline','O prazo de resposta deve anteceder a escala.')
         if data.status!='declined':
-            from datetime import datetime,timedelta
-            from ...evolution import date_time
-            start=datetime.combine(data.service_date,time.fromisoformat(data.service_time))
             validate_time_slot(c,data.person_id,data.service_date,data.service_time,data.duration_minutes,rid or str(data.request_id or ''))
-            if data.response_due_at and date_time(data.response_due_at).replace(tzinfo=None)>start:fail('deadline','O prazo de resposta deve anteceder a escala.')
         vals={
             'title':data.title.strip(),'ministry':data.ministry,'person_id':data.person_id,
             'role_notes':data.role_notes.strip(),'service_date':str(data.service_date),
             'service_time':data.service_time.strip() or '18:00','status':data.status,'duration_minutes':data.duration_minutes,'response_due_at':data.response_due_at,'reminder_enabled':int(data.reminder_enabled)
         }
+        if rid:
+            old=current(c,'ministries_schedules',rid)
+            if any(old[k]!=vals[k] for k in ('person_id','service_date','service_time','response_due_at','reminder_enabled')):
+                vals['reminder_sent']=0
         retried=not rid and data.request_id and c.execute('SELECT 1 FROM ministries_schedules WHERE id=?',(str(data.request_id),)).fetchone()
         res=save(c,'ministries_schedules','ministries',data,vals,user,rid)
         if retried:return res

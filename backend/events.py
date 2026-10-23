@@ -196,6 +196,8 @@ def update_event(event_id: int, data: EventCreate, user=Depends(staff)):
 
         booked=c.execute('SELECT count(*) FROM event_registrations WHERE event_id=?',(event_id,)).fetchone()[0]
         if data.max_capacity<booked:fail('capacity','A capacidade não pode ser menor que as inscrições existentes.',409)
+        for child in c.execute('SELECT ch.birthday FROM event_registrations er JOIN children ch ON ch.id=er.child_id WHERE er.event_id=?',(event_id,)):
+            if not data.min_age<=age_on(child['birthday'],data.starts_at)<=data.max_age:fail('age','A alteração exclui a faixa etária de uma criança já inscrita. Revise as inscrições primeiro.',409)
         c.execute('''
             UPDATE events SET
                 title = ?, description = ?, category = ?, target_audience = ?,
@@ -219,6 +221,8 @@ def delete_event(event_id: int, user=Depends(staff)):
         ev = c.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
         if not ev:
             fail('event_not_found', 'Evento não encontrado.', 404)
+        from .record_policy import global_manager
+        if not global_manager(c,user) and ev['created_by']!=user['id']:fail('owner','Somente TI e pastores podem excluir eventos de outras pessoas.',403)
         c.execute('UPDATE events SET active = 0 WHERE id = ?', (event_id,))
         s.audit(c, user['id'], 'delete_event')
         return {'ok': True}

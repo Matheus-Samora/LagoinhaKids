@@ -68,13 +68,10 @@ def _decrypt_person(d:dict)->dict:
 
 @router.get('')
 def listing(q:str=Query(default='',max_length=100),page:int=Query(default=1,ge=1),limit:int=Query(default=50,ge=1,le=200),user=Depends(module_access('members'))):
-    from ..schema import ensure_official_gcs
     with s.db() as c:
         from ...record_policy import manager,personal_records
         from ...record_policy import allowed
         if not allowed(c,user,'members') and not manager(c,user,'members'):return personal_records(c,user,'members')
-        if c.execute('SELECT count(*) FROM members_cells').fetchone()[0] == 0:
-            ensure_official_gcs(c)
         cells=[dict(r) for r in c.execute('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')]
         families=[dict(r) for r in c.execute("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE f.id=p.family_id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")]
         people=[_decrypt_person(dict(r)) for r in c.execute("SELECT p.*,coalesce(f.name,'Sem família vinculada') family_name,coalesce(mc.name,'') cell_name FROM members_people p LEFT JOIN members_families f ON f.id=p.family_id LEFT JOIN members_cells mc ON mc.id=p.cell_id WHERE p.active=1 AND lower(p.name) LIKE ? ORDER BY p.name,p.id LIMIT ? OFFSET ?",('%'+q.lower()+'%',limit+1,(page-1)*limit))]
@@ -212,23 +209,26 @@ def approve_self_registration(rid:str,user=Depends(write)):
         c.execute('BEGIN IMMEDIATE')
         reg=c.execute("SELECT * FROM members_self_registrations WHERE id=? AND status='pending'",(rid,)).fetchone()
         if not reg:fail('missing','Solicitação pendente não encontrada.',404)
-        if reg['owner_id'] is not None and c.execute('SELECT 1 FROM members_people WHERE account_user_id=? AND active=1',(reg['owner_id'],)).fetchone():fail('duplicate','Esta conta já possui um cadastro pessoal aprovado.',409)
-        fam_id=None
+        linked=c.execute('SELECT * FROM members_people WHERE account_user_id=? AND active=1',(reg['owner_id'],)).fetchall() if reg['owner_id'] is not None else []
+        if len(linked)>1:fail('identity','Há cadastros duplicados desta conta. Solicite revisão à TI.',409)
+        old=dict(linked[0]) if linked else None
+        fam_id=old['family_id'] if old else None
         fam_name=(reg['family_name'] or '').strip()
-        if fam_name:
-            existing=c.execute('SELECT id FROM members_families WHERE lower(name)=? AND active=1',(fam_name.lower(),)).fetchone()
-            if existing:fam_id=existing['id']
-            else:
-                fam_res=save(c,'members_families','members',Family(name=fam_name,joined_on=date.today()),{'name':fam_name,'joined_on':s.today(),'cell_id':None,'neighborhood':''},user)
-                fam_id=fam_res['id']
+        # A surname is not proof of family identity. Preserve explicit links.
+        if fam_name and not fam_id:
+            fam_id=save(c,'members_families','members',Family(name=fam_name),{'name':fam_name,'joined_on':None,'cell_id':None,'neighborhood':''},user)['id']
         person_vals={
-            'name':reg['name'],'joined_on':s.today(),'family_id':fam_id,'cell_id':None,
+            'name':reg['name'],'joined_on':None,'family_id':fam_id,'cell_id':None,
             'relationship':'Titular','birthday':reg['birthday'],'phone':reg['phone'] or '',
             'email':reg['email'] or '','integration_stage':reg['integration_stage'] or 'visitor',
             'baptism_date':None,'origin_church':'','marital_status':reg['marital_status'] or '',
-            'profession':reg['profession'] or '','address':decrypt_text(reg['address'] or ''),'pastoral_notes':encrypt_text('Auto-cadastro aprovado')
+            'profession':reg['profession'] or '','address':reg['address'] or '',
+            'pastoral_notes':encrypt_text('Auto-cadastro aprovado')
         }
-        p_res=save(c,'members_people','members',Person(name=reg['name']),person_vals,user)
+        if old:
+            # Complete the explicit account record without erasing ministry/GC history.
+            person_vals={k:(old[k] if k not in ('name','family_id') and old.get(k) not in (None,'') else v) for k,v in person_vals.items()}
+        p_res=save(c,'members_people','members',Person(name=reg['name'],version=old['version'] if old else None),person_vals,user,old['id'] if old else None)
         if reg['owner_id'] is not None:
             c.execute('UPDATE members_people SET created_by=?,account_user_id=? WHERE id=?',(reg['owner_id'],reg['owner_id'],p_res['id']))
         c.execute("UPDATE members_self_registrations SET status='approved',person_id=? WHERE id=?",(p_res['id'],rid))
@@ -239,6 +239,10 @@ def approve_self_registration(rid:str,user=Depends(write)):
 def reject_self_registration(rid:str,user=Depends(write)):
     with s.db() as c:
         c.execute('BEGIN IMMEDIATE')
+        row=c.execute('SELECT status FROM members_self_registrations WHERE id=?',(rid,)).fetchone()
+        if not row:fail('missing','Solicitação não encontrada.',404)
+        if row['status']=='rejected':return {'ok':True}
+        if row['status']!='pending':fail('state','A solicitação já foi concluída.',409)
         c.execute("UPDATE members_self_registrations SET status='rejected' WHERE id=?",(rid,))
         s.audit(c,user['id'],'members:self_reg_rejected:'+rid)
         return {'ok':True}

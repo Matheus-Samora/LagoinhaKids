@@ -165,7 +165,7 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   const teachers=allStaff.filter(u=>u.staff_role!=='monitor');
   const monitors=allStaff.filter(u=>u.staff_role==='monitor'||u.staff_role==='teacher'||u.role==='teacher');
   const selectedTeacher=lesson?.teacher_id || targetRoom?.teacher_id || targetRoom?.created_by || S.user.id;
-  const selectedMonitor=lesson?.monitor_id || targetRoom?.monitor_id || '';
+  const selectedMonitor=lesson ? (lesson.monitor_id || '') : (targetRoom?.monitor_id || '');
   const materialsUrl=lesson?.materials_url || '';
   const notesText=lesson?.notes || '';
 
