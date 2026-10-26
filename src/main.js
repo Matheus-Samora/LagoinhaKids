@@ -1355,7 +1355,7 @@ document.addEventListener('submit',async e=>{
    showModal('Check-in de Visitante Concluído! 🎉','Etiqueta de Segurança emitida',`<div class="pickup-receipt"><span>Código de Retirada do Visitante</span><strong>${escape(g.claim_code)}</strong><small>Entregue este código ao responsável ${escape(g.guardian_name)}.</small></div><button type="button" class="btn primary full" data-action="close" style="margin-top:14px;">Concluir</button>`);
    return;
   }
-  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token=NATIVE?(result.access_token||''):'';saveAccount(result.user);navHistory.length=0;S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await welcome();await load();realtime.connect(S.csrf,S.apiOrigin,S.token);const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
+  if(kind==='login'||kind==='register'){if(NATIVE&&!S.apiOrigin)throw new Error('Configure o servidor HTTPS do aplicativo.');const result=await api('/auth/'+kind,{method:'POST',body:{...values,terms_accepted:values.terms_accepted==='on',terms_version:'2026.1'}});S.user=result.user;S.csrf=result.csrf;S.token=NATIVE?(result.access_token||''):'';saveAccount(result.user);navHistory.length=0;S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await welcome();await load();const invite=new URL(location.href).searchParams.get('invite');if(invite)showModal('Convite de responsável','Aceite apenas se você conhece a família.',`<form data-form="accept-invite"><input type="hidden" name="token" value="${escape(invite)}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Aceitar convite</button></form>`);return;}
   if(kind==='password'){if(values.password!==values.confirm)throw new Error('As novas senhas não conferem.');await api('/auth/password',{method:'POST',body:{current:values.current,password:values.password}});form.reset();toast('Sua senha foi atualizada.');return;}
   if(kind==='guardian')await api(`/children/${cid}/guardian`,{method:'POST',body:{parent_id:Number(values.parent_id)}});
   if(kind==='attendance'){
@@ -1400,7 +1400,7 @@ async function start(){
  void initNativeNotifications();
  if(NATIVE&&!S.apiOrigin){renderLogin();return;}
  try{const health=await api('/health');S.google=health.google_enabled;}catch{renderLogin();toast('Não foi possível conectar. Verifique sua internet e tente entrar novamente.',true);return;}
- try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();checkAutoPromptPush();realtime.connect(S.csrf,S.apiOrigin,S.token);}catch{renderLogin();}
+ try{const data=await api('/me');S.user=data.user;S.csrf=data.csrf;saveAccount(data.user);S.page=navItems().some(([p])=>p===location.hash.slice(1))?location.hash.slice(1):(S.user.role==='teacher'?'rooms':'overview');await load();checkAutoPromptPush();}catch{renderLogin();}
  const params=new URL(location.href).searchParams;const resetTok=params.get('reset')||new URLSearchParams(location.hash.slice(1)).get('reset');if(resetTok){history.replaceState({},'',location.pathname);resetModal(resetTok);}
  if(params.get('verify'))showModal('Confirmar e-mail','Confirme o endereço associado à sua conta.',`<form data-form="verify-email"><input type="hidden" name="token" value="${escape(params.get('verify'))}"/><p class="form-error" role="alert"></p><button class="btn primary full" type="submit">Confirmar e-mail</button></form>`);
  const err=params.get('auth_error');if(err){toast({link_required:'Entre com sua senha e vincule sua conta Google em Minha conta.',google_email:'Use a conta Google com o mesmo e-mail do cadastro.',google_cancelled:'A entrada com Google foi cancelada.'}[err]||'Não foi possível validar a entrada Google.',true);history.replaceState({},'',location.pathname);}
@@ -1479,12 +1479,16 @@ window.addEventListener('lagoinha:realtime:kids:attendance', () => void syncLive
 window.addEventListener('lagoinha:realtime:kids:paging', () => void syncLive());
 window.addEventListener('lagoinha:realtime:notification:new', () => void syncLive());
 
-// Gentle 60s background safety heartbeat (reduced from aggressive 5s polling)
-setInterval(()=>void syncLive(),60000);
-setInterval(()=>void checkLiveUpdate(),60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){void syncLive();void checkLiveUpdate();}});
-window.addEventListener('focus',()=>{void syncLive();void checkLiveUpdate();});
-window.addEventListener('online',()=>{void syncLive();void checkLiveUpdate();});
+// On-demand focus sync with 5-minute cooldown to allow Cloud Run scale-to-zero
+let lastFocusSync=Date.now();
+function syncOnDemand(){
+ if(document.hidden||Date.now()-lastFocusSync<300000)return;
+ lastFocusSync=Date.now();
+ void syncLive();
+ void checkLiveUpdate();
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncOnDemand();});
+window.addEventListener('online',()=>syncOnDemand());
 
 welcome().then(start);
 

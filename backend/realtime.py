@@ -115,9 +115,10 @@ class RealtimeBroker:
         else:
             self.dispatch_local(event)
 
-        # 2. Cross-instance broadcast via PostgreSQL NOTIFY if connected
+        # 2. Cross-instance broadcast via PostgreSQL NOTIFY if connected (disabled in low-cost single-instance mode)
         db_url = os.getenv('KIDS_DATABASE_URL')
-        if db_url:
+        low_cost = os.getenv('KIDS_LOW_COST_MODE') == '1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE') != '0')
+        if db_url and not low_cost:
             self._broadcast_postgres(event)
 
     def _broadcast_postgres(self, event: dict):
@@ -134,7 +135,8 @@ class RealtimeBroker:
 
     def start_postgres_listener(self):
         """Start listening for cross-instance broadcasts from Cloud SQL PostgreSQL."""
-        if not os.getenv('KIDS_DATABASE_URL'):
+        low_cost = os.getenv('KIDS_LOW_COST_MODE') == '1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE') != '0')
+        if not os.getenv('KIDS_DATABASE_URL') or low_cost:
             return
         if self._listener_thread and self._listener_thread.is_alive():
             return
@@ -241,7 +243,8 @@ async def realtime_stream(request: Request, once: bool = False, user=Depends(ses
     async def event_generator():
         try:
             yield f"event: connected\ndata: {json.dumps(initial_state)}\n\n"
-            if once:
+            low_cost = os.getenv('KIDS_LOW_COST_MODE') == '1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE') != '0')
+            if once or low_cost:
                 return
             while True:
                 if await request.is_disconnected():

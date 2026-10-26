@@ -27,7 +27,11 @@ def main():
             c.execute('INSERT INTO platform_admins VALUES(?)',(uid,))
             from .platform_access import kids_grant
             kids_grant(c,uid,'admin')
-    processes=[subprocess.Popen([sys.executable,'-m','uvicorn','backend.app:app','--host','0.0.0.0','--port',os.getenv('PORT','8770'),'--proxy-headers']),subprocess.Popen([sys.executable,'-m','backend.push_worker'])]
+    low_cost=os.getenv('KIDS_LOW_COST_MODE')=='1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE')!='0')
+    uvicorn_cmd=[sys.executable,'-m','uvicorn','backend.app:app','--host','0.0.0.0','--port',os.getenv('PORT','8770'),'--proxy-headers','--no-access-log','--timeout-keep-alive','5']
+    processes=[subprocess.Popen(uvicorn_cmd)]
+    if not low_cost:
+        processes.append(subprocess.Popen([sys.executable,'-m','backend.push_worker']))
     stopping=False
     def stop(*_):
         nonlocal stopping
@@ -37,7 +41,7 @@ def main():
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     failed=False
     try:
-        while not stopping and all(p.poll() is None for p in processes):time.sleep(1)
+        while not stopping and all(p.poll() is None for p in processes):time.sleep(5 if low_cost else 1)
         failed=not stopping
     finally:
         stop()

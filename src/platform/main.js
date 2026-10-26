@@ -176,7 +176,6 @@ function login(message='',prefillEmail=''){
    sessionStorage.removeItem('lagoinha_login_redirected');
    await welcome(currentAreaKey());
    await load(true);
-   realtime.connect(csrf,'');
   }catch(error){
    if(error.code==='mfa'){const field=form.querySelector('#platform-otp');if(field){field.hidden=false;field.querySelector('input').focus();}}
    errEl.textContent=error.message;
@@ -944,7 +943,7 @@ function auditSection(){
 await welcome(currentAreaKey());
 const resetToken=new URLSearchParams(location.search).get('reset')||new URLSearchParams(location.hash.slice(1)).get('reset');
 if(resetToken){history.replaceState(null,'',location.pathname);recoveryScreen({root,api,e,login,token:resetToken});}
-else {try{const me=await api('/me');csrf=me.csrf;await load();realtime.connect(csrf,'');}catch{login();}}
+else {try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}}
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
@@ -961,8 +960,8 @@ async function refreshNoticeBadge(){
   updateTopBadge(next.unread_count);
  }catch{}
 }
-setInterval(()=>void refreshNoticeBadge(),60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshNoticeBadge();});
+let lastBadgeSync=Date.now();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastBadgeSync>=300000){lastBadgeSync=Date.now();void refreshNoticeBadge();}});
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',event=>{
  if(event.data?.type==='NEW_NOTICE'){void refreshNoticeBadge();noticeCenter.notify();}
 });
@@ -997,6 +996,5 @@ const communityRefresh=deferredRefresh({
 });
 realtime.on('ministries:my_schedule',()=>void communityRefresh.request());
 realtime.on('announcement:new',()=>void communityRefresh.request());
-setInterval(()=>void communityRefresh.flush(),5000);
 
 window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});

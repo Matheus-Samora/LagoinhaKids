@@ -55,7 +55,16 @@ _pool=None
 def db():
     global _pool
     if _pool is None:
-        _pool=ConnectionPool(os.environ['KIDS_DATABASE_URL'],min_size=1,max_size=int(os.getenv('KIDS_DB_POOL_SIZE','5')),timeout=15,kwargs={'row_factory':dict_row,'connect_timeout':15})
+        low_cost=os.getenv('KIDS_LOW_COST_MODE')=='1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE')!='0')
+        _pool=ConnectionPool(
+            os.environ['KIDS_DATABASE_URL'],
+            min_size=0 if low_cost else 1,
+            max_size=int(os.getenv('KIDS_DB_POOL_SIZE','2' if low_cost else '5')),
+            max_idle=30 if low_cost else 300,
+            timeout=15,
+            check=ConnectionPool.check_connection if low_cost else None,
+            kwargs={'row_factory':dict_row,'connect_timeout':15}
+        )
     with _pool.connection() as connection:yield Connection(connection)
 
 def init():

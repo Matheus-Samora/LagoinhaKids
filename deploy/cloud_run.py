@@ -70,8 +70,20 @@ def main():
         gcloud('artifacts','repositories','create',REPOSITORY,'--location='+REGION,'--repository-format=docker')
     if gcloud('sql','instances','describe',INSTANCE,check=False).returncode:
         info('Creating dedicated PostgreSQL instance. This creates ongoing database charges.')
-        gcloud('sql','instances','create',INSTANCE,'--database-version=POSTGRES_16','--edition=ENTERPRISE','--tier=db-f1-micro','--region='+REGION,'--storage-size=10','--backup-start-time=03:00','--availability-type=ZONAL','--deletion-protection')
+        gcloud('sql','instances','create',INSTANCE,'--database-version=POSTGRES_16','--edition=ENTERPRISE','--tier=db-f1-micro','--region='+REGION,'--storage-size=10','--no-storage-auto-increase','--backup-start-time=03:00','--retained-backups-count=7','--no-enable-point-in-time-recovery','--availability-type=ZONAL','--deletion-protection')
     instance=json.loads(gcloud('sql','instances','describe',INSTANCE,'--format=json').stdout)
+    sql_ops=json.loads(gcloud('sql','operations','list','--instance='+INSTANCE,'--filter=status:RUNNING OR status:PENDING','--format=json').stdout)
+    for op in sql_ops:
+        info('Waiting for active Cloud SQL operation '+op['name']+'...')
+        gcloud('sql','operations','wait',op['name'],'--timeout=unlimited')
+    instance=json.loads(gcloud('sql','instances','describe',INSTANCE,'--format=json').stdout)
+    sql_settings=instance.get('settings',{})
+    if sql_settings.get('tier')!='db-f1-micro' or sql_settings.get('availabilityType')!='ZONAL' or sql_settings.get('backupConfiguration',{}).get('pointInTimeRecoveryEnabled'):
+        info('Optimizing Cloud SQL instance to minimal cost tier (db-f1-micro, ZONAL, no PITR)...')
+        gcloud('sql','instances','patch',INSTANCE,'--tier=db-f1-micro','--availability-type=ZONAL','--no-enable-point-in-time-recovery','--retained-backups-count=7','--no-storage-auto-increase','--async')
+        sql_ops=json.loads(gcloud('sql','operations','list','--instance='+INSTANCE,'--filter=status:RUNNING OR status:PENDING','--format=json').stdout)
+        for op in sql_ops:gcloud('sql','operations','wait',op['name'],'--timeout=unlimited')
+        instance=json.loads(gcloud('sql','instances','describe',INSTANCE,'--format=json').stdout)
     connection=instance['connectionName']
     password_file=STATE/'database-password.txt'
     if not password_file.exists():password_file.write_text(secrets.token_urlsafe(32))
@@ -110,11 +122,13 @@ def main():
     url=f'https://{SERVICE}-{NUMBER}.{REGION}.run.app'
     gcloud('run','deploy',SERVICE,'--image='+image,'--region='+REGION,'--service-account='+SA,'--add-cloudsql-instances='+connection,
         '--set-secrets=KIDS_DATABASE_URL=kids-database-url:latest,KIDS_MASTER_KEY=kids-master-key:latest,KIDS_WEB_PUSH_PRIVATE_KEY=kids-vapid-key:latest,KIDS_BOOTSTRAP_PASSWORD=kids-bootstrap-password:latest,SMTP_PASSWORD=lagoinha-systems-smtp-password:latest',
-        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_USER=be996a001@smtp-brevo.com,SMTP_FROM=imm.tecnologia1@gmail.com',
-        '--min-instances=1','--max-instances=2','--concurrency=40','--memory=1Gi','--cpu=1','--timeout=60','--no-cpu-throttling','--execution-environment=gen2','--allow-unauthenticated')
+        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_LOW_COST_MODE=1,KIDS_DB_POOL_SIZE=2,KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_USER=be996a001@smtp-brevo.com,SMTP_FROM=imm.tecnologia1@gmail.com',
+        '--min-instances=0','--max-instances=1','--concurrency=80','--memory=512Mi','--cpu=1','--timeout=25','--cpu-throttling','--no-cpu-boost','--execution-environment=gen2','--allow-unauthenticated')
     service=json.loads(gcloud('run','services','describe',SERVICE,'--region='+REGION,'--format=json').stdout)
     actual=service['status']['url']
     if actual!=url:gcloud('run','services','update',SERVICE,'--region='+REGION,'--update-env-vars=KIDS_PUBLIC_URL='+actual)
+    for img in json.loads(gcloud('artifacts','docker','images','list',f'{REGION}-docker.pkg.dev/{PROJECT}/{REPOSITORY}/app','--include-tags','--format=json').stdout):
+        if '1.4.0' not in (img.get('tags') or []):gcloud('artifacts','docker','images','delete',f"{img['package']}@{img['version']}",'--delete-tags',check=False)
     response=httpx.get(actual+'/api/health',timeout=30);response.raise_for_status()
     (STATE/'deployment-result.json').write_text(json.dumps({'url':actual,'project':PROJECT,'region':REGION,'version':'1.4.0'},indent=2))
     info('DEPLOYED: '+actual);return 0

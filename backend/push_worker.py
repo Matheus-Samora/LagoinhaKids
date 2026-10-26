@@ -108,9 +108,10 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--once',action='store_true');args=parser.parse_args()
     last_operations=0
     while True:
-        include_operations=time.time()-last_operations>=30
+        include_operations=time.time()-last_operations>=300
         result=run_cycle(include_operations)
         if include_operations:last_operations=time.time()
-        print(json.dumps(result))
+        if args.once or result.get('sent',0)>0:
+            print(json.dumps(result))
         if args.once:break
-        time.sleep(15 if result.get('retry') else 3)
+        time.sleep(60 if result.get('retry') else 30)

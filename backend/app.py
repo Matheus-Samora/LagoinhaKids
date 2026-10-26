@@ -18,8 +18,10 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from .realtime import broker as realtime_broker
-    realtime_broker.start_postgres_listener()
+    low_cost = os.getenv('KIDS_LOW_COST_MODE') == '1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE') != '0')
+    if not low_cost:
+        from .realtime import broker as realtime_broker
+        realtime_broker.start_postgres_listener()
     yield
 
 app=FastAPI(title='Lagoinha Systems',version='3.2.0',lifespan=lifespan)
