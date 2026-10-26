@@ -122,8 +122,8 @@ def main():
     url=f'https://{SERVICE}-{NUMBER}.{REGION}.run.app'
     gcloud('run','deploy',SERVICE,'--image='+image,'--region='+REGION,'--service-account='+SA,'--add-cloudsql-instances='+connection,
         '--set-secrets=KIDS_DATABASE_URL=kids-database-url:latest,KIDS_MASTER_KEY=kids-master-key:latest,KIDS_WEB_PUSH_PRIVATE_KEY=kids-vapid-key:latest,KIDS_BOOTSTRAP_PASSWORD=kids-bootstrap-password:latest,SMTP_PASSWORD=lagoinha-systems-smtp-password:latest',
-        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_LOW_COST_MODE=1,KIDS_DB_POOL_SIZE=2,KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_USER=be996a001@smtp-brevo.com,SMTP_FROM=imm.tecnologia1@gmail.com',
-        '--min-instances=0','--max-instances=1','--concurrency=80','--memory=512Mi','--cpu=1','--timeout=25','--cpu-throttling','--no-cpu-boost','--execution-environment=gen2','--allow-unauthenticated')
+        '--set-env-vars=KIDS_PUBLIC_URL='+url+',KIDS_LOW_COST_MODE=1,KIDS_DB_POOL_SIZE=10,KIDS_BOOTSTRAP_EMAIL=imm.tecnologia1@gmail.com,KIDS_DATA_DIR=/tmp/kids,KIDS_WEB_PUSH_CONTACT=mailto:imm.tecnologia1@gmail.com,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_USER=be996a001@smtp-brevo.com,SMTP_FROM=imm.tecnologia1@gmail.com',
+        '--min-instances=0','--max-instances=1','--concurrency=80','--memory=512Mi','--cpu=1','--timeout=60','--cpu-throttling','--cpu-boost','--execution-environment=gen2','--allow-unauthenticated')
     service=json.loads(gcloud('run','services','describe',SERVICE,'--region='+REGION,'--format=json').stdout)
     actual=service['status']['url']
     if actual!=url:gcloud('run','services','update',SERVICE,'--region='+REGION,'--update-env-vars=KIDS_PUBLIC_URL='+actual)

@@ -2,6 +2,7 @@
 import os,re,sqlite3
 from pathlib import Path
 from contextlib import contextmanager
+from contextvars import ContextVar
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -51,21 +52,29 @@ class Connection:
     def rollback(self):self.connection.rollback()
 
 _pool=None
+_active_conn=ContextVar('_active_conn',default=None)
 @contextmanager
 def db():
+    existing=_active_conn.get()
+    if existing is not None:
+        yield existing
+        return
     global _pool
     if _pool is None:
         low_cost=os.getenv('KIDS_LOW_COST_MODE')=='1' or (bool(os.getenv('K_SERVICE')) and os.getenv('KIDS_LOW_COST_MODE')!='0')
         _pool=ConnectionPool(
             os.environ['KIDS_DATABASE_URL'],
             min_size=0 if low_cost else 1,
-            max_size=int(os.getenv('KIDS_DB_POOL_SIZE','2' if low_cost else '5')),
-            max_idle=30 if low_cost else 300,
-            timeout=15,
-            check=ConnectionPool.check_connection if low_cost else None,
+            max_size=int(os.getenv('KIDS_DB_POOL_SIZE','10' if low_cost else '8')),
+            max_idle=45 if low_cost else 300,
+            timeout=20,
             kwargs={'row_factory':dict_row,'connect_timeout':15}
         )
-    with _pool.connection() as connection:yield Connection(connection)
+    with _pool.connection() as connection:
+        wrapped=Connection(connection)
+        token=_active_conn.set(wrapped)
+        try:yield wrapped
+        finally:_active_conn.reset(token)
 
 def init():
     with psycopg.connect(os.environ['KIDS_DATABASE_URL']) as connection:

@@ -46,17 +46,21 @@ NATIVE_ORIGINS={'https://localhost','capacitor://localhost'}
 
 def fail(code,message,status=400): raise HTTPException(status,detail={'code':code,'message':message})
 def google_ready(): return bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))
-def public_user(row,connection=None):
+def public_user(row,connection=None,admins=None,pastors=None):
     keys = row.keys() if hasattr(row, 'keys') else []
     staff_r = row['staff_role'] if 'staff_role' in keys else ''
     if not staff_r and row['role'] == 'teacher':
         staff_r = 'teacher'
     elif not staff_r and row['role'] == 'admin':
         staff_r = 'admin'
-    from .platform_access import platform_admin,is_pastor
-    with (nullcontext(connection) if connection is not None else s.db()) as c:
-        central=platform_admin(c,row['id'])
-        pastor=is_pastor(c,row['id'])
+    if admins is not None and pastors is not None:
+        central = row['id'] in admins
+        pastor = row['id'] in pastors or (staff_r or '').strip().lower() in ('pastor','pastora')
+    else:
+        from .platform_access import platform_admin,is_pastor
+        with (nullcontext(connection) if connection is not None else s.db()) as c:
+            central=platform_admin(c,row['id'])
+            pastor=is_pastor(c,row['id'])
     if pastor and not staff_r:
         staff_r = 'pastor'
     return {k:row[k] for k in ('id','name','email','role','active')} | {
@@ -142,20 +146,17 @@ def session(request:Request):
             if row:
                 bearer_authenticated=is_bearer
                 break
-    if not row:fail('login','Entre para continuar.',401)
-    if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer_authenticated and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
-    from .platform_access import allowed,host_module
-    shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime','/api/workspace/')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
-    if not shared:
-        requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
-        requested=requested if requested in PLATFORM_MODULES else 'kids'
-        with s.db() as c:
+        if not row:fail('login','Entre para continuar.',401)
+        if request.method in MUTATE and request.url.path not in CSRF_EXEMPT_PATHS and not bearer_authenticated and not hmac.compare_digest(request.headers.get('x-csrf-token',''),row['csrf']): fail('csrf','Sessão inválida. Atualize a página.',403)
+        from .platform_access import allowed,host_module,platform_admin,is_pastor
+        shared=request.url.path.startswith(('/api/auth/','/api/platform/','/api/terms/','/api/web-push/','/api/realtime','/api/workspace/')) or request.url.path in ('/api/me','/api/avatar/upload','/api/notification-center','/api/ministries/my-schedules') or request.url.path.startswith(('/api/me/','/api/media/','/api/notification-center/')) or (request.url.path.startswith('/api/ministries/schedules/') and request.url.path.endswith('/respond'))
+        if not shared:
+            requested=request.url.path.split('/')[2] if len(request.url.path.split('/'))>2 else 'kids'
+            requested=requested if requested in PLATFORM_MODULES else 'kids'
             if not allowed(c,dict(row),requested):fail('module_access',f'Seu acesso ao setor {requested} não foi autorizado.',403)
-        selected=host_module(request.url.hostname or '')
-        if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
-    result=dict(row)
-    from .platform_access import platform_admin,is_pastor
-    with s.db() as c:
+            selected=host_module(request.url.hostname or '')
+            if selected and selected not in ('systems',requested):fail('module_host','Acesse esta função pelo Lagoinha Kids.',403)
+        result=dict(row)
         result['privacy_admin']=bool(platform_admin(c,result['id']) or is_pastor(c,result['id']))
         if result['privacy_admin']:result['role']='admin'
     request.state.privacy_user=result
@@ -501,9 +502,19 @@ def read_notification(nid:int,user=Depends(session)):
         publish('notification:count', {'unread_count':count}, user_id=user['id'])
     return {'ok':True}
 
+def _role_sets(c):
+    admins={r[0] for r in c.execute('SELECT user_id FROM platform_admins')}
+    pastors={r[0] for r in c.execute("SELECT user_id FROM pastoral_users UNION SELECT user_id FROM module_access WHERE role='pastor' AND enabled=1")}
+    return admins,pastors
+
 @app.get('/api/users')
 def users(user=Depends(identity_admin)):
-    with s.db() as c: return [public_user(r)|{'rooms':[x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=?',(r['id'],))]} for r in c.execute('SELECT * FROM users ORDER BY name')]
+    with s.db() as c:
+        admins,pastors=_role_sets(c)
+        tr={}
+        for uid,rid in c.execute('SELECT user_id,room_id FROM teacher_rooms'):
+            tr.setdefault(uid,[]).append(rid)
+        return [public_user(r,connection=c,admins=admins,pastors=pastors)|{'rooms':tr.get(r['id'],[])} for r in c.execute('SELECT * FROM users ORDER BY name')]
 class UserIn(Register):
     role:str='parent'
     staff_role:str=''
@@ -572,6 +583,7 @@ def update_user(uid:int,data:UserUpdate,user=Depends(identity_admin)):
 @app.get('/api/team')
 def get_team(user=Depends(staff)):
     with s.db() as c:
+        admins,pastors=_role_sets(c)
         staff_rows = c.execute('''
             SELECT u.*
             FROM users u
@@ -583,18 +595,17 @@ def get_team(user=Depends(staff)):
             rooms = [x[0] for x in c.execute('SELECT room_id FROM teacher_rooms WHERE user_id=? UNION SELECT id FROM rooms WHERE active=1 AND (teacher_id=? OR monitor_id=? OR created_by=?) UNION SELECT room_id FROM lessons WHERE active=1 AND ends_at>? AND (teacher_id=? OR monitor_id=?)',(r['id'],r['id'],r['id'],r['id'],s.now(),r['id'],r['id']))]
             if user['role']!='admin' and r['id']!=user['id'] and not any(room_allowed(c,user,rid) for rid in rooms):
                 continue
-            visible=public_user(r)
+            visible=public_user(r,connection=c,admins=admins,pastors=pastors)
             if not user.get('privacy_admin'):
                 visible={k:visible[k] for k in ('id','name','role','active','staff_role')}
                 if r['id']==user['id']:visible['avatar_url']=r['avatar_url']
                 rooms=[rid for rid in rooms if room_allowed(c,user,rid)]
             members.append(visible | {'rooms': rooms})
-        from .platform_access import platform_admin
-        central=platform_admin(c,user['id'])
-        candidates = [public_user(r) for r in c.execute('''
+        central=user['id'] in admins
+        candidates = [public_user(r,connection=c,admins=admins,pastors=pastors) for r in c.execute('''
             SELECT * FROM users WHERE role='parent' AND active=1 ORDER BY name
-        ''').fetchall()]
-        return {'members': members, 'candidates': candidates if central else []}
+        ''').fetchall()] if central else []
+        return {'members': members, 'candidates': candidates}
 
 class TeamMemberIn(BaseModel):
     name: str = Field(min_length=2, max_length=100)

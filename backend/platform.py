@@ -27,7 +27,7 @@ def me(request:Request,user=Depends(session)):
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
         return {
             'active_module':host_module(request.url.hostname or ''),
-            'user':public_user(user),
+            'user':public_user(user,connection=c,admins={user['id']} if root else set(),pastors={user['id']} if pastor else set()),
             'platform_admin':root,
             'pastor':pastor,
             'gc_leader':bool(c.execute('SELECT 1 FROM gc_leaders WHERE user_id=?',(user['id'],)).fetchone()),
@@ -36,7 +36,7 @@ def me(request:Request,user=Depends(session)):
             'notification_unread_count':c.execute('SELECT count(*) n FROM notifications WHERE user_id=? AND read_at IS NULL',(user['id'],)).fetchone()['n'],
             'modules':[{
                 'id':key,'name':name,'url':module_url(key),
-                'enabled':allowed(c,user,key),
+                'enabled':bool(root or pastor or grants.get(key,{}).get('enabled')),
                 'role':('admin' if key!='kids' else user['role']) if root else ('pastor' if pastor else (user['role'] if key=='kids' else grants.get(key,{}).get('role'))),
                 'scope':'' if (root or pastor) else scopes.get(key,''),
                 'status':'operational'
