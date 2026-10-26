@@ -905,6 +905,8 @@ from .realtime import router as realtime_router
 app.include_router(realtime_router)
 from .evolution import router as evolution_router
 app.include_router(evolution_router)
+from .scheduled_jobs import router as scheduled_jobs_router
+app.include_router(scheduled_jobs_router)
 
 
 

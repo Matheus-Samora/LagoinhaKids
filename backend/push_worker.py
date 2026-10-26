@@ -94,10 +94,16 @@ def dispatch_operations():
 def run_cycle(include_operations=True):
     import logging
     logger=logging.getLogger(__name__)
+    operations_failed=False
     if include_operations:
         try:dispatch_operations()
-        except Exception as exc:logger.warning('scheduled_operations_deferred type=%s',type(exc).__name__)
-    try:return deliver_batch()
+        except Exception as exc:
+            operations_failed=True
+            logger.warning('scheduled_operations_deferred type=%s',type(exc).__name__)
+    try:
+        result=deliver_batch()
+        if operations_failed:result['retry']=True
+        return result
     except Exception as exc:
         # A temporary database/provider failure must not terminate the HTTP service.
         logger.warning('push_batch_deferred type=%s',type(exc).__name__)

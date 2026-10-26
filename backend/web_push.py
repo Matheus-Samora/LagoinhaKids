@@ -58,5 +58,7 @@ def test(user=Depends(session)):
         attempt=c.execute('SELECT expires FROM attempts WHERE key=?',(key,)).fetchone()
         if attempt and attempt['expires']>time.time():fail('rate','Aguarde um minuto antes de solicitar outro teste.',429)
         c.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,1,int(time.time())+60))
-        c.execute('INSERT INTO notifications(user_id,kind,title,message,sender,created_at) VALUES(?,?,?,?,?,?)',(user['id'],'push_test','Teste de notificações','Este é um teste de entrega pelo servidor.',user['id'],s.now()))
+        from .platform_access import allowed
+        only_kids=allowed(c,user,'kids') and not any(allowed(c,user,module) for module in ('members','ministries','finance'))
+        c.execute('INSERT INTO notifications(user_id,kind,title,message,sender,created_at,sector) VALUES(?,?,?,?,?,?,?)',(user['id'],'push_test','Teste de notificações','Este é um teste de entrega pelo servidor.',user['id'],s.now(),'kids' if only_kids else 'all'))
     return {'ok':True,'message':'Teste colocado na fila. A entrega será feita pelo servidor.'}

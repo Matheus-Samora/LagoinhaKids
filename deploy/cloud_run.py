@@ -127,8 +127,7 @@ def main():
     service=json.loads(gcloud('run','services','describe',SERVICE,'--region='+REGION,'--format=json').stdout)
     actual=service['status']['url']
     if actual!=url:gcloud('run','services','update',SERVICE,'--region='+REGION,'--update-env-vars=KIDS_PUBLIC_URL='+actual)
-    for img in json.loads(gcloud('artifacts','docker','images','list',f'{REGION}-docker.pkg.dev/{PROJECT}/{REPOSITORY}/app','--include-tags','--format=json').stdout):
-        if '1.4.0' not in (img.get('tags') or []):gcloud('artifacts','docker','images','delete',f"{img['package']}@{img['version']}",'--delete-tags',check=False)
+    # Retain immutable images for rollback. Cleanup must be an explicit retention policy.
     response=httpx.get(actual+'/api/health',timeout=30);response.raise_for_status()
     (STATE/'deployment-result.json').write_text(json.dumps({'url':actual,'project':PROJECT,'region':REGION,'version':'1.4.0'},indent=2))
     info('DEPLOYED: '+actual);return 0

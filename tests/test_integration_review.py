@@ -103,6 +103,7 @@ def test_worker_defers_transient_failure_without_exposing_details(records,monkey
     assert result['retry'] and result['sent']==0
     assert 'private connection credentials' not in caplog.text
     monkeypatch.setattr(push_worker,'deliver_batch',lambda:{'configured':True,'sent':1})
+    assert push_worker.run_cycle()['retry'] is True
     assert push_worker.run_cycle(False)['sent']==1
 
 
@@ -115,3 +116,15 @@ def test_database_connection_failure_returns_safe_recoverable_response(records,m
     response=u.get('/api/me/profile')
     assert response.status_code==503 and response.json()['detail']['code']=='database_unavailable'
     assert 'private connection' not in response.text and response.headers['retry-after']=='3'
+
+
+def test_push_diagnostic_for_non_kids_user_uses_personal_area(records):
+    from test_basic_sectors import grant
+    from backend.notification_policy import metadata
+    grant(3,'finance','viewer')
+    with s.db() as c:
+        c.execute("UPDATE module_access SET enabled=0 WHERE user_id=3 AND module='kids'")
+        c.execute('INSERT INTO web_subscriptions(endpoint,user_id,keys_json,session_token,updated_at) VALUES(?,?,?,?,?)',('https://example.test/own-device',3,'{}','isolated',s.now()))
+    assert client(3).post('/api/web-push/test').status_code==200
+    with s.db() as c:notice=dict(c.execute("SELECT * FROM notifications WHERE user_id=3 AND kind='push_test'").fetchone())
+    assert notice['sector']=='all' and metadata(notice)['url']=='/membro'
