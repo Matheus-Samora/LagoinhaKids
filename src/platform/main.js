@@ -1,3 +1,4 @@
+import {readApiResponse} from '../api-response.js';
 import {workspaceUI} from './workspace.js';
 import {hasPendingForms} from '../form-lifecycle.js';
 import {deferredRefresh} from './live-refresh.js';
@@ -111,7 +112,7 @@ function welcome(areaKey=currentAreaKey()){
 async function api(path,options={}){
  const raw=options.raw||options.body instanceof FormData;
  let response;try{response=await fetch('/api'+path,{credentials:'same-origin',...options,signal:AbortSignal.timeout(45000),headers:{...(!raw?{'Content-Type':'application/json'}:{}),'X-CSRF-Token':csrf,...options.headers},body:raw?options.body:(options.body?JSON.stringify(options.body):undefined)});}catch{throw new Error('Conexão interrompida. Reabra os dados para conferir se foram salvos antes de tentar novamente.');}
- const data=await response.json();if(!response.ok){const err=new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir. Tente novamente.');err.code=data.detail?.code;throw err;}return data;
+ return readApiResponse(response,{method:options.method||'GET'});
 }
 
 const personal=personalDataUI({api,e});

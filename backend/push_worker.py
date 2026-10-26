@@ -34,10 +34,12 @@ def deliver_batch(limit=50):
                     else:c.execute('UPDATE outbox SET status="suppressed",last_error=? WHERE id=?',(reason,row['id']))
                     continue
             from .platform_access import allowed
+            meta=metadata(dict(row))
+            target=meta['url'].split('#',1)[0].strip('/')
+            sector_notice=target!='kids'
             with s.db() as c:
-                sector_notice=row['kind'] in ('sector_application','ministry_approved','gc_approved','announcement','hall_reply')
-                if not sector_notice and not allowed(c,{'id':row['user_id']},'kids'):
-                    c.execute('UPDATE outbox SET next_attempt=?,last_error=? WHERE id=?',(int(time.time())+3600,'Acesso ao módulo Kids suspenso.',row['id']))
+                if target in ('kids','members','ministries','finance','systems') and not allowed(c,{'id':row['user_id']},target):
+                    c.execute('UPDATE outbox SET next_attempt=?,last_error=? WHERE id=?',(int(time.time())+3600,'Acesso ao setor de destino suspenso.',row['id']))
                     continue
             with s.db() as c:tokens=[dict(r) for r in c.execute('SELECT d.token,d.platform FROM device_tokens d JOIN users u ON u.id=d.user_id WHERE d.user_id=? AND u.active=1',(row['user_id'],))]
             tokens=[r for r in tokens if (r['platform']=='android' and credentials) or (r['platform']=='ios' and apns_ready())]
@@ -89,16 +91,26 @@ def dispatch_operations():
     from .evolution import dispatch_due
     return dispatch_due()
 
+def run_cycle(include_operations=True):
+    import logging
+    logger=logging.getLogger(__name__)
+    if include_operations:
+        try:dispatch_operations()
+        except Exception as exc:logger.warning('scheduled_operations_deferred type=%s',type(exc).__name__)
+    try:return deliver_batch()
+    except Exception as exc:
+        # A temporary database/provider failure must not terminate the HTTP service.
+        logger.warning('push_batch_deferred type=%s',type(exc).__name__)
+        return {'configured':True,'sent':0,'retry':True}
+
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--once',action='store_true');args=parser.parse_args()
     last_operations=0
     while True:
-        if time.time()-last_operations>=30:
-            try:
-                dispatch_operations()
-            except Exception as exc:
-                __import__('logging').getLogger(__name__).error('scheduled_operations_failed type=%s',type(exc).__name__)
-            last_operations=time.time()
-        print(json.dumps(deliver_batch()))
+        include_operations=time.time()-last_operations>=30
+        result=run_cycle(include_operations)
+        if include_operations:last_operations=time.time()
+        print(json.dumps(result))
         if args.once:break
-        time.sleep(3)
+        time.sleep(15 if result.get('retry') else 3)

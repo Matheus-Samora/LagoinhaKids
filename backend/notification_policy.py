@@ -13,7 +13,7 @@ def metadata(notice):
     category=next((key for key,kinds in KINDS.items() if kind in kinds),'system')
     label,priority,ttl=CATEGORIES[category]
     sector=notice.get('sector','')
-    route='/'+sector if sector in ('finance','members','ministries') else '/membro' if notice.get('child_id') is None and category in ('tasks','announcements') else '/kids#notifications'
+    route='/'+sector if sector in ('finance','members','ministries') else '/membro' if notice.get('child_id') is None and sector!='kids' else '/kids#notifications'
     if kind in ('event_announcement','event_registration'):route='/kids#events'
     elif kind in ('ministry_approved','ministry_schedule','ministry_schedule_update'):route='/ministries'
     elif kind in ('gc_approved','gc_application_result'):route='/membro#tasks'

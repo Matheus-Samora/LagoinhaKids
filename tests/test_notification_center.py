@@ -82,6 +82,8 @@ def test_filters_and_context_routes(records):
 
 
 def test_partial_retry_does_not_resend_accepted_device(records,monkeypatch):
+    from test_basic_sectors import grant
+    grant(3,'finance','viewer')
     from backend import push_worker
     nid=notice();delivered=[];fail=[True]
     with s.db() as c:

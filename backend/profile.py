@@ -1,10 +1,12 @@
 """Own account profile: versioned atomic save, including an optional photo."""
 from datetime import date
-from fastapi import APIRouter,Depends,UploadFile,File,Form
+from fastapi import APIRouter,Depends,UploadFile,File,Form,Request
 from pydantic import BaseModel,Field,ConfigDict
 from starlette.concurrency import run_in_threadpool
 from . import store as s
 from .app import session,fail,public_user,MAX_UPLOAD,_prepare_upload,_insert_upload
+
+from .person_identity import linked_person
 
 router=APIRouter(prefix='/api/me',tags=['Profile'])
 
@@ -25,12 +27,18 @@ class ProfileUpdate(BaseModel):
     new_family_name:str|None=Field(default=None,max_length=120)
 
 
+def family_options(c,user,person=None):
+    from .record_policy import manager
+    if manager(c,user,'members'):return c.execute('SELECT id,name FROM members_families WHERE active=1 ORDER BY name').fetchall()
+    return c.execute('SELECT id,name FROM members_families WHERE active=1 AND (created_by=? OR id=?) ORDER BY name',(user['id'],person['family_id'] if person else '')).fetchall()
+
+
 def account(c,user):
     row=c.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
     value=dict(row);value['role']=user['role']
     res=public_user(value,connection=c)
     from .modules.common import decrypt_text
-    p_row=c.execute('SELECT * FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 ORDER BY id LIMIT 1',(user['id'],user['email'])).fetchone()
+    p_row=linked_person(c,user)
     if p_row:
         p_dict=dict(p_row)
         res['birthday']=p_dict.get('birthday')
@@ -62,7 +70,7 @@ def account(c,user):
 @router.get('/profile')
 def get_profile(user=Depends(session)):
     with s.db() as c:
-        families=[{'id':f['id'],'name':f['name']} for f in c.execute('SELECT id,name FROM members_families WHERE active=1 ORDER BY name').fetchall()]
+        families=[{'id':f['id'],'name':f['name']} for f in family_options(c,user,linked_person(c,user))]
         return {'user':account(c,user),'families':families}
 
 
@@ -74,6 +82,7 @@ def persist(data,user,prepared=None):
         c.execute('BEGIN IMMEDIATE')
         old=c.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
         if old['profile_version']!=data.version:fail('conflict','Seu perfil foi atualizado em outra tela. Reabra o perfil para conferir antes de salvar.',409)
+        p_row=linked_person(c,user,review=True)
         raw_dump=data.model_dump(exclude={'version'},exclude_none=True)
         values={k:(v.strip() if isinstance(v,str) else v) for k,v in raw_dump.items()}
         if 'name' in values and len(values['name'])<2:fail('name','Informe seu nome com pelo menos duas letras.')
@@ -97,18 +106,15 @@ def persist(data,user,prepared=None):
         has_family_change = False
         if values.get('new_family_name'):
             fn = values['new_family_name'].strip()
-            existing_fam = c.execute("SELECT id FROM members_families WHERE lower(name)=lower(?) AND active=1 LIMIT 1",(fn,)).fetchone()
-            if existing_fam:
-                target_family_id = existing_fam['id']
-            else:
-                fam_res = save(c,'members_families','members',Record(),{
-                    'name':fn,'joined_on':s.today(),'cell_id':None,'neighborhood':''
-                },user)
-                target_family_id = fam_res['id']
+            fam_res = save(c,'members_families','members',Record(),{
+                'name':fn,'joined_on':None,'cell_id':None,'neighborhood':''
+            },user)
+            target_family_id = fam_res['id']
             has_family_change = True
         elif 'family_id' in values or 'family_id' in data.model_fields_set:
             fid = (values.get('family_id') or '').strip()
             if fid:
+                if fid not in {row['id'] for row in family_options(c,user,p_row)}:fail('family','Solicite à gestão o vínculo com essa família.',403)
                 current(c,'members_families',fid)
                 target_family_id = fid
             else:
@@ -116,11 +122,6 @@ def persist(data,user,prepared=None):
             has_family_change = True
 
         # Synchronize with members_people without requiring pastoral approval
-        p_row=c.execute(
-            'SELECT * FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 ORDER BY id LIMIT 1',
-            (user['id'],user['email'])
-        ).fetchone()
-
         m_fields={}
         if 'name' in values:m_fields['name']=values['name']
         if 'phone' in values:m_fields['phone']=values['phone']
@@ -172,6 +173,7 @@ def update_profile(data:ProfileUpdate,user=Depends(session)):
 
 @router.post('/profile')
 async def update_profile_photo(
+    request:Request,
     version:int=Form(...,ge=1),
     name:str=Form(...,min_length=2,max_length=100),
     phone:str=Form(default='',max_length=30),
@@ -194,6 +196,8 @@ async def update_profile_photo(
         profession=profession,address=address,bio=bio,
         family_id=family_id,new_family_name=new_family_name,public_bio=public_bio,public_profession=public_profession
     )
+    supplied=set(await request.form())
+    data=ProfileUpdate.model_validate({k:v for k,v in data.model_dump().items() if k in supplied})
     prepared=None
     if photo:
         raw=await photo.read(MAX_UPLOAD+1)

@@ -22,7 +22,18 @@ async def lifespan(app: FastAPI):
     realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='3.1.0',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='3.2.0',lifespan=lifespan)
+
+from psycopg import OperationalError as PostgresOperationalError
+
+@app.exception_handler(PostgresOperationalError)
+@app.exception_handler(sqlite3.OperationalError)
+async def database_failure_response(request:Request,exc):
+    transient=not isinstance(exc,sqlite3.OperationalError) or any(word in str(exc).lower() for word in ('locked','busy'))
+    __import__('logging').getLogger(__name__).warning('database_request_failed type=%s',type(exc).__name__)
+    message='A conexão com os dados está indisponível. Confira se a operação foi salva antes de tentar novamente.' if transient else 'Não foi possível acessar os dados. Informe o suporte e confira o resultado antes de repetir a operação.'
+    return JSONResponse(status_code=503 if transient else 500,content={'detail':{'code':'database_unavailable' if transient else 'database_error','message':message}},headers={'Retry-After':'3'} if transient else None)
+
 PUBLIC_URL=os.getenv('KIDS_PUBLIC_URL','http://127.0.0.1:8770').rstrip('/')
 SECURE=PUBLIC_URL.startswith('https:')
 MAX_UPLOAD=10*1024*1024

@@ -1,3 +1,4 @@
+from ...person_identity import linked_person,account_for_person
 from contextlib import nullcontext
 from datetime import date,time
 from urllib.parse import urlsplit
@@ -94,7 +95,7 @@ def listing(q:str=Query(default='',max_length=100),user=Depends(module_access('m
             for item in apps:
                 if item.get('user_id')!=user['id']:
                     for key in ('email','phone','notes'):item.pop(key,None)
-        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_p=linked_person(c,user)
         return {
             'assignments':rows,
             'schedules':schedules,
@@ -165,9 +166,9 @@ def persist_schedule(data:Schedule,user,rid=None,connection=None):
         retried=not rid and data.request_id and c.execute('SELECT 1 FROM ministries_schedules WHERE id=?',(str(data.request_id),)).fetchone()
         res=save(c,'ministries_schedules','ministries',data,vals,user,rid)
         if retried:return res
-        p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(data.person_id,)).fetchone()
+        p_row=c.execute('SELECT id,name,email,account_user_id FROM members_people WHERE id=?',(data.person_id,)).fetchone()
         if p_row:
-            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            u_row=account_for_person(c,p_row)
             if u_row and u_row['id']!=user['id']:
                 s_parts=str(data.service_date).split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(data.service_date)
@@ -193,9 +194,9 @@ def remove_schedule(rid:str,version:int=Query(ge=1),user=Depends(admin)):
         c.execute('BEGIN IMMEDIATE')
         old=current(c,'ministries_schedules',rid)
         check_ministry_scope(c,user,old['ministry'])
-        p_row=c.execute('SELECT name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
+        p_row=c.execute('SELECT id,name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
         if p_row:
-            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row['account_user_id'],p_row['email'] or '')).fetchone()
+            u_row=account_for_person(c,p_row)
             if u_row and u_row['id']!=user['id']:
                 s_parts=str(old['service_date']).split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else str(old['service_date'])
@@ -221,7 +222,8 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
         old=current(c,'ministries_schedules',rid)
         p_row=c.execute('SELECT id,name,email,account_user_id FROM members_people WHERE id=?',(old['person_id'],)).fetchone()
         if not p_row:fail('not_found','Pessoa da escala não encontrada.',404)
-        is_self=(p_row['account_user_id']==user['id'] or (p_row['account_user_id'] is None and p_row['email'] and p_row['email'].lower()==user['email'].lower()))
+        self_person=linked_person(c,user)
+        is_self=bool(self_person and self_person['id']==p_row['id'])
         from ...record_policy import manager
         is_mgr=manager(c,user,'ministries')
         if not is_self and not is_mgr:
@@ -272,7 +274,7 @@ def respond_schedule(rid:str,data:ScheduleResponse,user=Depends(session)):
 @router.get('/my-schedules')
 def my_schedules(user=Depends(session)):
     with s.db() as c:
-        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        p_row=linked_person(c,user)
         if not p_row:return {'schedules':[]}
         rows=c.execute("SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.person_id=? AND ms.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC LIMIT 50",(p_row['id'],)).fetchall()
         return {'schedules':[dict(r) for r in rows]}
@@ -311,7 +313,7 @@ def create_worship_scale(data:WorshipScaleCreate,user=Depends(write)):
                 'role_notes':inst,'service_date':s_date,'service_time':s_time,'status':'confirmed'
             },user)
             created_ids.append(res['id'])
-            u_row=c.execute('SELECT id FROM users WHERE id=coalesce(?,(SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 LIMIT 1)) AND active=1 LIMIT 1',(p_row.get('account_user_id'),p_row.get('email') or '')).fetchone()
+            u_row=account_for_person(c,p_row)
             if u_row and u_row['id']!=user['id']:
                 s_parts=s_date.split('-')
                 fmt_date=f"{s_parts[2]}/{s_parts[1]}" if len(s_parts)==3 else s_date

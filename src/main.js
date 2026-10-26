@@ -1,3 +1,4 @@
+import {readApiResponse} from './api-response.js';
 import {hasPendingForms} from './form-lifecycle.js';
 import {accountProfileUI} from './account-profile.js';
 import {realtime} from './platform/realtime.js';
@@ -55,11 +56,10 @@ function toast(text,error=false){const t=document.getElementById('toast');t.text
 async function api(path,options={}){
  const headers={...(NATIVE?{'X-Native-Client':'1'}:{}),...(S.token?{'Authorization':'Bearer '+S.token}:{}),...(S.csrf?{'X-CSRF-Token':S.csrf}:{}),...options.headers};
  if(options.body && !(options.body instanceof FormData)){headers['Content-Type']='application/json';options.body=JSON.stringify(options.body);}
- let response;try{response=await fetch(S.apiOrigin+'/api'+path,{credentials:'include',...options,headers,signal:AbortSignal.timeout(15000)});}catch{setConnection(false);throw new Error('Sem conexão com o servidor. Tente novamente.');}
+ let response;try{response=await fetch(S.apiOrigin+'/api'+path,{credentials:'include',...options,headers,signal:AbortSignal.timeout(15000)});}catch{setConnection(false);throw new Error('Conexão interrompida. Confira se os dados foram salvos antes de repetir a operação.');}
  setConnection(true);
- const data=await response.json();
- if(!response.ok){if(response.status===401 && S.user){S.user=null;renderLogin();}const err=new Error(data.detail?.message||data.detail?.[0]?.msg||'Não foi possível concluir a operação.');err.code=data.detail?.code;throw err;}
- return data;
+ if(response.status===401 && S.user){S.user=null;renderLogin();}
+ return readApiResponse(response,{method:options.method||'GET'});
 }
 function getSavedAccounts(){try{localStorage.removeItem('kids_saved_accounts');}catch{}return [];}
 

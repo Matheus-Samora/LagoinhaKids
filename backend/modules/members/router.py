@@ -1,3 +1,4 @@
+from ...person_identity import linked_person
 from datetime import date
 import secrets
 from fastapi import APIRouter,Depends,Query
@@ -92,7 +93,7 @@ def listing(q:str=Query(default='',max_length=100),page:int=Query(default=1,ge=1
             if not global_manager(c,user) and d.get('user_id')!=user['id']:
                 for key in ('email','phone','notes'):d.pop(key,None)
             gc_apps.append(d)
-        my_p=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        my_p=linked_person(c,user)
         return {
             'pastoral_notes_allowed':bool(global_manager(c,user)),
             'page':page,'has_more':has_more,

@@ -1,3 +1,4 @@
+from .person_identity import linked_person
 import json,secrets
 from fastapi import APIRouter,Depends,Request,Response
 from pydantic import BaseModel,Field
@@ -57,7 +58,7 @@ def community_catalog(user=Depends(session)):
             d=dict(r);d['notes']=decrypt_text(d.get('notes',''));my_apps.append(d)
         notifs=[dict(r) for r in c.execute('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25',(user['id'],))]
         announcements=[dict(r) for r in c.execute('SELECT * FROM platform_announcements WHERE active=1 AND (publish_at IS NULL OR publish_at<=?) AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 200',(s.now(),s.now())) if visible_announcement(c,user,dict(r))][:40]
-        p_row=c.execute("SELECT id FROM members_people WHERE (account_user_id=? OR (account_user_id IS NULL AND lower(email)=lower(?))) AND active=1 LIMIT 1",(user['id'],user['email'])).fetchone()
+        p_row=linked_person(c,user)
         my_schedules=[]
         if p_row:
             my_schedules=[dict(r) for r in c.execute("SELECT ms.*,p.name person_name FROM ministries_schedules ms JOIN members_people p ON p.id=ms.person_id WHERE ms.person_id=? AND ms.active=1 ORDER BY ms.service_date ASC,ms.service_time ASC LIMIT 30",(p_row['id'],)).fetchall()]
