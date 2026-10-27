@@ -608,7 +608,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   const isHallTab=key==='members'&&activeTab==='hall';
   if(isHallTab){host.innerHTML='<div data-hall-root></div>';void hall.mount(host.querySelector('[data-hall-root]'));return;}
   const visibleKinds=activeTab==='all'
-   ?(key==='ministries'?(ministryFilter?['schedules','resources']:['schedules']):key==='members'?(cellFilter?['people','cells']:['people','cells','families']):[])
+   ?[]
    :activeTab==='worship'
    ?['schedules']
    :key==='members'&&activeTab==='cells'&&cellFilter
@@ -616,7 +616,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    :allKinds.filter(k=>k===activeTab);
   const showSummary=activeTab==='all';
   const showWorshipOnly=key==='ministries'&&activeTab==='worship';
-  const showGcCards=key==='members'&&(activeTab==='cells'||activeTab==='all');
+  const showGcCards=key==='members'&&activeTab==='cells';
 
   host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}<section class="panel"><h2>Continuar</h2><div class="work-actions">${allKinds.map(kind=>`<a class="button secondary" href="/${key}#${kind}">${labels[kind]}</a>`).join('')}</div>${key==='finance'&&!data.accounts?.length?'<p>Comece criando uma conta. Depois cadastre um centro de custo e seu primeiro lançamento para conferir o saldo.</p>':''}</section>`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search" ${showSummary?'hidden':''}><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
   host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');peoplePage=1;void refresh();};

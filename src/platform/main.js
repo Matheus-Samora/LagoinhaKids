@@ -47,14 +47,15 @@ let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=nu
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
 
-const WORK_TABS=new Set(['tasks','calendar','account','operations','groups','reception','church-attendance']);
+const WORK_TABS=new Set(['church-attendance']);
 const AREA_TABS={
  membro:[
   {id:'all',label:'Início',icon:'home'},
-  {id:'hall',label:'Hall de Membros',icon:'community'},
-  {id:'announcements',label:'Comunicados',icon:'announcements'},
+  {id:'church-attendance',label:'Presença no Culto',icon:'schedules'},
   {id:'gcs',label:'GCs',icon:'groups'},
-  {id:'ministries',label:'Ministérios',icon:'ministries'}
+  {id:'ministries',label:'Ministérios',icon:'ministries'},
+  {id:'announcements',label:'Comunicados',icon:'announcements'},
+  {id:'hall',label:'Hall de Membros',icon:'community'}
  ],
  systems:[
   {id:'all',label:'Visão Geral',icon:'home'},
@@ -63,10 +64,10 @@ const AREA_TABS={
  ],
  members:[
   {id:'all',label:'Visão Geral',icon:'home'},
-  {id:'hall',label:'Hall de Membros',icon:'community'},
   {id:'people',label:'Membros',icon:'identity'},
   {id:'families',label:'Famílias',icon:'family'},
-  {id:'cells',label:'GCs',icon:'groups'}
+  {id:'cells',label:'GCs',icon:'groups'},
+  {id:'church-attendance',label:'Presença nos Cultos',icon:'schedules'}
  ],
  ministries:[
   {id:'all',label:'Visão Geral',icon:'home'},
@@ -80,12 +81,10 @@ const AREA_TABS={
   {id:'entries',label:'Lançamentos',icon:'transactions'},
   {id:'closings',label:'Fechamento do culto',icon:'closing'},
   {id:'accounts',label:'Contas',icon:'bank'},
-  {id:'cost-centers',label:'Centros',icon:'costs'},
+  {id:'cost-centers',label:'Centros de Custo',icon:'costs'},
   {id:'invoices',label:'Notas Fiscais',icon:'invoice'}
  ]
 };
-
-for(const [area,tabs] of Object.entries(AREA_TABS)){tabs.push({id:'tasks',label:'Tarefas',icon:'closing'},{id:'calendar',label:'Agenda',icon:'schedules'},{id:'account',label:'Minha conta',icon:'identity'});if(area==='membro')tabs.push({id:'reception',label:'Recepção Kids',icon:'kids'},{id:'groups',label:'Liderança de GC',icon:'groups'});else tabs.push({id:'operations',label:area==='systems'?'Operações':area==='finance'?'Conferência':area==='members'?'Integração & GCs':'Gestão da equipe',icon:'systems'});}
 
 function currentAreaKey(){
  const p=location.pathname.split('/')[1];
@@ -119,7 +118,6 @@ async function api(path,options={}){
 const personal=personalDataUI({api,e});
 const operationsUI=workspaceUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
 const churchAttendance=churchAttendanceUI({api,e});
-for(const tabs of Object.values(AREA_TABS))tabs.push({id:'church-attendance',label:'Presença nos cultos',icon:'schedules'});
 const portalHall=communityHallUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
 const sectors=createSectors({api,e,identity:()=>identity,onProfileSaved:profileSaved,openQrModal:()=>openAppDownloadQrModal()});
 
@@ -411,7 +409,76 @@ function memberCommunityPortal(tab='all'){
   </div>
  </section>`:'';
 
- return `${myAppsHtml}${announcementsHtml}${gcsHtml}${ministriesHtml}<dialog id="community-apply-dialog"><div class="sector-modal"></div></dialog>`;
+ if(tab==='announcements')return `${announcementsHtml}<dialog id="community-apply-dialog"><div class="sector-modal"></div></dialog>`;
+ if(tab==='gcs')return `${gcsHtml}<dialog id="community-apply-dialog"><div class="sector-modal"></div></dialog>`;
+ if(tab==='ministries')return `${ministriesHtml}<dialog id="community-apply-dialog"><div class="sector-modal"></div></dialog>`;
+
+ const quickActionsHtml=`
+  <section class="portal-quick-grid">
+   <button type="button" class="portal-quick-card" data-switch-tab="church-attendance">
+    <span class="portal-quick-icon">📍</span>
+    <div>
+     <strong>Presença no Culto</strong>
+     <small>Check-in automático &amp; GPS</small>
+    </div>
+   </button>
+   <button type="button" class="portal-quick-card" data-switch-tab="gcs">
+    <span class="portal-quick-icon">👥</span>
+    <div>
+     <strong>Grupos de Crescimento</strong>
+     <small>${cells.length} GCs disponíveis</small>
+    </div>
+   </button>
+   <button type="button" class="portal-quick-card" data-switch-tab="ministries">
+    <span class="portal-quick-icon">🤝</span>
+    <div>
+     <strong>Ministérios</strong>
+     <small>${mins.length} ministérios para servir</small>
+    </div>
+   </button>
+   <button type="button" class="portal-quick-card" data-switch-tab="announcements">
+    <span class="portal-quick-icon">📢</span>
+    <div>
+     <strong>Comunicados &amp; Eventos</strong>
+     <small>${anns.length} comunicado(s) ativos</small>
+    </div>
+   </button>
+  </section>
+ `;
+
+ const recentAnnouncementsHtml=anns.length?`
+  <section class="panel" style="margin-top:20px;">
+   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <h2>${uiIcon('announcements',20)} Últimos Comunicados</h2>
+    <button type="button" class="secondary" data-switch-tab="announcements" style="font-size:12px;padding:4px 10px;">Ver todos (${anns.length}) →</button>
+   </div>
+   <div class="announcements-mural-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+    ${anns.slice(0,2).map(a=>{
+     const sCol=sectorColors[a.target_sector]||'#18181b';
+     return `
+      <article class="announcement-card">
+       <div>
+        <div class="announcement-badge-row">
+         <span class="announcement-badge-sector" style="background:${sCol};color:#ffffff;">
+          ${e(sectorLabels[a.target_sector]||a.target_sector)}
+         </span>
+         ${a.event_date?`<span class="badge" style="background:#fef3c7;color:#92400e;">${uiIcon('schedules',14)} ${e(a.event_date)}</span>`:''}
+        </div>
+        <h3 style="margin:10px 0 6px;">${e(a.title)}</h3>
+        <p class="announcement-body" style="-webkit-line-clamp:3;">${e(a.message)}</p>
+        ${a.location?`<div class="announcement-meta-item" style="margin-top:8px;">${uiIcon('groups',16)} <span>${e(a.location)}</span></div>`:''}
+       </div>
+       <div class="announcement-footer">
+        <span><strong>${e(a.author_name||'Liderança')}</strong> · ${e(new Date(a.created_at).toLocaleDateString('pt-BR'))}</span>
+       </div>
+      </article>
+     `;
+    }).join('')}
+   </div>
+  </section>
+ `:'';
+
+ return `${quickActionsHtml}${mySchedulesHtml}${myAppsHtml}${recentAnnouncementsHtml}<dialog id="community-apply-dialog"><div class="sector-modal"></div></dialog>`;
 }
 
 function openApplyModal(targetType,targetId,targetName,extra={}){
@@ -581,7 +648,7 @@ function render(message=''){
  const areaKey=module?module.id:(isMemberPortal?'membro':'systems');
  const personalOnly=false;
  const canHall=identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled);
- const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>(item.id!=='hall'||canHall)&&(item.id!=='reception'||['teacher','admin'].includes(identity.user.role)&&identity.modules.some(m=>m.id==='kids'&&m.enabled))&&(item.id!=='operations'||areaKey==='systems'||identity.platform_admin||identity.pastor||['admin','editor'].includes(module?.role))&&(item.id!=='groups'||identity.gc_leader||identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled&&['admin','editor'].includes(m.role))));
+ const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>(item.id!=='hall'||canHall));
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -604,7 +671,7 @@ function render(message=''){
   ${identity.modules.filter(m=>m.enabled).map(m=>`<a class="platform-nav-link ${module?.id===m.id?'active':''}" href="${m.url}"><span class="nav-btn-icon">${uiIcon(m.id)}</span><span>${e(m.name.replace('Lagoinha ',''))}</span></a>`).join('')}
  `;
 
- const bottomTabs=[...tabs.slice(0,4),...tabs.filter(t=>t.id==='account'&&!tabs.slice(0,4).some(x=>x.id==='account'))];
+ const bottomTabs=tabs.slice(0,5);
  const bottomNavHtml=bottomTabs.map(tItem=>`
   <button type="button" class="platform-bnav-item ${activeSectionTab===tItem.id?'active':''}" data-switch-tab="${e(tItem.id)}">
    <span class="bnav-emoji" aria-hidden="true">${uiIcon(tItem.icon,22)}</span>
@@ -695,7 +762,7 @@ function render(message=''){
 
  root.querySelector('[data-gc-search]')?.addEventListener('submit',async event=>{event.preventDefault();const f=event.currentTarget,rows=await api('/workspace/groups/search?q='+encodeURIComponent(f.elements.q.value)+'&day='+encodeURIComponent(f.elements.day.value));const ids=new Set(rows.map(x=>String(x.id)));root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>{card.hidden=!ids.has(card.querySelector('[data-apply-gc]')?.dataset.applyGc);});root.querySelector('[data-gc-results]').textContent=rows.length+' GC(s) encontrado(s).';});
  root.querySelector('[data-gc-search]')?.addEventListener('reset',()=>{root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>card.hidden=false);root.querySelector('[data-gc-results]').textContent='';});
- if(WORK_TABS.has(activeSectionTab)){root.querySelector('.workspace').innerHTML='<div id="work-root"></div>';if(activeSectionTab==='church-attendance')void churchAttendance.mount(root.querySelector('#work-root'));else void operationsUI.mount(root.querySelector('#work-root'),activeSectionTab,areaKey);}
+ if(WORK_TABS.has(activeSectionTab)){root.querySelector('.workspace').innerHTML='<div id="work-root"></div>';if(activeSectionTab==='church-attendance')void churchAttendance.mount(root.querySelector('#work-root'));}
  if(isMemberPortal&&activeSectionTab==='hall'&&canHall)void portalHall.mount(root.querySelector('#member-hall-root'));
  if(!WORK_TABS.has(activeSectionTab)&&module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
 

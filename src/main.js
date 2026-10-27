@@ -129,9 +129,9 @@ function navItems(){
  return [['overview',t('kids.overview','Visão geral'),'home'],['rooms',t('kids.rooms','Turmas'),'rooms'],['team',t('kids.team','Professores e Monitores'),'volunteers'],['children',t('kids.students','Alunos'),'kids'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell'],['users',t('kids.users','Usuários e acessos'),'permissions'],['settings',t('kids.settings','Minha conta'),'settings']].filter(([id])=>id!=='users'||S.user.platform_admin);
 }
 function mobileNavItems(){
- if(S.user.role==='parent')return [['overview',t('kids.my_children','Meus filhos'),'kids'],['events',t('kids.events','Eventos'),'calendar'],['lessons',t('kids.lessons','Aulinhas'),'clock'],['notifications',t('kids.notifications','Avisos'),'bell'],['settings',t('kids.settings','Conta'),'settings']];
- if(S.user.role==='teacher')return [['rooms',t('kids.rooms','Turmas'),'rooms'],['team',t('kids.team_short','Equipe'),'volunteers'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell'],['settings',t('kids.settings','Conta'),'settings']];
- return [['overview',t('kids.overview','Visão'),'home'],['rooms',t('kids.rooms','Turmas'),'rooms'],['team',t('kids.team_short','Equipe'),'volunteers'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell'],['settings',t('kids.settings','Conta'),'settings']];
+ if(S.user.role==='parent')return [['overview',t('kids.my_children','Meus filhos'),'kids'],['lessons',t('kids.lessons','Aulinhas'),'clock'],['events',t('kids.events','Eventos'),'calendar']];
+ if(S.user.role==='teacher')return [['rooms',t('kids.rooms','Turmas'),'rooms'],['attendance',t('kids.attendance','Chamada'),'check'],['team',t('kids.team_short','Equipe'),'volunteers'],['events',t('kids.events','Eventos'),'calendar']];
+ return [['overview',t('kids.overview','Visão'),'home'],['rooms',t('kids.rooms','Turmas'),'rooms'],['children',t('kids.students','Alunos'),'kids'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar']];
 }
 const navHistory=[];
 let lastBackTime=0;
