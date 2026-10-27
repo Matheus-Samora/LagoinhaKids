@@ -3757,3 +3757,104 @@ button.mini-button.success-button:hover {
 .sector-table tbody tr:last-child td{border-bottom:0}
 .account-close-icon{font-size:23px;font-weight:400;line-height:1}
 @media(max-width:600px){.sector-modal .section-title h2{font-size:20px}.sector-modal .record-form :is(input:not([type=checkbox]):not([type=hidden]),select,textarea){font-size:16px}.sector-modal .section-title{gap:10px;padding-bottom:15px}.sector-modal .record-form{gap:17px}}
+
+
+/* Service occurrences and ministry scale cards */
+.service-occurrences-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.service-occurrence-card {
+  background: var(--surface, #ffffff);
+  border: 1.5px solid var(--border, #e4e4e7);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.service-occurrence-card:hover {
+  border-color: #c48a29;
+  box-shadow: 0 4px 12px rgba(196, 138, 41, 0.1);
+}
+
+.service-occurrence-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid var(--border, #f4f4f5);
+  padding-bottom: 10px;
+}
+
+.service-occurrence-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.service-date-chip {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #c48a29;
+}
+
+.service-occurrence-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text, #18181b);
+}
+
+.service-occurrence-time {
+  font-size: 12px;
+  color: var(--muted, #71717a);
+}
+
+.service-lineup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.service-lineup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--surface, #fff) 94%, #a1a1aa);
+  border-radius: 8px;
+}
+
+.service-card-action {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border, #f4f4f5);
+}
+
+.service-card-action button {
+  width: 100%;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .service-occurrence-card {
+  background: #18181b;
+  border-color: #27272a;
+}
+
+[data-theme="dark"] .service-lineup-item {
+  background: #27272a;
+}

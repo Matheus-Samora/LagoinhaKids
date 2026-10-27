@@ -219,6 +219,69 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   </section>`;
  }
 
+ function ministrySchedulesByServicePanel(){
+  if(key!=='ministries')return '';
+  const occurrences=(data.service_occurrences||[]).filter(o=>!o.is_hidden);
+  const filter=ministryFilter;
+  const title=filter?`Escalas por Culto · ${filter}`:'Cultos Oficiais & Escalas da Igreja';
+  const subtitle=filter
+   ?`Escala da equipe de <strong>${e(filter)}</strong> nos cultos semanais oficiais da igreja.`
+   :'Acompanhe e escale os voluntários de cada ministério nos dias e horários de culto padrão.';
+
+  return `<section class="panel sector-section">
+   <div class="section-title">
+    <div>
+     <span class="eyebrow" style="color:#c48a29;">CALENDÁRIO DE CULTOS</span>
+     <h2>${uiIcon('schedules',22)} ${title}</h2>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+     ${filter?button('filter-ministry','Mostrar todos os ministérios','data-ministry="" class="secondary"'):''}
+     ${edit()?button('new','+ Nova escala geral',`data-kind="schedules" data-preset-ministry="${e(filter)}"`):''}
+    </div>
+   </div>
+   <p class="subtle" style="margin:-4px 0 14px;font-size:13px;">${subtitle}</p>
+
+   ${occurrences.length?`
+    <div class="service-occurrences-grid">
+     ${occurrences.slice(0,6).map(srv=>{
+      const srvSchedules=(data.schedules||[]).filter(s=>s.service_date===srv.date && (!filter || s.ministry===filter));
+      return `<article class="service-occurrence-card">
+       <div class="service-occurrence-head">
+        <div class="service-occurrence-meta">
+         <span class="service-date-chip">📅 ${e(srv.weekday_name)}, ${date(srv.date)}</span>
+         <strong class="service-occurrence-title">${e(srv.title)}</strong>
+         <span class="service-occurrence-time">🕒 ${e(srv.time)} · ${srv.duration_minutes} min</span>
+        </div>
+        <span class="badge ${srvSchedules.length?'badge-active':''}" style="${srvSchedules.length?'background:#c48a29;color:#fff;':''}">${srvSchedules.length} escalado(s)</span>
+       </div>
+
+       <div class="service-lineup-list">
+        ${srvSchedules.length?srvSchedules.map(s=>`
+         <div class="service-lineup-item">
+          <div>
+           ${!filter?`<span class="badge" style="font-size:10px;margin-right:4px;">${e(s.ministry)}</span>`: ''}
+           <strong>${e(s.person_name)}</strong>
+           ${s.role_notes?`<small style="display:block;color:var(--muted,#71717a);font-size:11px;">${e(s.role_notes)}</small>`:''}
+          </div>
+          <span class="badge badge-status-${e(s.status)}" style="font-size:10px;">${e(scheduleStatusLabels[s.status]||s.status)}</span>
+         </div>
+        `).join(''):'<p class="subtle" style="font-size:12px;margin:8px 0;">Nenhum voluntário escalado ainda.</p>'}
+       </div>
+
+       ${edit()?`
+        <div class="service-card-action">
+         <button type="button" class="secondary" data-sector-action="scale-service-occurrence" data-service-title="${e(srv.title)}" data-service-date="${e(srv.date)}" data-service-time="${e(srv.time)}" data-service-duration="${srv.duration_minutes}" data-ministry="${e(filter||'')}">
+          + Escalar voluntário neste culto
+         </button>
+        </div>
+       `: ''}
+      </article>`;
+     }).join('')}
+    </div>
+   `:'<div class="sector-empty" style="padding:28px 16px;text-align:center;"><p class="subtle">Nenhum culto padrão cadastrado. Acesse a Gestão da equipe para configurar os horários semanais.</p></div>'}
+  </section>`;
+ }
+
  function gcCardsShowcase(){
   if(key!=='members')return '';
   const cells=data.cells||[];
@@ -401,6 +464,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     }).join('')}
    </div>
    ${ministryMembersShowcase()}
+   ${ministrySchedulesByServicePanel()}
    ${worshipScalePanel()}`;
   }
 
@@ -869,7 +933,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
  }
 
  async function form(kind,record,presetMinistry=''){
-  const r=record||{};let html='';
+  const r=record||{};const isEdit=Boolean(record&&r.id);let html='';
   if(kind==='cells'){
    html=field('name','Nome do GC',r.name,'text',true)
     +field('leader_name','Líder',r.leader_name||'Liderança GC')
@@ -918,7 +982,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   }
   if(kind==='schedules'){
    directory=await api('/ministries/people');
-   html=field('template','Horário cadastrado (opcional)','','text',false,[['','Preencher manualmente'],...(data.service_templates||[]).map(s=>[s.id,s.title+' · '+s.service_time])])+`<div class="lookup"><label>Buscar voluntário<input id="person-search" maxlength="100"></label>${button('lookup','Buscar','class="secondary"')}</div>`
+   const activeOccurrences=(data.service_occurrences||[]).filter(o=>!o.is_hidden);
+   html=field('preset_occurrence','Culto semanal oficial (Data e Horário)','','text',false,[['','Preencher manualmente ou selecionar culto...'],...activeOccurrences.map(o=>[`${o.date}|${o.time}|${o.duration_minutes}|${encodeURIComponent(o.title)}`,`📅 ${o.title} — ${date(o.date)} (${o.weekday_name}) às ${o.time}`])])+`<div class="lookup"><label>Buscar voluntário<input id="person-search" maxlength="100"></label>${button('lookup','Buscar','class="secondary"')}</div>`
     +field('title','Culto / Evento',r.title||'Culto de Celebração','text',true)
     +field('ministry','Ministério',r.ministry||ministryFilter||data.user_scope||data.catalog[0],'text',true,data.catalog.map(x=>[x,x]))
     +field('person_id','Voluntário',r.person_id,'text',true,opt(directory,r.person_id,r.person_name))
@@ -980,10 +1045,10 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   }
 
   const dialog=host.querySelector('dialog');
-  dialog.querySelector('.sector-modal').innerHTML=`<div class="section-title"><h2>${record?'Editar':'Adicionar'} · ${labels[kind]}</h2>${button('close','Fechar','class="secondary"')}</div><form class="record-form"><input name="request_id" type="hidden" value="${id()}">${html}<p class="error" role="alert"></p><button type="submit">Salvar</button></form>`;
+  dialog.querySelector('.sector-modal').innerHTML=`<div class="section-title"><h2>${isEdit?'Editar':'Adicionar'} · ${labels[kind]}</h2>${button('close','Fechar','class="secondary"')}</div><form class="record-form"><input name="request_id" type="hidden" value="${id()}">${html}<p class="error" role="alert"></p><button type="submit">Salvar</button></form>`;
   const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
-  dialog.querySelector('[name=template]')?.addEventListener('change',event=>{const model=(data.service_templates||[]).find(s=>s.id===event.target.value);if(!model)return;const f=dialog.querySelector('form');f.elements.title.value=model.title;f.elements.service_time.value=model.service_time;f.elements.duration_minutes.value=model.duration_minutes;});
+  dialog.querySelector('[name=preset_occurrence]')?.addEventListener('change',event=>{const val=event.target.value;if(!val)return;const parts=val.split('|');const occDate=parts[0],occTime=parts[1],occDuration=parts[2],occTitle=decodeURIComponent(parts[3]||'');const f=dialog.querySelector('form');if(occTitle&&f.elements.title)f.elements.title.value=occTitle;if(occDate&&f.elements.service_date)f.elements.service_date.value=occDate;if(occTime&&f.elements.service_time)f.elements.service_time.value=occTime;if(occDuration&&f.elements.duration_minutes)f.elements.duration_minutes.value=occDuration;});
   dialog.querySelector('[data-sector-action="lookup"]')?.addEventListener('click',async()=>{
    try{
     directory=await api('/ministries/people?q='+encodeURIComponent(dialog.querySelector('#person-search').value));
@@ -999,14 +1064,14 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   dialog.querySelector('form').onsubmit=async event=>{
    event.preventDefault();if(lifecycle.busy)return;const f=event.currentTarget,b=f.querySelector('button[type=submit]');lifecycle.setBusy(true);b.disabled=true;
    try{
-    const body=Object.fromEntries(new FormData(f));if(record)body.version=r.version;
+    const body=Object.fromEntries(new FormData(f));if(isEdit)body.version=r.version;
     for(const name of ['family_id','cell_id','birthday','joined_on','baptism_date','started_on','due_date','cost_center_id','entry_id','file_id']){
      if(name in body&&!body[name])body[name]=null;
     }
     if('is_leader' in body)body.is_leader=body.is_leader==='true';
     if('reminder_enabled' in body)body.reminder_enabled=body.reminder_enabled==='true';
     if('duration_minutes' in body)body.duration_minutes=Number(body.duration_minutes);
-    await api('/'+key+'/'+kind+(record?'/'+r.id:''),{method:record?'PUT':'POST',body});
+    await api('/'+key+'/'+kind+(isEdit?'/'+r.id:''),{method:isEdit?'PUT':'POST',body});
     lifecycle.complete();dialog.close();await refresh('Registro salvo.');
    }catch(err){f.querySelector('.error').textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;}
   };
@@ -1086,6 +1151,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    if(b.dataset.sectorAction==='clear'){query='';ministryFilter='';cellFilter='';await refresh();return;}
    if(b.dataset.sectorAction==='self-reg-modal'){openSelfRegModal();return;}
    if(b.dataset.sectorAction==='worship-scale-modal'){await openWorshipScaleModal();return;}
+    if(b.dataset.sectorAction==='scale-service-occurrence'){await form('schedules',{title:b.dataset.serviceTitle,service_date:b.dataset.serviceDate,service_time:b.dataset.serviceTime,duration_minutes:Number(b.dataset.serviceDuration||90),ministry:b.dataset.ministry||ministryFilter},b.dataset.ministry||ministryFilter);return;}
    if(b.dataset.sectorAction==='worship-member-modal'){await form('assignments',null,'Music');return;}
    if(b.dataset.sectorAction==='finance-report-modal'){openFinanceReportModal();return;}
    if(b.dataset.sectorAction==='member-doc'){

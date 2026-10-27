@@ -1125,6 +1125,34 @@ export default {
           const resources = (await db.all('SELECT * FROM ministries_resources WHERE active=1 ORDER BY ministry ASC, created_at DESC LIMIT 200')).map(r => decryptRecord(r, env));
           const counts = await db.all('SELECT ministry, count(*) total, sum(CASE WHEN is_leader=1 THEN 1 ELSE 0 END) leaders FROM ministries_assignments WHERE active=1 GROUP BY ministry');
           const templates = await db.all('SELECT * FROM service_templates WHERE active=1 ORDER BY weekday, service_time');
+          const occurrences = [];
+          const spNow = new Date(Date.now() - 3 * 3600 * 1000);
+          const startDay = new Date(Date.UTC(spNow.getUTCFullYear(), spNow.getUTCMonth(), spNow.getUTCDate()));
+          for (let dayOffset = 0; dayOffset <= 45; dayOffset++) {
+            const tDate = new Date(startDay.getTime() + dayOffset * 86400000);
+            const isoWeekday = (tDate.getUTCDay() + 6) % 7;
+            const yyyy = tDate.getUTCFullYear();
+            const mm = String(tDate.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(tDate.getUTCDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            for (const t of templates) {
+              if (Number(t.weekday) === isoWeekday) {
+                const hiddenList = (t.hidden_dates || '').split(',').map(s => s.trim()).filter(Boolean);
+                const isHidden = hiddenList.includes(dateStr);
+                occurrences.push({
+                  template_id: t.id,
+                  title: t.title,
+                  date: dateStr,
+                  time: t.service_time,
+                  duration_minutes: Number(t.duration_minutes || 90),
+                  weekday: isoWeekday,
+                  weekday_name: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'][isoWeekday],
+                  is_hidden: isHidden
+                });
+              }
+            }
+          }
+          occurrences.sort((a, b) => (a.date + 'T' + a.time).localeCompare(b.date + 'T' + b.time));
           const apps = (await db.all("SELECT * FROM sector_applications WHERE target_type='ministry' AND status='pending' ORDER BY created_at DESC LIMIT 100")).map(r => decryptRecord(r, env));
           const myP = await linkedPerson(db, user);
           return jsonResp({
@@ -1134,6 +1162,7 @@ export default {
             catalog: MINISTRY_CATALOG,
             worship_roles: WORSHIP_ROLES,
             service_templates: templates,
+            service_occurrences: occurrences,
             counts,
             statistics: {
               assignments: counts.reduce((s, r) => s + Number(r.total || 0), 0),
@@ -2281,10 +2310,29 @@ export default {
         const body = await request.json();
         const rid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
-          'INSERT OR REPLACE INTO service_templates(id,title,weekday,service_time,duration_minutes,created_by,created_at) VALUES(?,?,?,?,?,?,?)',
-          [rid, String(body.title || 'Culto').trim(), Number(body.weekday || 0), body.service_time || '18:00', Number(body.duration_minutes || 90), user.id, nowIso()]
+          'INSERT OR REPLACE INTO service_templates(id,title,weekday,service_time,duration_minutes,created_by,created_at,hidden_dates) VALUES(?,?,?,?,?,?,?,coalesce(?, \'\'))',
+          [rid, String(body.title || 'Culto').trim(), Number(body.weekday || 0), body.service_time || '18:00', Number(body.duration_minutes || 90), user.id, nowIso(), body.hidden_dates || '']
         );
         return jsonResp({ ok: true, id: rid });
+      }
+
+      if (path.startsWith('/api/workspace/services/') && path.endsWith('/hide-date') && method === 'POST') {
+        const rid = path.split('/')[4];
+        const body = await request.json();
+        const targetDate = String(body.date || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) fail('date', 'Data inválida (formato AAAA-MM-DD).', 400);
+        const row = await db.first('SELECT * FROM service_templates WHERE id=?', [rid]);
+        if (!row) fail('not_found', 'Culto padrão não encontrado.', 404);
+        let dates = (row.hidden_dates || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (body.action === 'unhide') {
+          dates = dates.filter(d => d !== targetDate);
+        } else {
+          if (!dates.includes(targetDate)) dates.push(targetDate);
+          dates.sort();
+        }
+        const newHiddenStr = dates.join(',');
+        await db.run('UPDATE service_templates SET hidden_dates=? WHERE id=?', [newHiddenStr, rid]);
+        return jsonResp({ ok: true, id: rid, hidden_dates: newHiddenStr });
       }
 
       if (path.startsWith('/api/workspace/services/') && method === 'DELETE') {
