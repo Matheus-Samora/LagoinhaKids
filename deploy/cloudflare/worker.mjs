@@ -338,13 +338,13 @@ export default {
       // 2. Media binary serving
       if (path.startsWith('/api/media/') && method === 'GET') {
         const mediaId = path.split('/').pop();
-        const row = await db.first('SELECT mime_type, data FROM media WHERE id=?', [mediaId]);
+        const row = await db.first('SELECT content_type, data FROM media WHERE id=?', [mediaId]);
         if (row && row.data) {
           const bytes = row.data instanceof ArrayBuffer ? new Uint8Array(row.data) : Buffer.from(row.data);
           return new Response(bytes, {
             status: 200,
             headers: {
-              'Content-Type': row.mime_type || 'image/webp',
+              'Content-Type': row.content_type || 'image/webp',
               'Cache-Control': 'public, max-age=86400'
             }
           });
@@ -988,8 +988,10 @@ export default {
         const body = await request.json();
         const status = body.status;
         if (!['confirmed', 'declined', 'pending'].includes(status)) fail('status', 'Status inválido.');
-        const notes = encryptText(body.decline_reason || body.notes || '', env);
-        await db.run('UPDATE ministries_schedules SET status=?, notes=?, version=version+1 WHERE id=?', [status, notes, sid]);
+        const reason = encryptText(body.reason || body.decline_reason || body.notes || '', env);
+        const oldSched = await db.first('SELECT status FROM ministries_schedules WHERE id=?', [sid]);
+        await db.run('UPDATE ministries_schedules SET status=?, version=version+1 WHERE id=?', [status, sid]);
+        await db.run('INSERT INTO schedule_responses(id,schedule_id,actor,previous_status,status,reason,created_at) VALUES(?,?,?,?,?,?,?)', [randomBytes(16).toString('hex'), sid, user.id, oldSched?.status || 'pending', status, reason, nowIso()]);
         return jsonResp({ ok: true, id: sid, status });
       }
 
@@ -1133,8 +1135,8 @@ export default {
             const mediaId = randomBytes(16).toString('hex');
             const mime = uploadedPhoto.type || 'image/webp';
             await db.run(
-              'INSERT INTO media(id,filename,mime_type,size_bytes,sha256,data,uploaded_by,created_at) VALUES(?,?,?,?,?,?,?,?)',
-              [mediaId, uploadedPhoto.name || 'avatar.webp', mime, buf.length, sha256Hex(buf.toString('base64')), buf, user.id, nowIso()]
+              'INSERT INTO media(id,filename,content_type,data,created_by,created_at) VALUES(?,?,?,?,?,?)',
+              [mediaId, uploadedPhoto.name || 'avatar.webp', mime, buf, user.id, nowIso()]
             );
             avatarUrl = '/api/media/' + mediaId;
           } else if (body.avatar_url !== undefined) {
@@ -1560,7 +1562,7 @@ export default {
         }
         if (body.pastor !== undefined) {
           if (body.pastor) {
-            await db.run('INSERT OR IGNORE INTO pastoral_users(user_id,granted_by,created_at) VALUES(?,?,?)', [uid, user.id, nowIso()]);
+            await db.run('INSERT OR IGNORE INTO pastoral_users(user_id) VALUES(?)', [uid]);
             await db.run("UPDATE users SET staff_role='pastor' WHERE id=?", [uid]);
           } else {
             await db.run('DELETE FROM pastoral_users WHERE user_id=?', [uid]);
@@ -1592,14 +1594,13 @@ export default {
         const body = await request.json();
         const aid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
-          'INSERT INTO platform_announcements(id,title,message,target_sector,audience_type,audience_value,audience_ids,author_id,author_name,active,created_at,publish_at,expires_at,require_ack,dispatched) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,1)',
+          'INSERT INTO platform_announcements(id,title,message,target_sector,target_scope,audience_ids,author_id,author_name,active,created_at,publish_at,expires_at,require_ack,dispatched) VALUES(?,?,?,?,?,?,?,?,1,?,?,?,?,1)',
           [
             aid,
             String(body.title || '').trim(),
             encryptText(body.message || '', env),
             body.target_sector || 'all',
-            body.audience_type || 'sector',
-            body.audience_value || '',
+            body.target_scope || body.audience_value || '',
             JSON.stringify(body.recipient_ids || []),
             user.id,
             user.name,
@@ -1621,15 +1622,15 @@ export default {
       if (path.startsWith('/api/platform/archives/') && method === 'GET') {
         const mod = path.split('/')[4];
         const tables = {
-          members: [['people', 'members_people', 'name'], ['families', 'members_families', 'name'], ['cells', 'members_cells', 'name']],
-          ministries: [['schedules', 'ministries_schedules', 'title'], ['assignments', 'ministries_assignments', 'ministry'], ['resources', 'ministries_resources', 'title']],
-          finance: [['accounts', 'finance_accounts', 'name'], ['cost-centers', 'finance_cost_centers', 'name'], ['entries', 'finance_entries', 'description'], ['closings', 'finance_service_closings', 'service_name'], ['invoices', 'finance_invoices', 'number']],
-          kids: [['children', 'children', 'name'], ['rooms', 'rooms', 'name'], ['lessons', 'lessons', 'title'], ['events', 'events', 'title']]
+          members: [['people', 'members_people', 'name', 'created_at'], ['families', 'members_families', 'name', 'created_at'], ['cells', 'members_cells', 'name', 'created_at']],
+          ministries: [['schedules', 'ministries_schedules', 'title', 'created_at'], ['assignments', 'ministries_assignments', 'ministry', 'created_at'], ['resources', 'ministries_resources', 'title', 'created_at']],
+          finance: [['accounts', 'finance_accounts', 'name', 'created_at'], ['cost-centers', 'finance_cost_centers', 'name', 'created_at'], ['entries', 'finance_entries', 'description', 'created_at'], ['closings', 'finance_service_closings', 'service_name', 'created_at'], ['invoices', 'finance_invoices', 'number', 'created_at']],
+          kids: [['children', 'children', 'name', 'created_at'], ['rooms', 'rooms', 'name', "''"], ['lessons', 'lessons', 'title', 'starts_at'], ['events', 'events', 'title', 'created_at']]
         }[mod] || [];
         const items = [];
-        for (const [kind, tbl, col] of tables) {
+        for (const [kind, tbl, col, tsCol] of tables) {
           const flagCol = tbl === 'children' ? 'archived=1' : 'active=0';
-          const rows = await db.all(`SELECT id, ${col} as label, created_at FROM ${tbl} WHERE ${flagCol} ORDER BY created_at DESC LIMIT 50`);
+          const rows = await db.all(`SELECT id, ${col} as label, ${tsCol} as created_at FROM ${tbl} WHERE ${flagCol} ORDER BY id DESC LIMIT 50`);
           for (const r of rows) items.push({ id: r.id, kind, label: decryptText(r.label, env), created_at: r.created_at });
         }
         return jsonResp({ items });
@@ -1784,8 +1785,8 @@ export default {
         const body = await request.json();
         const rid = randomBytes(16).toString('hex');
         await db.run(
-          "INSERT INTO members_self_registrations(id,name,phone,email,birthday,family_name,address,integration_stage,notes,status,created_at,cell_id) VALUES(?,?,?,?,?,?,?,?,?,'pending',?,?)",
-          [rid, String(body.name || '').trim(), body.phone || '', body.email || '', body.birthday || null, body.family_name || '', encryptText(body.address || '', env), body.integration_stage || 'visitor', encryptText(body.notes || '', env), nowIso(), body.cell_id || null]
+          "INSERT INTO members_self_registrations(id,name,phone,email,birthday,family_name,address,integration_stage,status,created_at,owner_id,version) VALUES(?,?,?,?,?,?,?,?,'pending',?,?,1)",
+          [rid, String(body.name || '').trim(), body.phone || '', body.email || '', body.birthday || null, body.family_name || '', encryptText(body.address || '', env), body.integration_stage || 'visitor', nowIso(), user.id]
         );
         return jsonResp({ ok: true, id: rid, message: 'Ficha de cadastro enviada com sucesso!' });
       }
@@ -1799,13 +1800,13 @@ export default {
           'INSERT INTO members_people(id,family_id,cell_id,name,relationship,phone,email,birthday,joined_on,integration_stage,pastoral_notes,active,version,created_at,created_by,address) VALUES(?,?,?,?,?,?,?,?,?,?,?,1,1,?,?,?)',
           [pid, null, reg.cell_id || null, reg.name, 'Membro', reg.phone || '', reg.email || '', reg.birthday || null, todayStr(), reg.integration_stage || 'active_member', '', nowIso(), user.id, reg.address || '']
         );
-        await db.run("UPDATE members_self_registrations SET status='approved', reviewed_by=?, person_id=? WHERE id=?", [user.id, pid, rid]);
+        await db.run("UPDATE members_self_registrations SET status='approved', person_id=? WHERE id=?", [pid, rid]);
         return jsonResp({ ok: true, person_id: pid });
       }
 
       if (path.startsWith('/api/members/self-registrations/') && method === 'DELETE') {
         const rid = path.split('/')[4];
-        await db.run("UPDATE members_self_registrations SET status='rejected', reviewed_by=? WHERE id=?", [user.id, rid]);
+        await db.run("UPDATE members_self_registrations SET status='rejected' WHERE id=?", [rid]);
         return jsonResp({ ok: true });
       }
 
@@ -1872,7 +1873,7 @@ export default {
         const body = await request.json();
         const sid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
-          'INSERT OR REPLACE INTO ministries_schedules(id,title,ministry,service_date,service_time,person_id,role_notes,status,notes,active,version,created_at,created_by,duration_minutes,response_due_at,reminder_enabled) VALUES(?,?,?,?,?,?,?,?,?,1,1,?,?,?,?,?)',
+          'INSERT OR REPLACE INTO ministries_schedules(id,title,ministry,service_date,service_time,person_id,role_notes,status,active,version,created_at,created_by,duration_minutes,response_due_at,reminder_enabled) VALUES(?,?,?,?,?,?,?,?,1,1,?,?,?,?,?)',
           [
             sid,
             String(body.title || 'Culto de Celebração').trim(),
@@ -1882,11 +1883,10 @@ export default {
             body.person_id,
             body.role_notes || '',
             body.status || 'confirmed',
-            encryptText(body.notes || '', env),
             nowIso(),
             user.id,
             Number(body.duration_minutes || 60),
-            body.response_due_at || null,
+            body.response_due_at || '',
             body.reminder_enabled ? 1 : 0
           ]
         );
@@ -1927,8 +1927,8 @@ export default {
         for (const m of members) {
           const sid = randomBytes(16).toString('hex');
           await db.run(
-            'INSERT INTO ministries_schedules(id,title,ministry,service_date,service_time,person_id,role_notes,status,notes,active,version,created_at,created_by,duration_minutes) VALUES(?,?,?,?,?,?,?,?,?,1,1,?,?,90)',
-            [sid, body.title || 'Culto de Celebração', 'Music', body.service_date || todayStr(), body.service_time || '18:00', m.person_id, m.instrument || 'Integrante', 'pending', encryptText(body.repertoire_notes || '', env), nowIso(), user.id]
+            'INSERT INTO ministries_schedules(id,title,ministry,service_date,service_time,person_id,role_notes,status,active,version,created_at,created_by,duration_minutes) VALUES(?,?,?,?,?,?,?,?,1,1,?,?,90)',
+            [sid, body.title || 'Culto de Celebração', 'Music', body.service_date || todayStr(), body.service_time || '18:00', m.person_id, m.instrument || 'Integrante', 'pending', nowIso(), user.id]
           );
           ids.push(sid);
         }
@@ -2403,20 +2403,45 @@ export default {
 
 
       
+      // === FINANCE FILES UPLOAD & DOWNLOAD ===
+      if (path === '/api/finance/files' && method === 'POST') {
+        const fd = await request.formData();
+        const file = fd.get('file');
+        if (!file || typeof file.arrayBuffer !== 'function') fail('file', 'Selecione um arquivo válido.');
+        const buf = Buffer.from(await file.arrayBuffer());
+        const fid = randomBytes(16).toString('hex');
+        await db.run(
+          'INSERT INTO finance_files(id,filename,content_type,data,created_at) VALUES(?,?,?,?,?)',
+          [fid, file.name || 'anexo.pdf', file.type || 'application/pdf', buf, nowIso()]
+        );
+        return jsonResp({ id: fid, url: '/api/finance/files/' + fid });
+      }
+
+      if (path.startsWith('/api/finance/files/') && method === 'GET') {
+        const fid = path.split('/')[4];
+        const row = await db.first('SELECT filename, content_type, data FROM finance_files WHERE id=?', [fid]);
+        if (!row || !row.data) fail('missing', 'Anexo não encontrado.', 404);
+        const bytes = row.data instanceof ArrayBuffer ? new Uint8Array(row.data) : Buffer.from(row.data);
+        return new Response(bytes, {
+          status: 200,
+          headers: { 'Content-Type': row.content_type || 'application/pdf', 'Cache-Control': 'private, max-age=3600' }
+        });
+      }
+
       // === KIDS CRUD & CHECK-IN ENDPOINTS ===
       if (path === '/api/children' && method === 'POST') {
         const body = await request.json();
         const ins = await db.run(
-          'INSERT INTO children(name,birth_date,room_id,parent_id,guardian_name,guardian_phone,allergies,medical_notes,authorized_pickups,created_at,archived) VALUES(?,?,?,?,?,?,?,?,?,?,0)',
+          'INSERT INTO children(name,birthday,room_id,parent_id,allergies,medical_conditions,emergency_medication,special_needs,authorized_pickups,created_at,archived) VALUES(?,?,?,?,?,?,?,?,?,?,0)',
           [
             String(body.name || '').trim(),
-            body.birth_date || todayStr(),
+            body.birthday || body.birth_date || todayStr(),
             Number(body.room_id || 1),
             body.parent_id ? Number(body.parent_id) : user.id,
-            body.guardian_name || user.name,
-            body.guardian_phone || user.phone || '',
             encryptText(body.allergies || '', env),
-            encryptText(body.medical_notes || '', env),
+            encryptText(body.medical_conditions || body.medical_notes || '', env),
+            encryptText(body.emergency_medication || '', env),
+            encryptText(body.special_needs || '', env),
             encryptText(body.authorized_pickups || '', env),
             nowIso()
           ]
@@ -2428,17 +2453,17 @@ export default {
         const cid = Number(path.split('/')[3]);
         const body = await request.json();
         const day = todayStr();
-        const status = body.status || 'present';
+        const status = body.status === 'present' ? 'present' : 'departed';
         const code = Array.from({ length: 4 }, () => CLAIM_ALPHABET[Math.floor(Math.random() * CLAIM_ALPHABET.length)]).join('');
         if (status === 'present') {
           await db.run(
-            'INSERT INTO attendance(child_id,day,status,in_at,guardian,teacher_id,claim_code) VALUES(?,?,?,?,?,?,?) ON CONFLICT(child_id,day) DO UPDATE SET status=excluded.status, in_at=excluded.in_at, guardian=excluded.guardian, claim_code=coalesce(attendance.claim_code,excluded.claim_code)',
+            "INSERT INTO attendance(child_id,day,status,in_at,guardian,actor,claim_code) VALUES(?,?,?,?,?,?,?) ON CONFLICT(child_id,day) DO UPDATE SET status=excluded.status, in_at=excluded.in_at, guardian=excluded.guardian, claim_code=coalesce(nullif(attendance.claim_code,''),excluded.claim_code)",
             [cid, day, 'present', nowIso(), body.guardian || user.name, user.id, code]
           );
         } else {
           await db.run(
             'UPDATE attendance SET status=?, out_at=?, checkout_guardian=? WHERE child_id=? AND day=?',
-            [status, nowIso(), body.guardian || user.name, cid, day]
+            ['departed', nowIso(), body.guardian || user.name, cid, day]
           );
         }
         return jsonResp({ ok: true, claim_code: code, status });
@@ -2454,13 +2479,13 @@ export default {
         const old = await db.first('SELECT * FROM children WHERE id=?', [cid]);
         if (!old) fail('missing', 'Criança não encontrada.', 404);
         await db.run(
-          'UPDATE children SET name=?, birth_date=?, room_id=?, allergies=?, medical_notes=?, authorized_pickups=? WHERE id=?',
+          'UPDATE children SET name=?, birthday=?, room_id=?, allergies=?, medical_conditions=?, authorized_pickups=? WHERE id=?',
           [
             body.name !== undefined ? String(body.name).trim() : old.name,
-            body.birth_date || old.birth_date,
+            body.birthday || body.birth_date || old.birthday,
             body.room_id ? Number(body.room_id) : old.room_id,
             body.allergies !== undefined ? encryptText(body.allergies, env) : old.allergies,
-            body.medical_notes !== undefined ? encryptText(body.medical_notes, env) : old.medical_notes,
+            (body.medical_conditions ?? body.medical_notes) !== undefined ? encryptText(body.medical_conditions ?? body.medical_notes, env) : old.medical_conditions,
             body.authorized_pickups !== undefined ? encryptText(body.authorized_pickups, env) : old.authorized_pickups,
             cid
           ]
@@ -2471,8 +2496,8 @@ export default {
       if (path === '/api/rooms' && method === 'POST') {
         const body = await request.json();
         const ins = await db.run(
-          'INSERT INTO rooms(name,age_group,min_age,max_age,capacity,color,teacher_id,monitor_id,active) VALUES(?,?,?,?,?,?,?,?,1)',
-          [String(body.name || '').trim(), body.age_group || '', Number(body.min_age || 0), Number(body.max_age || 12), Number(body.capacity || 20), body.color || '#4f46e5', body.teacher_id ? Number(body.teacher_id) : null, body.monitor_id ? Number(body.monitor_id) : null]
+          'INSERT INTO rooms(name,min_age,max_age,capacity,color,created_by,teacher_id,monitor_id,active) VALUES(?,?,?,?,?,?,?,?,1)',
+          [String(body.name || '').trim(), Number(body.min_age || 0), Number(body.max_age || 12), Number(body.capacity || 20), body.color || '#4f46e5', user.id, body.teacher_id ? Number(body.teacher_id) : null, body.monitor_id ? Number(body.monitor_id) : null]
         );
         return jsonResp({ ok: true, id: ins.lastrowid });
       }
@@ -2480,8 +2505,8 @@ export default {
       if (path === '/api/lessons' && method === 'POST') {
         const body = await request.json();
         const ins = await db.run(
-          'INSERT INTO lessons(room_id,title,theme,bible_verse,starts_at,ends_at,teacher_id,monitor_id,notes,active,created_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)',
-          [Number(body.room_id || 1), String(body.title || '').trim(), body.theme || '', body.bible_verse || '', body.starts_at || nowIso(), body.ends_at || nowIso(), body.teacher_id ? Number(body.teacher_id) : user.id, body.monitor_id ? Number(body.monitor_id) : null, body.notes || '', nowIso()]
+          'INSERT INTO lessons(room_id,title,theme,memory_verse,starts_at,ends_at,created_by,teacher_id,monitor_id,notes,active) VALUES(?,?,?,?,?,?,?,?,?,?,1)',
+          [Number(body.room_id || 1), String(body.title || '').trim(), body.theme || '', body.memory_verse || body.bible_verse || '', body.starts_at || nowIso(), body.ends_at || nowIso(), user.id, body.teacher_id ? Number(body.teacher_id) : user.id, body.monitor_id ? Number(body.monitor_id) : null, body.notes || '']
         );
         return jsonResp({ ok: true, id: ins.lastrowid });
       }
@@ -2489,8 +2514,8 @@ export default {
       if (path === '/api/events' && method === 'POST') {
         const body = await request.json();
         const ins = await db.run(
-          'INSERT INTO events(title,category,description,location,starts_at,ends_at,capacity,price_cents,target_audience,active,created_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)',
-          [String(body.title || '').trim(), body.category || 'culto', body.description || '', body.location || 'Templo Lagoinha', body.starts_at || nowIso(), body.ends_at || nowIso(), Number(body.capacity || 100), Number(body.price_cents || 0), body.target_audience || 'Todos', nowIso()]
+          'INSERT INTO events(title,category,description,location,starts_at,ends_at,max_capacity,price,target_audience,active,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,1,?,?)',
+          [String(body.title || '').trim(), body.category || 'culto', body.description || '', body.location || 'Templo Lagoinha', body.starts_at || nowIso(), body.ends_at || nowIso(), Number(body.max_capacity || body.capacity || 100), String(body.price || 'Gratuito'), body.target_audience || 'all', user.id, nowIso()]
         );
         return jsonResp({ ok: true, id: ins.lastrowid });
       }
@@ -2499,8 +2524,8 @@ export default {
         const body = await request.json();
         const code = Array.from({ length: 4 }, () => CLAIM_ALPHABET[Math.floor(Math.random() * CLAIM_ALPHABET.length)]).join('');
         const ins = await db.run(
-          "INSERT INTO guest_checkins(child_name,child_age,guardian_name,guardian_phone,room_id,allergies,notes,claim_code,status,in_at,checked_in_by,created_at) VALUES(?,?,?,?,?,?,?,?,'present',?,?,?)",
-          [String(body.child_name || '').trim(), Number(body.child_age || 5), String(body.guardian_name || '').trim(), String(body.guardian_phone || '').trim(), Number(body.room_id || 1), encryptText(body.allergies || '', env), encryptText(body.notes || '', env), code, nowIso(), user.id, nowIso()]
+          "INSERT INTO guest_checkins(child_name,child_age,guardian_name,guardian_phone,room_id,allergies,claim_code,status,actor,created_at) VALUES(?,?,?,?,?,?,?,'present',?,?)",
+          [String(body.child_name || '').trim(), Number(body.child_age || 5), String(body.guardian_name || '').trim(), String(body.guardian_phone || '').trim(), Number(body.room_id || 1), encryptText(body.allergies || '', env), code, user.id, nowIso()]
         );
         return jsonResp({ ok: true, id: ins.lastrowid, claim_code: code });
       }
