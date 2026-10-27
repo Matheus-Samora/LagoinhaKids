@@ -1,5 +1,6 @@
 import {readApiResponse} from '../api-response.js';
 import {workspaceUI} from './workspace.js';
+import {churchAttendanceUI} from './church-attendance.js';
 import {hasPendingForms} from '../form-lifecycle.js';
 import {deferredRefresh} from './live-refresh.js';
 import {communityHallUI} from './hall.js';
@@ -46,7 +47,7 @@ let csrf='',identity=null,communityData=null,users=[],userSearch='',auditData=nu
 const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=name=>String(name||'L').trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('')||'L';
 
-const WORK_TABS=new Set(['tasks','calendar','account','operations','groups','reception']);
+const WORK_TABS=new Set(['tasks','calendar','account','operations','groups','reception','church-attendance']);
 const AREA_TABS={
  membro:[
   {id:'all',label:'Início',icon:'home'},
@@ -117,6 +118,8 @@ async function api(path,options={}){
 
 const personal=personalDataUI({api,e});
 const operationsUI=workspaceUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
+const churchAttendance=churchAttendanceUI({api,e});
+for(const tabs of Object.values(AREA_TABS))tabs.push({id:'church-attendance',label:'Presença nos cultos',icon:'schedules'});
 const portalHall=communityHallUI({api,e,identity:()=>identity,onProfileSaved:profileSaved});
 const sectors=createSectors({api,e,identity:()=>identity,onProfileSaved:profileSaved,openQrModal:()=>openAppDownloadQrModal()});
 
@@ -569,6 +572,7 @@ async function openPublishAnnouncementModal(){
 }
 
 function render(message=''){
+ void churchAttendance.setUser(identity?.user?.id);
  const selected=location.pathname.split('/')[1]||identity.active_module;
  const module=identity.modules.find(m=>m.id===selected);
  const isMemberPortal=!module&&(selected==='access'||selected==='membro'||!identity.platform_admin);
@@ -689,7 +693,7 @@ function render(message=''){
 
  root.querySelector('[data-gc-search]')?.addEventListener('submit',async event=>{event.preventDefault();const f=event.currentTarget,rows=await api('/workspace/groups/search?q='+encodeURIComponent(f.elements.q.value)+'&day='+encodeURIComponent(f.elements.day.value));const ids=new Set(rows.map(x=>String(x.id)));root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>{card.hidden=!ids.has(card.querySelector('[data-apply-gc]')?.dataset.applyGc);});root.querySelector('[data-gc-results]').textContent=rows.length+' GC(s) encontrado(s).';});
  root.querySelector('[data-gc-search]')?.addEventListener('reset',()=>{root.querySelectorAll('.gc-showcase-grid .gc-banner-card').forEach(card=>card.hidden=false);root.querySelector('[data-gc-results]').textContent='';});
- if(WORK_TABS.has(activeSectionTab)){root.querySelector('.workspace').innerHTML='<div id="work-root"></div>';void operationsUI.mount(root.querySelector('#work-root'),activeSectionTab,areaKey);}
+ if(WORK_TABS.has(activeSectionTab)){root.querySelector('.workspace').innerHTML='<div id="work-root"></div>';if(activeSectionTab==='church-attendance')void churchAttendance.mount(root.querySelector('#work-root'));else void operationsUI.mount(root.querySelector('#work-root'),activeSectionTab,areaKey);}
  if(isMemberPortal&&activeSectionTab==='hall'&&canHall)void portalHall.mount(root.querySelector('#member-hall-root'));
  if(!WORK_TABS.has(activeSectionTab)&&module?.enabled&&module.id!=='kids'){if(personalOnly)void personal.mount(root.querySelector('#sector-content'),module.id);else void sectors.mount(module,activeSectionTab);}
 
@@ -792,7 +796,7 @@ function render(message=''){
  };
  bindPushBtn(root.querySelector('#enable-push'));
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
- const handleLogout=async()=>{try{realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
+ const handleLogout=async()=>{try{churchAttendance.stop();realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
  root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());

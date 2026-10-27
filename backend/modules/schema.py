@@ -180,3 +180,5 @@ def migrate(c):
 
     from ..evolution_schema import migrate as evolve
     evolve(c)
+    from ..church_attendance_schema import migrate as church_attendance
+    church_attendance(c)

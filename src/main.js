@@ -1,4 +1,5 @@
 import {readApiResponse} from './api-response.js';
+import {churchAttendanceUI} from './platform/church-attendance.js';
 import {hasPendingForms} from './form-lifecycle.js';
 import {accountProfileUI} from './account-profile.js';
 import {realtime} from './platform/realtime.js';
@@ -61,6 +62,7 @@ async function api(path,options={}){
  if(response.status===401 && S.user){S.user=null;renderLogin();}
  return readApiResponse(response,{method:options.method||'GET'});
 }
+const churchPresence=churchAttendanceUI({api,e:x=>escape(x)});
 function getSavedAccounts(){try{localStorage.removeItem('kids_saved_accounts');}catch{}return [];}
 
 function saveAccount(){try{localStorage.removeItem('kids_saved_accounts');}catch{}}
@@ -82,6 +84,7 @@ function authBrand(){
 }
 function brand(){return `<div class="brand"><img src="/logo.png" alt="Logo Lagoinha"/><div>Lagoinha <strong>Kids</strong><small>${t('brand.kids_tagline', 'CUIDADO QUE CONECTA')}</small></div></div>`;}
 function renderLogin(register=false,prefillEmail=''){
+ churchPresence.stop();
  const saved=getSavedAccounts();
  const savedSection=(!register&&saved.length)?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos neste dispositivo</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="${escape(a.email)}"><span class="avatar mini">${initials(a.name||a.email)}</span><div class="saved-account-text"><strong>${escape(a.name||a.email)}</strong><small>${escape(roles[a.role]||a.role||'Acesso')}</small></div></button><button type="button" class="saved-account-del" data-action="remove-saved" data-email="${escape(a.email)}" title="Remover conta deste aparelho" aria-label="Remover">✕</button></div>`).join('')}</div></div>`:'';
  const demoSection='';
@@ -101,6 +104,7 @@ async function familyModal(ch){
 }
 async function historyModal(ch){const rows=await api(`/children/${ch.id}/history`);showModal('Histórico',escape(ch.name),rows.length?rows.map(r=>`<article class="history-entry"><strong>${r.action==='in'?'Entrada':'Saída'} · ${new Date(r.created_at).toLocaleString('pt-BR')}</strong><p>${escape(r.guardian_name)}</p></article>`).join(''):'<p>Ainda não há registros de chegada e saída.</p>');}
 async function load(){
+ void churchPresence.setUser(S.user?.id);
  const [children,rooms,notifications,lessons,events,activePaging,users,audit,activeGuests,teamData,platform]=await Promise.all([
   api('/children'),
   api('/rooms'),

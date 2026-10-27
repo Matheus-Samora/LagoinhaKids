@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
         realtime_broker.start_postgres_listener()
     yield
 
-app=FastAPI(title='Lagoinha Systems',version='3.2.0',lifespan=lifespan)
+app=FastAPI(title='Lagoinha Systems',version='3.3.0',lifespan=lifespan)
 
 from psycopg import OperationalError as PostgresOperationalError
 
@@ -907,6 +907,8 @@ from .evolution import router as evolution_router
 app.include_router(evolution_router)
 from .scheduled_jobs import router as scheduled_jobs_router
 app.include_router(scheduled_jobs_router)
+from .church_attendance import router as church_attendance_router
+app.include_router(church_attendance_router)
 
 
 

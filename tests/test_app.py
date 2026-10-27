@@ -16,6 +16,8 @@ def records(monkeypatch):
     monkeypatch.delenv('KIDS_WEB_PUSH_PRIVATE_KEY',raising=False)
     monkeypatch.delenv('KIDS_WEB_PUSH_KEY_PATH',raising=False)
     with s.db() as c:
+        c.execute('DELETE FROM church_presences')
+        c.execute('DELETE FROM church_services')
         for table in ['service_templates','hall_reports','hall_reactions','hall_comments','hall_posts','notification_deliveries','notification_preferences','whatsapp_dispatches','whatsapp_settings','platform_announcements','module_changes','sector_applications','finance_service_closings','finance_invoices','finance_entries','finance_cost_centers','finance_accounts','finance_files','ministries_schedules','ministries_resources','ministries_assignments','members_self_registrations','members_people','members_families','members_cells','module_scopes','module_access','pastoral_users','platform_admins','media','web_subscriptions','paging_requests','guest_checkins','event_registrations','events','mfa_recovery','outbox','attendance_events','family_links','family_invites','waitlist','auth_tokens','terms_consents','device_tokens','reservations','lessons','audit','notifications','attendance','children','teacher_rooms','rooms','sessions','attempts','oauth','users']:
             c.execute(f'DELETE FROM {table}')
         for uid,role in [(1,'admin'),(2,'teacher'),(3,'parent'),(4,'parent')]:
