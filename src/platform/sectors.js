@@ -649,10 +649,22 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
 
  const opt=(rows,currentId,currentLabel)=>{const list=options(rows||[]);if(currentId&&!list.some(([v])=>v===currentId))list.push([currentId,currentLabel||'Vínculo atual']);return list;};
 
- async function openWorshipScaleModal(){
+ async function openWorshipScaleModal(preset=null){
   directory=await api('/ministries/people');
   const musicAssignments=(data.assignments||[]).filter(a=>a.ministry==='Music');
   const dialog=host.querySelector('dialog');
+   const templates=data.service_templates||[];
+   const activeOccurrences=(data.service_occurrences||[]).filter(o=>!o.is_hidden);
+   const firstOcc=activeOccurrences[0];
+   const initialTitle=preset?.title||(firstOcc?firstOcc.title:(templates[0]?.title||'Culto de Celebração'));
+   const initialDate=preset?.service_date||(firstOcc?firstOcc.date:today());
+   const initialTime=preset?.service_time||(firstOcc?firstOcc.time:(templates[0]?.service_time||'19:00'));
+   const occurrenceOptions=activeOccurrences.map(o=>[
+    `${o.date}|${o.time}|${encodeURIComponent(o.title)}`,
+    `📅 ${o.title} — ${date(o.date)} (${o.weekday_name}) às ${o.time}`
+   ]);
+   const matchingOccVal=activeOccurrences.find(o=>o.date===initialDate&&o.title===initialTitle);
+   const currentOccKey=matchingOccVal?`${matchingOccVal.date}|${matchingOccVal.time}|${encodeURIComponent(matchingOccVal.title)}`:'';
 
   const CORE_LINEUP=[
    {role:'Ministrante',capacity:1,label:'Ministrante',hint:'1 vaga',tag:'Voz'},
@@ -711,11 +723,16 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     ${button('close','Fechar','class="secondary"')}
    </div>
    <form class="record-form" id="worship-scale-form">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-     ${field('title','Culto','Culto de Celebração','text',true)}
-     ${field('service_date','Data',today(),'date',true,null,true)}
-     ${field('service_time','Horário','18:00','text',true,[['09:00','09:00'],['10:00','10:00'],['17:00','17:00'],['18:00','18:00'],['19:30','19:30'],['20:00','20:00']])}
-    </div>
+     ${occurrenceOptions.length?`
+      <div style="margin-bottom:12px;">
+       ${field('preset_occurrence','Culto da programação oficial (preenchimento automático)',currentOccKey,'text',false,[['','Selecionar culto da programação oficial...'],...occurrenceOptions])}
+      </div>
+     `:''}
+     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+      ${field('title','Culto',initialTitle,'text',true,templates.length?templates.map(t=>[t.title,t.title]):[['Culto de Celebração','Culto de Celebração']])}
+      ${field('service_date','Data',initialDate,'date',true,null,true)}
+      ${field('service_time','Horário',initialTime,'time',true)}
+     </div>
     ${field('repertoire_notes','Repertório / Tons (opcional)','','text',false)}
 
     <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
@@ -769,6 +786,27 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
 
   const lifecycle=guardForm(dialog.querySelector('form'),dialog);
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
+   const worshipForm=dialog.querySelector('#worship-scale-form');
+   worshipForm.querySelector('[name=preset_occurrence]')?.addEventListener('change',event=>{
+    const val=event.target.value;if(!val)return;
+    const parts=val.split('|');
+    const occDate=parts[0], occTime=parts[1], occTitle=decodeURIComponent(parts[2]||'');
+    if(occTitle&&worshipForm.elements.title)worshipForm.elements.title.value=occTitle;
+    if(occDate&&worshipForm.elements.service_date)worshipForm.elements.service_date.value=occDate;
+    if(occTime&&worshipForm.elements.service_time)worshipForm.elements.service_time.value=occTime;
+   });
+   worshipForm.querySelector('[name=title]')?.addEventListener('change',event=>{
+    const chosenTitle=event.target.value;
+    const matchedTemplate=templates.find(t=>t.title===chosenTitle);
+    if(matchedTemplate&&worshipForm.elements.service_time){
+     worshipForm.elements.service_time.value=matchedTemplate.service_time;
+    }
+    const nextOcc=activeOccurrences.find(o=>o.title===chosenTitle);
+    if(nextOcc){
+     if(worshipForm.elements.service_date)worshipForm.elements.service_date.value=nextOcc.date;
+     if(worshipForm.elements.preset_occurrence)worshipForm.elements.preset_occurrence.value=`${nextOcc.date}|${nextOcc.time}|${encodeURIComponent(nextOcc.title)}`;
+    }
+   });
   dialog.querySelector('#worship-scale-form').onsubmit=async ev=>{
    ev.preventDefault();if(lifecycle.busy)return;lifecycle.setBusy(true);
    const f=ev.currentTarget,b=f.querySelector('button[type=submit]');
@@ -1151,7 +1189,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    if(b.dataset.sectorAction==='clear'){query='';ministryFilter='';cellFilter='';await refresh();return;}
    if(b.dataset.sectorAction==='self-reg-modal'){openSelfRegModal();return;}
    if(b.dataset.sectorAction==='worship-scale-modal'){await openWorshipScaleModal();return;}
-    if(b.dataset.sectorAction==='scale-service-occurrence'){await form('schedules',{title:b.dataset.serviceTitle,service_date:b.dataset.serviceDate,service_time:b.dataset.serviceTime,duration_minutes:Number(b.dataset.serviceDuration||90),ministry:b.dataset.ministry||ministryFilter},b.dataset.ministry||ministryFilter);return;}
+    if(b.dataset.sectorAction==='scale-service-occurrence'){if(ministryFilter==='Music'||b.dataset.ministry==='Music'){await openWorshipScaleModal({title:b.dataset.serviceTitle,service_date:b.dataset.serviceDate,service_time:b.dataset.serviceTime});return;}await form('schedules',{title:b.dataset.serviceTitle,service_date:b.dataset.serviceDate,service_time:b.dataset.serviceTime,duration_minutes:Number(b.dataset.serviceDuration||90),ministry:b.dataset.ministry||ministryFilter},b.dataset.ministry||ministryFilter);return;}
    if(b.dataset.sectorAction==='worship-member-modal'){await form('assignments',null,'Music');return;}
    if(b.dataset.sectorAction==='finance-report-modal'){openFinanceReportModal();return;}
    if(b.dataset.sectorAction==='member-doc'){
