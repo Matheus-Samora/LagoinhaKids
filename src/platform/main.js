@@ -364,8 +364,9 @@ function memberCommunityPortal(tab='all'){
       <p class="gc-banner-address">${e(gc.address||gc.neighborhood||'')}</p>
       <div class="gc-banner-meta">
        <span>${e(gc.leader_name||'Liderança')}</span>
-       <span>${gc.member_count||0} membro(s)</span>
+       <span>${gc.member_count||(gc.members||[]).length||0} membro(s)</span>
       </div>
+      ${(gc.members&&gc.members.length)?`<div style="margin:6px 0 8px;padding-top:6px;border-top:1px solid var(--line,#e4e4e7);font-size:11.5px;"><strong style="display:block;margin-bottom:3px;color:var(--muted,#52525b);">Integrantes:</strong><div style="display:flex;flex-wrap:wrap;gap:4px;">${gc.members.slice(0,6).map(mb=>`<span class="badge" style="font-size:10.5px;">${e(mb.name)}</span>`).join('')}${gc.members.length>6?`<span class="badge" style="font-size:10.5px;">+${gc.members.length-6}</span>`:''}</div></div>`:''}
       <button type="button" class="${alreadyPending?'secondary':''}" data-apply-gc="${e(gc.id)}" data-gc-name="${e(gc.name)}" data-gc-addr="${e(gc.address||gc.neighborhood||'')}" data-gc-banner="${e(banner)}">
        ${alreadyPending?'⏳ Solicitação enviada':'Participar'}
       </button>
@@ -400,6 +401,7 @@ function memberCommunityPortal(tab='all'){
       <div class="ministry-role-pills">
        ${(meta.roles||[]).slice(0,3).map(r=>`<span class="card-tag">${e(r)}</span>`).join('')}
       </div>
+      ${(m.members&&m.members.length)?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--line,#e4e4e7);font-size:11.5px;"><strong style="display:block;margin-bottom:3px;color:var(--muted,#52525b);">Equipe (${m.members.length}):</strong><div style="display:flex;flex-wrap:wrap;gap:4px;">${m.members.slice(0,6).map(mb=>`<span class="badge" style="font-size:10.5px;">${e(mb.person_name||mb.name)}${mb.is_leader?' ⭐':''}</span>`).join('')}${m.members.length>6?`<span class="badge" style="font-size:10.5px;">+${m.members.length-6}</span>`:''}</div></div>`:''}
      </div>
      <button type="button" class="${alreadyPending?'secondary':''}" data-apply-ministry="${e(m.name)}" data-ministry-banner="${e(banner||'')}">
       ${alreadyPending?'⏳ Enviado':'Candidatar-se'}

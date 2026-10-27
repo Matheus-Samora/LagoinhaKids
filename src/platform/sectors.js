@@ -7,7 +7,7 @@ import {t, translateDOM} from './i18n.js';
 
 export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileSaved}){
  const hall=communityHallUI({api,e,identity,onProfileSaved});
- let key='',data={},directory=[],query='',ministryFilter='',activeTab='all',generation=0,host,peoplePage=1;
+ let key='',data={},directory=[],query='',ministryFilter='',cellFilter='',activeTab='all',generation=0,host,peoplePage=1;
  const cash=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
  const date=v=>v?v.slice(0,10).split('-').reverse().join('/'):'—';
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
@@ -226,10 +226,17 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   return `<section class="panel sector-section">
    <div class="section-title">
     <h2>GCs Ativos (${cells.length})</h2>
-    ${edit()?button('new','+ Adicionar GC','data-kind="cells"'):''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+     ${cellFilter?button('filter-cell','Mostrar todos os GCs','data-cell="" class="secondary"'):''}
+     ${edit()?button('new','+ Adicionar GC','data-kind="cells"'):''}
+    </div>
    </div>
    <div class="gc-showcase-grid">
-    ${cells.map(gc=>`<article class="gc-banner-card">
+    ${cells.map(gc=>{
+     const gcMembers=gc.members||(data.people||[]).filter(p=>p.cell_id===gc.id);
+     const count=gc.member_count??gcMembers.length;
+     const isFiltered=cellFilter===gc.id;
+     return `<article class="gc-banner-card" style="${isFiltered?'outline:2px solid #0f766e;':''}">
      <div class="gc-banner-media">
       <img src="${e(gc.banner_url||'/gc/gc-ide.webp')}" alt="${e(gc.name)}" loading="lazy"/>
       <span class="gc-day-pill">${e(gc.meeting_day||'Terça-feira | 19h30')}</span>
@@ -242,11 +249,22 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
       <p class="gc-banner-address">${e(gc.address||gc.neighborhood||'Endereço a definir')}</p>
       <div class="gc-banner-meta">
        <span>${e(gc.leader_name||'Liderança GC')}</span>
-       <span>${gc.member_count||0} membro(s)</span>
+       <span>${count} membro(s)</span>
       </div>
-      ${edit()?`<div style="display:flex;gap:8px;margin-top:6px;">${button('edit','Editar',`class="secondary" data-kind="cells" data-id="${e(gc.id)}" style="width:100%;min-height:36px;font-size:12.5px;"`)}</div>`:''}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border,#e4e4e7);font-size:12px;">
+       <strong style="display:block;margin-bottom:4px;color:var(--muted,#52525b);">Membros vinculados (${gcMembers.length}):</strong>
+       ${gcMembers.length
+        ?`<div style="display:flex;flex-wrap:wrap;gap:4px;">${gcMembers.slice(0,8).map(m=>`<span class="badge" style="font-size:11px;">${e(m.name)}</span>`).join('')}${gcMembers.length>8?`<span class="badge" style="font-size:11px;">+${gcMembers.length-8}</span>`:''}</div>`
+        :`<span class="subtle" style="font-size:11.5px;">Nenhum membro vinculado ainda.</span>`}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+       ${button('filter-cell',isFiltered?'Ocultar filtro':'Ver membros',`class="secondary" data-cell="${e(gc.id)}" style="flex:1;min-height:34px;font-size:12px;"`)}
+       ${edit()?button('assign-gc-member','+ Vincular',`class="secondary" data-cell="${e(gc.id)}" style="flex:1;min-height:34px;font-size:12px;"`):''}
+       ${edit()?button('edit','Editar',`class="secondary" data-kind="cells" data-id="${e(gc.id)}" style="min-height:34px;font-size:12px;"`):''}
+      </div>
      </div>
-    </article>`).join('')}
+    </article>`;
+    }).join('')}
    </div>
   </section>`;
  }
@@ -351,7 +369,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    </div>
    <div class="ministry-grid-cards ministry-counts">
     ${(data.catalog||[]).map(m=>{
-     const total=data.counts.find(c=>c.ministry===m)?.total||0;
+     const minMembers=(data.assignments||[]).filter(a=>a.ministry===m);
+     const total=data.counts.find(c=>c.ministry===m)?.total||minMembers.length||0;
      const activeClass=ministryFilter===m?'active':'';
      return `<button type="button" class="ministry-card-btn ${activeClass}" data-sector-action="filter-ministry" data-ministry="${e(m)}">
       <div class="ministry-card-top">
@@ -359,6 +378,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
        <span class="ministry-count-pill badge">${total}</span>
       </div>
       <strong class="ministry-card-name">${e(m)}</strong>
+      ${minMembers.length?`<small style="display:block;font-size:11px;color:var(--muted,#71717a);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${minMembers.slice(0,3).map(x=>e(x.person_name)).join(', ')}${minMembers.length>3?` +${minMembers.length-3}`:''}</small>`:'<small style="display:block;font-size:11px;color:var(--muted,#a1a1aa);margin-top:4px;">Sem vinculados</small>'}
      </button>`;
     }).join('')}
    </div>
@@ -413,7 +433,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
  }
 
  function row(kind,r){
-  if(kind==='cells')return `<td><strong>${e(r.name)}</strong><small>${e(r.address||r.neighborhood||'—')}</small></td><td>${e(r.leader_name||'Liderança GC')}<small>${e(r.meeting_day||'')}</small></td><td><span class="badge">${r.member_count||0} membro(s)</span></td>`;
+  if(kind==='cells'){const gcMembers=r.members||(data.people||[]).filter(p=>p.cell_id===r.id);const memberNames=gcMembers.length?gcMembers.map(m=>e(m.name)).join(', '):'Nenhum membro vinculado';return `<td><strong>${e(r.name)}</strong><small>${e(r.address||r.neighborhood||'—')}</small></td><td>${e(r.leader_name||'Liderança GC')}<small>${e(r.meeting_day||'')}</small></td><td><span class="badge">${r.member_count??gcMembers.length} membro(s)</span><small style="display:block;margin-top:4px;">${memberNames}</small></td>`;}
   if(kind==='families')return `<td><strong>${e(r.name)}</strong><small>${e(r.neighborhood||'')}</small></td><td><span class="badge">${r.member_count} integrante(s)</span>${r.cell_name?`<small>GC: ${e(r.cell_name)}</small>`:''}</td><td>${date(r.joined_on)}</td>`;
   if(kind==='people'){
       if(r.profile_restricted)return `<td><strong>${e(r.name)}</strong></td><td>—</td><td>—</td>`;
@@ -438,6 +458,9 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(['assignments','schedules','resources'].includes(kind)&&ministryFilter){
    rows=rows.filter(r=>r.ministry===ministryFilter);
   }
+  if(kind==='people'&&cellFilter){
+   rows=rows.filter(r=>r.cell_id===cellFilter);
+  }
   return rows;
  }
 
@@ -456,19 +479,26 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    entries:['Lançamento','Data / Status','Valor'],
    invoices:['Nota / Fornecedor','Emissão','Valor']
   }[kind];
-  const filterSuffix=['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'';
-  const pager=kind==='people'?`<div class="work-actions">${data.page>1?button('people-prev','Anterior'):''}<span>Página ${data.page||1}</span>${data.has_more?button('people-next','Próxima'):''}</div>`:'';
-  return `<section class="panel sector-section" id="section-${kind}">${pager}<div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2>${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'&&!r.profile_restricted?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button success-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):(kind==='schedules'&&r.person_id===data.my_person_id?'':'<span>Consulta</span>')}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
+  const cellObj=cellFilter?(data.cells||[]).find(c=>c.id===cellFilter):null;
+  const filterSuffix=(['assignments','schedules','resources'].includes(kind)&&ministryFilter?` · ${e(ministryFilter)}`:'')+(kind==='people'&&cellObj?` · ${e(cellObj.name)}`:'');
+  const pager=kind==='people'&&!cellFilter?`<div class="work-actions">${data.page>1?button('people-prev','Anterior'):''}<span>Página ${data.page||1}</span>${data.has_more?button('people-next','Próxima'):''}</div>`:'';
+  return `<section class="panel sector-section" id="section-${kind}">${pager}<div class="section-title"><h2>${uiIcon(kind,20)}${labels[kind]}${filterSuffix}</h2><div style="display:flex;gap:8px;">${kind==='people'&&cellFilter?button('filter-cell','Mostrar todos','data-cell="" class="secondary"'):''}${edit()?button('new','+ Adicionar',`data-kind="${kind}"`):''}</div></div>${rows.length?`<div class="sector-table"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>${row(kind,r)}<td class="row-buttons">${kind==='people'&&!r.profile_restricted?button('member-doc','Credencial',`class="secondary" data-id="${e(r.id)}"`):''}${kind==='entries'&&r.payment_status==='pending'&&edit()?button('settle','Baixar',`data-id="${e(r.id)}"`):''}${kind==='schedules'&&r.person_id===data.my_person_id?`<span class="schedule-quick-actions" style="display:inline-flex;gap:4px;margin-right:4px;">${r.status!=='confirmed'?`<button type="button" class="mini-button success-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="confirmed" title="Confirmar presença">✓ Confirmar</button>`:''}${r.status!=='declined'?`<button type="button" class="mini-button danger-button" data-sector-action="respond-schedule" data-respond-schedule="${e(r.id)}" data-status="declined" title="Informar indisponibilidade">✕ Indisponível</button>`:''}</span>`:''}${edit()||(kind==='people'&&r.id===data.my_person_id)?button('edit',r.id===data.my_person_id?'Meus dados':'Editar',`data-kind="${kind}" data-id="${e(r.id)}"`):(kind==='schedules'&&r.person_id===data.my_person_id?'':'<span>Consulta</span>')}${canArchive()?button('archive','Arquivar',`data-kind="${kind}" data-id="${e(r.id)}"`):''}${key==='finance'&&canArchive()&&['accounts','entries','invoices'].includes(kind)?button('history','Histórico',`data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty"><h3>Nenhum registro</h3></div>`}</section>`;
  }
 
  function paint(message=''){
   const allKinds=key==='members'?['people','families','cells']:key==='ministries'?['schedules','assignments','resources']:['entries','closings','accounts','cost-centers','invoices'];
   const isHallTab=key==='members'&&activeTab==='hall';
   if(isHallTab){host.innerHTML='<div data-hall-root></div>';void hall.mount(host.querySelector('[data-hall-root]'));return;}
-  const visibleKinds=activeTab==='all'?[]:activeTab==='worship'?['schedules']:allKinds.filter(k=>k===activeTab);
+  const visibleKinds=activeTab==='all'
+   ?(key==='ministries'?(ministryFilter?['assignments','schedules','resources']:['assignments','schedules']):key==='members'?(cellFilter?['people','cells']:['people','cells','families']):[])
+   :activeTab==='worship'
+   ?['schedules']
+   :key==='members'&&activeTab==='cells'&&cellFilter
+   ?['people','cells']
+   :allKinds.filter(k=>k===activeTab);
   const showSummary=activeTab==='all';
   const showWorshipOnly=key==='ministries'&&activeTab==='worship';
-  const showGcCards=key==='members'&&activeTab==='cells';
+  const showGcCards=key==='members'&&(activeTab==='cells'||activeTab==='all');
 
   host.innerHTML=`<div class="page-enter"><p role="status" class="status">${e(message)}</p>${heroBanner()}${showSummary?`${selfRegistrationsPanel()}${summary()}<section class="panel"><h2>Continuar</h2><div class="work-actions">${allKinds.map(kind=>`<a class="button secondary" href="/${key}#${kind}">${labels[kind]}</a>`).join('')}</div>${key==='finance'&&!data.accounts?.length?'<p>Comece criando uma conta. Depois cadastre um centro de custo e seu primeiro lançamento para conferir o saldo.</p>':''}</section>`:''}${showWorshipOnly?worshipScalePanel():''}${showGcCards?gcCardsShowcase():''}<form class="sector-search" ${showSummary?'hidden':''}><label>Buscar<input name="q" value="${e(query)}" maxlength="100" placeholder="${isHallTab?'Buscar no Hall de Membros...':'Pesquisar...'}"></label><button>Buscar</button>${button('clear','Limpar','class="secondary"')}</form>${visibleKinds.map(section).join('')}<dialog id="sector-dialog"><div class="sector-modal"></div></dialog></div>`;
   host.querySelector('.sector-search').onsubmit=event=>{event.preventDefault();query=new FormData(event.currentTarget).get('q');peoplePage=1;void refresh();};
@@ -488,7 +518,35 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   }catch(err){if(n===generation)host.innerHTML=`<div class="panel"><p role="alert">${message?'Registro salvo. Não foi possível atualizar a lista. ':''}${e(err.message)}</p>${button('retry','Tentar novamente')}</div>`;host.querySelector('[data-sector-action="retry"]')?.addEventListener('click',()=>void refresh());}finally{if(n===generation&&host===loadingTarget){host.inert=false;host.setAttribute('aria-busy','false');}}
  }
 
- async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';peoplePage=1;if(host)await refresh();}
+ async function mount(module,initialTab='all'){key=module.id;activeTab=initialTab||'all';host=document.getElementById('sector-content');query='';ministryFilter='';cellFilter='';peoplePage=1;if(host)await refresh();}
+
+ async function openAssignGcMemberModal(targetCellId){
+  const cell=(data.cells||[]).find(c=>c.id===targetCellId);
+  if(!cell)return;
+  directory=await api('/ministries/people');
+  const dialog=host.querySelector('dialog');
+  dialog.querySelector('.sector-modal').innerHTML=`
+   <div class="section-title"><h2>Vincular Membro · ${e(cell.name)}</h2>${button('close','Fechar','class="secondary"')}</div>
+   <form class="record-form" id="assign-gc-member-form">
+    ${field('person_id','Selecione o membro','','text',true,opt(directory))}
+    <p class="error" role="alert"></p>
+    <button type="submit">Vincular ao GC</button>
+   </form>`;
+  const lifecycle=guardForm(dialog.querySelector('form'),dialog);
+  dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
+  dialog.querySelector('#assign-gc-member-form').onsubmit=async ev=>{
+   ev.preventDefault();if(lifecycle.busy)return;lifecycle.setBusy(true);
+   const f=ev.currentTarget,b=f.querySelector('button[type=submit]');b.disabled=true;
+   try{
+    const pid=new FormData(f).get('person_id');
+    const existing=(data.people||[]).find(p=>p.id===pid)||{};
+    await api('/members/people/'+pid,{method:'PUT',body:{...existing,name:existing.name||directory.find(d=>d.id===pid)?.name||'Membro',cell_id:targetCellId}});
+    lifecycle.complete();dialog.close();
+    await refresh('Membro vinculado ao GC com sucesso!');
+   }catch(err){f.querySelector('.error').textContent=err.message;}finally{lifecycle.setBusy(false);b.disabled=false;}
+  };
+  dialog.showModal();
+ }
 
  function setTab(tab){
   activeTab=tab||'all';
@@ -1003,8 +1061,10 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    const r=list.find(x=>x.id===b.dataset.id);
    if(b.dataset.sectorAction==='open-qr'){if(openQrModal)openQrModal();return;}
    if(b.dataset.sectorAction==='filter-ministry'){ministryFilter=ministryFilter===b.dataset.ministry?'':b.dataset.ministry;paint();return;}
+   if(b.dataset.sectorAction==='filter-cell'){cellFilter=cellFilter===b.dataset.cell?'':b.dataset.cell;paint();return;}
+   if(b.dataset.sectorAction==='assign-gc-member'){await openAssignGcMemberModal(b.dataset.cell);return;}
    if(b.dataset.sectorAction==='people-next'||b.dataset.sectorAction==='people-prev'){peoplePage+=b.dataset.sectorAction==='people-next'?1:-1;await refresh();return;}
-   if(b.dataset.sectorAction==='clear'){query='';ministryFilter='';await refresh();return;}
+   if(b.dataset.sectorAction==='clear'){query='';ministryFilter='';cellFilter='';await refresh();return;}
    if(b.dataset.sectorAction==='self-reg-modal'){openSelfRegModal();return;}
    if(b.dataset.sectorAction==='worship-scale-modal'){await openWorshipScaleModal();return;}
    if(b.dataset.sectorAction==='worship-member-modal'){await form('assignments',null,'Music');return;}
