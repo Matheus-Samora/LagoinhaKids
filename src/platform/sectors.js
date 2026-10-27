@@ -349,6 +349,25 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    </div></details>`;
   }
 
+  function ministryMembersShowcase(){
+   const filter=ministryFilter;
+   const allAssignments=data.assignments||[];
+   const filtered=filter?allAssignments.filter(a=>a.ministry===filter):allAssignments;
+   const title=filter?`Membros do Ministério · ${filter} (${filtered.length})`:`Membros Vinculados aos Ministérios (${allAssignments.length})`;
+
+   return `<section class="panel sector-section ministry-members-panel" id="ministry-members-showcase" style="margin-top:20px;">
+    <div class="section-title">
+     <h2>${uiIcon('assignments',22)} ${e(title)}</h2>
+     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${filter?button('filter-ministry','Mostrar todos os ministérios','data-ministry="" class="secondary"'):''}
+      ${edit()?button('new','+ Vincular membro',`data-kind="assignments" data-preset-ministry="${e(filter)}"`):''}
+     </div>
+    </div>
+    ${filter?`<p class="subtle" style="margin:-4px 0 14px;font-size:13px;">Exibindo voluntários e líderes atuantes no ministério <strong>${e(filter)}</strong>.</p>`:`<p class="subtle" style="margin:-4px 0 14px;font-size:13px;">Selecione um ministério nos filtros acima para visualizar os membros de cada área.</p>`}
+    ${filtered.length?`<div class="sector-table"><table><thead><tr><th>Membro</th><th>Ministério / Função</th><th>Papel</th><th>Ações</th></tr></thead><tbody>${filtered.map(r=>`<tr><td><strong>${e(r.person_name)}</strong>${r.person_phone?`<small style="display:block;color:var(--muted,#71717a);font-size:11.5px;">${e(r.person_phone)}</small>`:''}</td><td><span class="badge">${e(r.ministry)}</span>${r.position?`<small style="display:block;margin-top:2px;">${e(r.position)}</small>`:''}</td><td><span class="badge" style="${r.is_leader?'background:#09090b;color:#fff;':'background:#f4f4f5;color:#27272a;'}">${r.is_leader?'⭐ Líder':'Voluntário'}</span></td><td class="row-buttons">${edit()?button('edit','Editar',`data-kind="assignments" data-id="${e(r.id)}"`):''}${canArchive()?button('archive','Desvincular',`data-kind="assignments" data-id="${e(r.id)}"`):''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="sector-empty" style="padding:28px 16px;text-align:center;"><p style="margin:0 0 12px;color:var(--muted,#71717a);font-size:13.5px;">${filter?`Nenhum membro vinculado ao ministério <strong>${e(filter)}</strong> no momento.`:'Nenhum membro vinculado cadastrado.'}</p>${edit()?`<button type="button" class="primary" data-sector-action="new" data-kind="assignments" data-preset-ministry="${e(filter)}">+ Vincular primeiro membro</button>`:''}</div>`}
+   </section>`;
+  }
+
   if(key==='ministries'){
    const assignments=data.assignments||[];
    const schedules=data.schedules||[];
@@ -372,16 +391,16 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
      const minMembers=(data.assignments||[]).filter(a=>a.ministry===m);
      const total=data.counts.find(c=>c.ministry===m)?.total||minMembers.length||0;
      const activeClass=ministryFilter===m?'active':'';
-     return `<button type="button" class="ministry-card-btn ${activeClass}" data-sector-action="filter-ministry" data-ministry="${e(m)}">
+     return `<button type="button" class="ministry-card-btn ${activeClass}" data-sector-action="filter-ministry" data-ministry="${e(m)}" title="Filtrar por ${e(m)}">
       <div class="ministry-card-top">
        ${ministryEmblem(m)}
        <span class="ministry-count-pill badge">${total}</span>
       </div>
       <strong class="ministry-card-name">${e(m)}</strong>
-      ${minMembers.length?`<small style="display:block;font-size:11px;color:var(--muted,#71717a);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${minMembers.slice(0,3).map(x=>e(x.person_name)).join(', ')}${minMembers.length>3?` +${minMembers.length-3}`:''}</small>`:'<small style="display:block;font-size:11px;color:var(--muted,#a1a1aa);margin-top:4px;">Sem vinculados</small>'}
      </button>`;
     }).join('')}
    </div>
+   ${ministryMembersShowcase()}
    ${worshipScalePanel()}`;
   }
 
@@ -490,7 +509,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   const isHallTab=key==='members'&&activeTab==='hall';
   if(isHallTab){host.innerHTML='<div data-hall-root></div>';void hall.mount(host.querySelector('[data-hall-root]'));return;}
   const visibleKinds=activeTab==='all'
-   ?(key==='ministries'?(ministryFilter?['assignments','schedules','resources']:['assignments','schedules']):key==='members'?(cellFilter?['people','cells']:['people','cells','families']):[])
+   ?(key==='ministries'?(ministryFilter?['schedules','resources']:['schedules']):key==='members'?(cellFilter?['people','cells']:['people','cells','families']):[])
    :activeTab==='worship'
    ?['schedules']
    :key==='members'&&activeTab==='cells'&&cellFilter
@@ -1119,7 +1138,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     await refresh('Lançamento liquidado!');
     return;
    }
-   if(b.dataset.sectorAction==='new')await form(kind);
+   if(b.dataset.sectorAction==='new')await form(kind,null,b.dataset.presetMinistry||ministryFilter);
    if(b.dataset.sectorAction==='edit')await form(kind,r);
    if(b.dataset.sectorAction==='archive'){
     if(!confirm('Arquivar este registro?'))return;

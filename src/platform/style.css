@@ -1310,14 +1310,15 @@ header.platform-topbar {
   color: #09090b;
   border: 1.5px solid #e4e4e7;
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
   text-align: left;
   cursor: pointer;
-  min-height: 92px;
+  min-height: 82px;
   transition: all 0.18s ease;
 }
 
