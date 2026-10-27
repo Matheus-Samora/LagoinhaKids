@@ -2141,7 +2141,7 @@ export default {
           const rid = randomBytes(16).toString('hex');
           await db.run(
             'INSERT INTO ministries_resources(id,ministry,title,category,notes,resource_url,active,version,created_at,created_by) VALUES(?,?,?,?,?,?,1,1,?,?)',
-            [rid, 'Music', `${body.title || 'Culto'} (${body.service_date})`, 'repertorio', encryptText(body.repertoire_notes, env), '', nowIso(), user.id]
+            [rid, 'Music', `${body.title || 'Culto'} (${body.service_date})`, 'repertorio', encryptText(body.repertoire_notes, env), body.resource_url || '', nowIso(), user.id]
           );
         }
         return jsonResp({ ok: true, created: ids.length, schedule_ids: ids });

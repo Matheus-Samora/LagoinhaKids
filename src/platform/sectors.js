@@ -199,21 +199,56 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    ${services.length?`
     <h3 style="margin:16px 0 10px;font-size:14.5px;">Próximas Escalas (${services.length})</h3>
     <div class="worship-services-grid">
-     ${services.map(srv=>`<article class="worship-service-card">
-      <div class="worship-service-head">
-       <div>
-        <strong>${e(srv.title)}</strong>
-        <small>${date(srv.date)} às ${e(srv.time)}</small>
+     ${services.map(srv=>{
+      const srvRepertoire=(data.resources||[]).find(r=>r.ministry==='Music'&&r.category==='repertorio'&&(r.title.includes(srv.date)||r.title.includes(srv.title)));
+      let repHtml='';
+      if(srvRepertoire&&srvRepertoire.notes){
+        try{
+          const rep=JSON.parse(srvRepertoire.notes);
+          if(Array.isArray(rep.songs)&&rep.songs.length){
+            repHtml=`<div class="worship-repertoire-box">
+              <div class="worship-repertoire-head">
+                <span style="font-size:12px;font-weight:700;color:#4338ca;">🎵 Repertório (${rep.songs.length} músicas)</span>
+                ${rep.notes?`<small class="subtle">${e(rep.notes)}</small>`:''}
+              </div>
+              <div class="worship-songs-list">
+                ${rep.songs.map((s,i)=>`
+                  <div class="worship-song-row">
+                    <div class="worship-song-info">
+                      <span class="worship-song-num">${i+1}.</span>
+                      <strong>${e(s.title)}</strong>
+                      ${s.key?`<span class="badge worship-key-badge">Tom: ${e(s.key)}</span>`: ''}
+                    </div>
+                    <div class="worship-song-links">
+                      ${s.youtube_url?`<a href="${e(s.youtube_url)}" target="_blank" rel="noopener" class="worship-link-btn yt-link" title="Ouvir versão no YouTube">▶ YouTube</a>`: ''}
+                      ${s.cifraclub_url?`<a href="${e(s.cifraclub_url)}" target="_blank" rel="noopener" class="worship-link-btn cifra-link" title="Ver cifra no Cifra Club">🎸 Cifra Club</a>`: ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>`;
+          }
+        }catch(_){
+          repHtml=`<div class="worship-repertoire-box"><span style="font-size:12px;font-weight:700;color:#4338ca;">🎵 Repertório:</span><p style="font-size:12px;margin:4px 0;">${e(srvRepertoire.notes)}</p></div>`;
+        }
+      }
+      return `<article class="worship-service-card">
+       <div class="worship-service-head">
+        <div>
+         <strong>${e(srv.title)}</strong>
+         <small>${date(srv.date)} às ${e(srv.time)}</small>
+        </div>
+        <span class="badge" style="background:#4338ca;color:#fff;">${srv.members.length}</span>
        </div>
-       <span class="badge" style="background:#4338ca;color:#fff;">${srv.members.length}</span>
-      </div>
-      <div class="worship-lineup-list">
-       ${srv.members.map(m=>`<div class="worship-lineup-item">
-        <span class="worship-inst-tag">${e(m.role_notes||'Integrante')}</span>
-        <strong>${e(m.person_name)}</strong>
-       </div>`).join('')}
-      </div>
-     </article>`).join('')}
+       <div class="worship-lineup-list">
+        ${srv.members.map(m=>`<div class="worship-lineup-item">
+         <span class="worship-inst-tag">${e(m.role_notes||'Integrante')}</span>
+         <strong>${e(m.person_name)}</strong>
+        </div>`).join('')}
+       </div>
+       ${repHtml}
+      </article>`;
+     }).join('')}
     </div>
    `:`<p class="subtle" style="margin-top:12px;">Nenhuma escala agendada.</p>`}
   </section>`;
@@ -733,7 +768,20 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
       ${field('service_date','Data',initialDate,'date',true,null,true)}
       ${field('service_time','Horário',initialTime,'time',true)}
      </div>
-    ${field('repertoire_notes','Repertório / Tons (opcional)','','text',false)}
+    <div style="border-top:1px solid var(--border,#e4e4e7);padding-top:16px;margin-top:16px;">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+       <strong style="font-size:14px;display:block;">🎵 Músicas do Repertório, Tons & Cifras</strong>
+       <small style="color:var(--muted,#71717a);font-size:12px;">Vincule versões do YouTube e cifras do Cifra Club para os instrumentistas.</small>
+      </div>
+      <button type="button" class="secondary" id="add-song-btn" style="min-height:34px;font-size:12px;font-weight:600;">+ Adicionar Música</button>
+     </div>
+     <div id="songs-container" style="display:grid;gap:10px;"></div>
+     <label style="display:block;margin-top:10px;font-size:12px;color:var(--muted,#71717a);">
+      Observações gerais do repertório (opcional)
+      <input name="repertoire_general_notes" placeholder="Ex.: Momentos de oração, transições de tom, ordem especial..." maxlength="250" style="margin-top:4px;padding:8px 10px;min-height:38px;font-size:13px;width:100%;box-sizing:border-box;">
+     </label>
+    </div>
 
     <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
      <strong style="font-size:14px;display:block;margin-bottom:10px;">Banda Base</strong>
@@ -755,6 +803,98 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
    </form>`;
 
   const extraContainer=dialog.querySelector('#extra-musicians-container');
+  const songsContainer=dialog.querySelector('#songs-container');
+  const addSongBtn=dialog.querySelector('#add-song-btn');
+  let songIndex=0;
+  function addSongRow(songData={title:'',key:'',youtube_url:'',cifraclub_url:''}){
+   songIndex++;
+   const rowId=`song-row-${songIndex}`;
+   const row=document.createElement('div');
+   row.id=rowId;
+   row.className='worship-song-item';
+   row.style.cssText='background:var(--surface,#fff);border:1.5px solid var(--border,#e4e4e7);border-radius:12px;padding:12px 14px;display:grid;gap:10px;';
+   const keys=['C','C#','Db','D','D#','Eb','E','F','F#','Gb','G','G#','Ab','A','A#','Bb','B','Cm','C#m','Dm','D#m','Ebm','Em','Fm','F#m','Gm','G#m','Am','Bbm','Bm'];
+   const keyOpts=keys.map(k=>`<option value="${k}" ${songData.key===k?'selected':''}>${k}</option>`).join('');
+   row.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+     <strong style="font-size:12.5px;color:#4338ca;font-weight:700;">Música #<span class="song-num">${songIndex}</span></strong>
+     <button type="button" class="secondary danger-btn" style="min-height:26px;padding:2px 8px;font-size:11.5px;color:#dc2626;" title="Remover música">✕ Remover</button>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
+     <label style="font-size:11.5px;font-weight:600;display:block;">
+      Nome da Música / Versão
+      <input name="song_title_${songIndex}" placeholder="Ex.: A Casa é Sua (Casa Worship)" value="${e(songData.title)}" maxlength="100" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;min-height:38px;font-size:13px;" required>
+     </label>
+     <label style="font-size:11.5px;font-weight:600;display:block;">
+      Tom da Música
+      <select name="song_key_${songIndex}" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;min-height:38px;font-size:13px;">
+       <option value="">Tom original / A definir</option>
+       ${keyOpts}
+      </select>
+     </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+     <div>
+      <label style="font-size:11.5px;font-weight:600;display:block;">
+       ▶ Link ou Versão no YouTube
+       <input name="song_youtube_${songIndex}" placeholder="Link do vídeo (opcional)" value="${e(songData.youtube_url)}" maxlength="250" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;min-height:36px;font-size:12px;">
+      </label>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+       <a class="button secondary btn-search-yt" target="_blank" rel="noopener" style="font-size:11px;padding:4px 8px;min-height:28px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-weight:600;">
+        🔍 Buscar no YouTube
+       </a>
+      </div>
+     </div>
+     <div>
+      <label style="font-size:11.5px;font-weight:600;display:block;">
+       🎸 Link ou Cifra no Cifra Club
+       <input name="song_cifra_${songIndex}" placeholder="Link da cifra (opcional)" value="${e(songData.cifraclub_url)}" maxlength="250" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;min-height:36px;font-size:12px;">
+      </label>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+       <a class="button secondary btn-search-cifra" target="_blank" rel="noopener" style="font-size:11px;padding:4px 8px;min-height:28px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#ffedd5;color:#ea580c;border:1px solid #fed7aa;border-radius:6px;font-weight:600;">
+        🔍 Buscar no Cifra Club
+       </a>
+      </div>
+     </div>
+    </div>
+   `;
+   const titleInp=row.querySelector(`[name="song_title_${songIndex}"]`);
+   const keyInp=row.querySelector(`[name="song_key_${songIndex}"]`);
+   const ytInp=row.querySelector(`[name="song_youtube_${songIndex}"]`);
+   const cifraInp=row.querySelector(`[name="song_cifra_${songIndex}"]`);
+   const ytBtn=row.querySelector('.btn-search-yt');
+   const cifraBtn=row.querySelector('.btn-search-cifra');
+   function updateSearchLinks(){
+    const t=titleInp.value.trim();
+    const k=keyInp.value.trim();
+    const ytVal=ytInp.value.trim();
+    const cifraVal=cifraInp.value.trim();
+    if(ytVal&&/^https?:\/\//i.test(ytVal)){
+     ytBtn.href=ytVal;
+     ytBtn.textContent='▶ Ouvir no YouTube';
+    }else{
+     const q=t?(t+(k?' tom '+k:'')):'louvor gospel';
+     ytBtn.href='https://www.youtube.com/results?search_query='+encodeURIComponent(q);
+     ytBtn.textContent='🔍 Buscar no YouTube';
+    }
+    if(cifraVal&&/^https?:\/\//i.test(cifraVal)){
+     cifraBtn.href=cifraVal;
+     cifraBtn.textContent='🎸 Abrir Cifra';
+    }else{
+     cifraBtn.href=t?'https://www.cifraclub.com.br/?q='+encodeURIComponent(t):'https://www.cifraclub.com.br/';
+     cifraBtn.textContent='🔍 Buscar no Cifra Club';
+    }
+   }
+   titleInp.addEventListener('input',updateSearchLinks);
+   keyInp.addEventListener('change',updateSearchLinks);
+   ytInp.addEventListener('input',updateSearchLinks);
+   cifraInp.addEventListener('input',updateSearchLinks);
+   updateSearchLinks();
+   row.querySelector('.danger-btn').onclick=()=>row.remove();
+   songsContainer.appendChild(row);
+  }
+  addSongBtn.onclick=()=>addSongRow();
+  addSongRow();
   const addExtraBtn=dialog.querySelector('#add-extra-musician-btn');
 
   let extraIndex=0;
@@ -841,14 +981,42 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
 
     if(!members.length)throw new Error('Selecione pelo menos 1 integrante.');
 
+    const songs=[];
+    dialog.querySelectorAll('.worship-song-item').forEach(row=>{
+      const titleInp=row.querySelector('input[name^="song_title_"]');
+      const keySelect=row.querySelector('select[name^="song_key_"]');
+      const ytInp=row.querySelector('input[name^="song_youtube_"]');
+      const cifraInp=row.querySelector('input[name^="song_cifra_"]');
+      const title=titleInp?.value?.trim();
+      if(title){
+        const key=keySelect?.value?.trim()||'';
+        let ytUrl=ytInp?.value?.trim()||'';
+        if(!ytUrl){
+          ytUrl='https://www.youtube.com/results?search_query='+encodeURIComponent(title+(key?' tom '+key:''));
+        }
+        let cifraUrl=cifraInp?.value?.trim()||'';
+        if(!cifraUrl){
+          cifraUrl='https://www.cifraclub.com.br/?q='+encodeURIComponent(title);
+        }
+        songs.push({title,key,youtube_url:ytUrl,cifraclub_url:cifraUrl});
+      }
+    });
+    const repNotes=fd.get('repertoire_general_notes')?.trim()||'';
+    let repertoirePayload='';
+    let mainResourceUrl='';
+    if(songs.length||repNotes){
+      repertoirePayload=JSON.stringify({notes:repNotes,songs});
+      mainResourceUrl=songs[0]?.youtube_url||'';
+    }
     const res=await api('/ministries/worship-scale',{
      method:'POST',
      body:{
       title:fd.get('title'),
       service_date:fd.get('service_date'),
       service_time:fd.get('service_time'),
-      repertoire_title:fd.get('repertoire_notes')?'Repertório do culto':'',
-      repertoire_notes:fd.get('repertoire_notes')||'',
+      repertoire_title:repertoirePayload?'Repertório do culto':'',
+      repertoire_notes:repertoirePayload,
+      resource_url:mainResourceUrl,
       members
      }
     });

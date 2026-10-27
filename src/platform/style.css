@@ -3858,3 +3858,117 @@ button.mini-button.success-button:hover {
 [data-theme="dark"] .service-lineup-item {
   background: #27272a;
 }
+
+
+/* Worship Repertoire, Songs & Cifras */
+.worship-repertoire-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border, #e4e4e7);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.worship-repertoire-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.worship-songs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.worship-song-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--surface, #fff) 94%, #a1a1aa);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.worship-song-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.worship-song-num {
+  font-weight: 700;
+  color: var(--muted, #71717a);
+  font-size: 11px;
+}
+
+.worship-key-badge {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.worship-song-links {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.worship-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.worship-link-btn:hover {
+  opacity: 0.85;
+}
+
+.yt-link {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.cifra-link {
+  background: #ffedd5;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+[data-theme="dark"] .worship-song-row {
+  background: #27272a;
+}
+
+[data-theme="dark"] .worship-key-badge {
+  background: #451a03;
+  color: #fde68a;
+}
+
+[data-theme="dark"] .yt-link {
+  background: #450a0a;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
+[data-theme="dark"] .cifra-link {
+  background: #431407;
+  color: #fdba74;
+  border-color: #9a3412;
+}
