@@ -278,6 +278,163 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
 }
 
+async function fetchGeocode(q, env = {}) {
+  const googleKey = env?.GOOGLE_MAPS_API_KEY || env?.GOOGLE_MAPS_KEY || '';
+  if (googleKey) {
+    try {
+      const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&key=${googleKey}&language=pt-BR`;
+      const res = await fetch(gUrl, { headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
+        return data.results.map(r => {
+          let neighborhood = '', city = '', state = '', road = '', number = '';
+          for (const c of r.address_components || []) {
+            if (c.types.includes('sublocality') || c.types.includes('sublocality_level_1') || c.types.includes('neighborhood')) neighborhood = c.long_name;
+            if (c.types.includes('administrative_area_level_2')) city = c.long_name;
+            if (c.types.includes('administrative_area_level_1')) state = c.short_name;
+            if (c.types.includes('route')) road = c.long_name;
+            if (c.types.includes('street_number')) number = c.long_name;
+          }
+          const regionParts = [neighborhood, city, state].filter(Boolean);
+          return {
+            provider: 'google',
+            display_name: r.formatted_address,
+            location_name: road ? (road + (number ? ', ' + number : '')) : (neighborhood || r.formatted_address.split(',')[0]),
+            address: r.formatted_address,
+            neighborhood,
+            city,
+            state,
+            region_label: regionParts.join(', '),
+            latitude: r.geometry.location.lat,
+            longitude: r.geometry.location.lng
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('Google Geocode error:', e);
+    }
+  }
+
+  try {
+    const oUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=6&countrycodes=br&addressdetails=1`;
+    const res = await fetch(oUrl, {
+      headers: {
+        'User-Agent': 'LagoinhaKidsAttendance/1.0 (contato@lagoinha.com)',
+        'Accept-Language': 'pt-BR,pt;q=0.9'
+      }
+    });
+    const items = await res.json();
+    if (Array.isArray(items)) {
+      return items.map(item => {
+        const addr = item.address || {};
+        const neighborhood = addr.suburb || addr.neighbourhood || addr.residential || addr.subdivision || '';
+        const city = addr.city || addr.town || addr.municipality || addr.village || '';
+        const state = addr.state || '';
+        const road = addr.road || '';
+        const number = addr.house_number || '';
+        const regionParts = [neighborhood, city, state].filter(Boolean);
+        return {
+          provider: 'nominatim',
+          display_name: item.display_name,
+          location_name: item.name || (road ? (road + (number ? ', ' + number : '')) : item.display_name.split(',')[0]),
+          address: item.display_name,
+          neighborhood,
+          city,
+          state,
+          region_label: regionParts.join(', '),
+          latitude: parseFloat(item.lat),
+          longitude: parseFloat(item.lon)
+        };
+      });
+    }
+  } catch (e) {
+    console.warn('Nominatim error:', e);
+  }
+  return [];
+}
+
+async function fetchReverseGeocode(lat, lon, env = {}) {
+  const googleKey = env?.GOOGLE_MAPS_API_KEY || env?.GOOGLE_MAPS_KEY || '';
+  if (googleKey) {
+    try {
+      const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${googleKey}&language=pt-BR`;
+      const res = await fetch(gUrl, { headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
+        const r = data.results[0];
+        let neighborhood = '', city = '', state = '', road = '', number = '';
+        for (const c of r.address_components || []) {
+          if (c.types.includes('sublocality') || c.types.includes('sublocality_level_1') || c.types.includes('neighborhood')) neighborhood = c.long_name;
+          if (c.types.includes('administrative_area_level_2')) city = c.long_name;
+          if (c.types.includes('administrative_area_level_1')) state = c.short_name;
+          if (c.types.includes('route')) road = c.long_name;
+          if (c.types.includes('street_number')) number = c.long_name;
+        }
+        const regionParts = [neighborhood, city, state].filter(Boolean);
+        return {
+          ok: true,
+          provider: 'google',
+          display_name: r.formatted_address,
+          address: r.formatted_address,
+          neighborhood,
+          city,
+          state,
+          road,
+          house_number: number,
+          region_label: regionParts.join(', ') || r.formatted_address,
+          latitude: Number(lat),
+          longitude: Number(lon)
+        };
+      }
+    } catch (e) {
+      console.warn('Google Reverse Geocode error:', e);
+    }
+  }
+
+  try {
+    const oUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
+    const res = await fetch(oUrl, {
+      headers: {
+        'User-Agent': 'LagoinhaKidsAttendance/1.0 (contato@lagoinha.com)',
+        'Accept-Language': 'pt-BR,pt;q=0.9'
+      }
+    });
+    const item = await res.json();
+    if (item && item.address) {
+      const addr = item.address;
+      const neighborhood = addr.suburb || addr.neighbourhood || addr.residential || addr.subdivision || '';
+      const city = addr.city || addr.town || addr.municipality || addr.village || '';
+      const state = addr.state || '';
+      const road = addr.road || '';
+      const number = addr.house_number || '';
+      const regionParts = [neighborhood, city, state].filter(Boolean);
+      return {
+        ok: true,
+        provider: 'nominatim',
+        display_name: item.display_name,
+        address: item.display_name,
+        neighborhood,
+        city,
+        state,
+        road,
+        house_number: number,
+        region_label: regionParts.join(', ') || item.display_name,
+        latitude: Number(lat),
+        longitude: Number(lon)
+      };
+    }
+  } catch (e) {
+    console.warn('Nominatim reverse error:', e);
+  }
+
+  return {
+    ok: false,
+    region_label: `Coordenadas: ${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`,
+    latitude: Number(lat),
+    longitude: Number(lon)
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -847,6 +1004,21 @@ export default {
         return jsonResp({ ok: true, enabled: Boolean(body.enabled) });
       }
 
+      if (path === '/api/workspace/church-attendance/geocode' && method === 'GET') {
+        const q = (url.searchParams.get('q') || '').trim();
+        if (!q) return jsonResp([]);
+        const results = await fetchGeocode(q, env);
+        return jsonResp(results);
+      }
+
+      if (path === '/api/workspace/church-attendance/reverse-geocode' && method === 'GET') {
+        const lat = Number(url.searchParams.get('lat'));
+        const lon = Number(url.searchParams.get('lon'));
+        if (isNaN(lat) || isNaN(lon)) fail('coords', 'Coordenadas inválidas.', 400);
+        const result = await fetchReverseGeocode(lat, lon, env);
+        return jsonResp(result);
+      }
+
       if (path.startsWith('/api/workspace/church-attendance/') && path.endsWith('/check-in') && method === 'POST') {
         const rid = path.split('/')[4];
         const body = await request.json();
@@ -855,15 +1027,19 @@ export default {
         const person = await linkedPerson(db, user);
         if (!person) fail('member', 'Seu cadastro de membro precisa estar vinculado à conta.', 409);
         const meters = haversineMeters(Number(body.latitude), Number(body.longitude), Number(srv.latitude), Number(srv.longitude));
-        if (Number(body.accuracy) > Math.min(100, srv.radius_m / 2) || meters + Number(body.accuracy) > srv.radius_m) {
-          fail('location', 'Localização fora da área ou imprecisa. Aproxime-se do local e tente novamente.', 409);
+        const accuracy = Number(body.accuracy) || 0;
+        // Allow buffer for phone GPS accuracy in buildings
+        if (meters > srv.radius_m + Math.min(30, accuracy) || accuracy > 200) {
+          fail('location', 'Localização fora da área permitida ou GPS impreciso. Aproxime-se do local do culto e tente novamente.', 409);
         }
         const checkedAt = nowIso();
+        const regionLabel = String(body.region_label || '').trim();
+        const reason = regionLabel ? `${regionLabel} · ${Math.round(meters)} m` : `${Math.round(meters)} m do local`;
         await db.run(
-          "INSERT INTO church_presences(service_id,person_id,user_id,method,checked_at,actor,service_version,voided) VALUES(?,?,?,?,?,?,?,0) ON CONFLICT(service_id,person_id) DO UPDATE SET user_id=excluded.user_id,method=excluded.method,checked_at=excluded.checked_at,actor=excluded.actor,service_version=excluded.service_version,voided=0,reason=''",
-          [rid, person.id, user.id, 'location', checkedAt, user.id, srv.version || 1]
+          "INSERT INTO church_presences(service_id,person_id,user_id,method,checked_at,actor,service_version,voided,reason) VALUES(?,?,?,?,?,?,?,0,?) ON CONFLICT(service_id,person_id) DO UPDATE SET user_id=excluded.user_id,method=excluded.method,checked_at=excluded.checked_at,actor=excluded.actor,service_version=excluded.service_version,voided=0,reason=excluded.reason",
+          [rid, person.id, user.id, 'location', checkedAt, user.id, srv.version || 1, reason]
         );
-        return jsonResp({ ok: true, already_present: false, checked_at: checkedAt });
+        return jsonResp({ ok: true, already_present: false, checked_at: checkedAt, distance_m: Math.round(meters), region_label: regionLabel });
       }
 
       // Sector Modules: Members, Ministries, Finance

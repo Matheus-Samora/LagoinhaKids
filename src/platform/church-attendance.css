@@ -1,3 +1,328 @@
-.ca-panel{max-width:1120px;margin:auto}.ca-panel h1{display:flex;align-items:center;gap:12px;font-size:clamp(1.4rem,4vw,2rem)}.ca-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.ca-actions button{min-height:44px}.ca-info{max-width:850px;font-size:.88rem;line-height:1.6;opacity:.8}.ca-service{padding:22px 0;border-top:1px solid var(--border,#ddd)}.ca-service h3{margin:0 0 10px;font-size:1.15rem}.ca-service p{margin:6px 0;line-height:1.5}.ca-service .ca-actions{margin-top:14px}.ca-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:24px}.ca-filter label,.ca-fields label,.ca-dialog label{display:flex;flex-direction:column;gap:7px}.ca-filter input,.ca-dialog input,.ca-dialog select,.ca-dialog textarea{min-height:44px;width:100%;padding:10px;border:1px solid var(--border,#ccc);border-radius:10px;background:var(--surface,#fff);color:inherit;box-sizing:border-box}.ca-dialog{width:min(700px,calc(100% - 28px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid var(--border,#ddd);border-radius:20px;padding:24px;background:var(--surface,#fff);color:var(--text,#18181b);box-sizing:border-box}.ca-dialog::backdrop{background:#0008}.ca-dialog .ca-actions{margin-top:20px}.ca-dialog [data-error],[data-ca-status][role=alert]{color:var(--danger,#bc3030)}.ca-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.ca-dialog form>label{margin:12px 0}.ca-scroll{overflow:auto}.ca-scroll table{width:100%;text-align:left;border-collapse:collapse}.ca-scroll th,.ca-scroll td{padding:12px;border-bottom:1px solid var(--border,#ddd)}.ca-empty{padding:24px 0}.ca-dialog button{min-height:44px}@media(max-width:560px){.ca-fields{grid-template-columns:1fr}.ca-dialog{padding:18px}.ca-actions button{flex:1 1 auto}.ca-filter label{flex:1 1 130px}.ca-service{padding:18px 0}}
+/* Church Attendance Styles with Google Maps & Geolocation Integration */
+.ca-panel { max-width: 1120px; margin: auto; }
+.ca-panel h1 { display: flex; align-items: center; gap: 12px; font-size: clamp(1.4rem, 4vw, 2rem); }
+.ca-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ca-actions button { min-height: 44px; }
+.ca-info { max-width: 850px; font-size: .88rem; line-height: 1.6; opacity: .8; }
+.ca-info summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; text-decoration: underline; text-underline-offset: 3px; }
 
-.ca-info summary{cursor:pointer;min-height:44px;display:flex;align-items:center;text-decoration:underline;text-underline-offset:3px}.ca-filter label{width:auto;min-width:0}.ca-filter button{width:auto}
+/* Member Geolocation Banner */
+.ca-geo-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-card, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin: 16px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.ca-geo-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ca-geo-card-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.ca-geo-card-info strong {
+  display: block;
+  font-size: 0.96rem;
+  color: var(--text, #0f172a);
+}
+.ca-geo-card-info p {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.35;
+}
+.ca-geo-card-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Service Cards */
+.ca-service {
+  padding: 22px 0;
+  border-top: 1px solid var(--border, #ddd);
+}
+.ca-service h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ca-service h3 small {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  background: #ef444420;
+  color: #dc2626;
+  border-radius: 6px;
+}
+.ca-service p { margin: 5px 0; line-height: 1.5; font-size: 0.92rem; }
+.ca-service .ca-actions { margin-top: 14px; }
+
+/* Real-time Distance & Geolocation Pills */
+.ca-distance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin: 8px 0 4px;
+}
+.ca-distance-pill.inside {
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+  color: #065f46;
+}
+.ca-distance-pill.outside {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+}
+:root[data-theme='dark'] .ca-distance-pill.inside {
+  background: #064e3b40;
+  border-color: #059669;
+  color: #6ee7b7;
+}
+:root[data-theme='dark'] .ca-distance-pill.outside {
+  background: #78350f40;
+  border-color: #d97706;
+  color: #fde68a;
+}
+
+/* Google Maps external link pills */
+.ca-gmap-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.ca-gmap-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--surface-hover, #f1f5f9);
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text, #334155);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.ca-gmap-link:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: var(--text, #0f172a);
+}
+
+/* Filter Bar */
+.ca-filter { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-top: 24px; }
+.ca-filter label { width: auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.ca-filter button { width: auto; }
+.ca-filter input { min-height: 44px; padding: 10px; border: 1px solid var(--border, #ccc); border-radius: 10px; background: var(--surface, #fff); color: inherit; }
+
+/* Dialog Modal */
+.ca-dialog {
+  width: min(720px, calc(100% - 24px));
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 20px;
+  padding: 24px;
+  background: var(--surface, #fff);
+  color: var(--text, #18181b);
+  box-sizing: border-box;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+.ca-dialog::backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); }
+.ca-dialog .ca-actions { margin-top: 20px; }
+.ca-dialog [data-error], [data-ca-status][role=alert] { color: var(--danger, #bc3030); font-weight: 500; }
+.ca-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.ca-fields .full-width { grid-column: 1 / -1; }
+.ca-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; font-weight: 500; }
+.ca-dialog input, .ca-dialog select, .ca-dialog textarea {
+  min-height: 44px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+  box-sizing: border-box;
+}
+
+/* Map Search & Autocomplete in Modal */
+.ca-map-search-wrap {
+  position: relative;
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+}
+.ca-map-search-bar {
+  display: flex;
+  gap: 8px;
+}
+.ca-map-search-bar input {
+  flex: 1;
+}
+.ca-map-search-bar button {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.ca-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+  z-index: 10000;
+}
+.ca-dropdown-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+}
+.ca-dropdown-item:last-child { border-bottom: none; }
+.ca-dropdown-item:hover {
+  background: var(--surface-hover, #f8fafc);
+}
+.ca-dropdown-item strong {
+  font-size: 0.88rem;
+  color: var(--text, #0f172a);
+}
+.ca-dropdown-item small {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+.ca-dropdown-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--text-muted, #64748b);
+}
+
+/* Interactive Map Box */
+.ca-map-box {
+  grid-column: 1 / -1;
+  height: 250px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border, #cbd5e1);
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+  z-index: 1;
+}
+.leaflet-container {
+  font-family: inherit;
+  width: 100%;
+  height: 100%;
+}
+
+/* Map Quick Toolbar */
+.ca-map-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+  margin-top: -6px;
+}
+.ca-map-toolbar-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ca-map-detected-label {
+  grid-column: 1 / -1;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+  background: var(--surface-card, #f8fafc);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--border, #cbd5e1);
+}
+
+/* Custom Leaflet Map Pin */
+.ca-church-pin-icon {
+  background: transparent;
+  border: none;
+}
+.ca-pin-badge {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(225, 29, 72, 0.45);
+  border: 2px solid #fff;
+}
+.ca-pin-pointer {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #be123c;
+  margin: -1px auto 0;
+}
+
+/* Roster Table & Badges */
+.ca-scroll { overflow-x: auto; }
+.ca-scroll table { width: 100%; text-align: left; border-collapse: collapse; }
+.ca-scroll th, .ca-scroll td { padding: 12px; border-bottom: 1px solid var(--border, #ddd); }
+.ca-roster-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #10b981;
+}
+.ca-roster-pill small { opacity: 0.85; font-size: 0.76rem; }
+.ca-roster-pill.manual {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+.ca-empty { padding: 24px 0; }
+.ca-dialog button { min-height: 44px; }
+
+@media (max-width: 600px) {
+  .ca-fields { grid-template-columns: 1fr; gap: 10px; }
+  .ca-geo-card { flex-direction: column; align-items: flex-start; }
+  .ca-geo-card-btn { width: 100%; }
+  .ca-map-box { height: 210px; }
+  .ca-dialog { padding: 16px; border-radius: 16px; }
+  .ca-actions button { flex: 1 1 auto; }
+  .ca-filter label { flex: 1 1 130px; }
+  .ca-service { padding: 16px 0; }
+}
