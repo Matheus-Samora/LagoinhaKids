@@ -6,6 +6,12 @@ import './church-attendance.css';
 
 export function churchAttendanceUI({api,e}){
  const base='/workspace/church-attendance';
+ const CHURCH_DEFAULT = {
+  address: 'Rua José Otávio da Fonseca, 228, Vila Isa, Governador Valadares, Minas Gerais, 35044-170, Brasil',
+  lat: -18.888042,
+  lon: -41.947946,
+  radius: 180
+ };
  let uid=null,enabled=false,timer=null,busy=false,generation=0,host=null,data=null,lastMessage='',filter='';
  let userLocation=null; // { lat, lon, accuracy, region_label, neighborhood, city, timestamp }
  const fmt=x=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(x));
@@ -70,7 +76,7 @@ export function churchAttendanceUI({api,e}){
   }
  }
 
- function schedule(){clearTimeout(timer);if(uid&&enabled&&!document.hidden)timer=setTimeout(()=>void automatic(),60000);}
+ function schedule(){clearTimeout(timer);if(uid&&enabled&&!document.hidden)timer=setTimeout(()=>void automatic(),30000);}
 
  async function automatic(){
   if(!uid||!enabled||document.hidden||busy)return;
@@ -138,9 +144,9 @@ export function churchAttendanceUI({api,e}){
 
  function edit(row){
   const rid=row?.id||crypto.randomUUID();
-  const initLat=Number(row?.latitude)||userLocation?.lat||-18.8511;
-  const initLon=Number(row?.longitude)||userLocation?.lon||-41.9542;
-  const initRad=Number(row?.radius_m)||150;
+  const initLat=Number(row?.latitude)||CHURCH_DEFAULT.lat;
+  const initLon=Number(row?.longitude)||CHURCH_DEFAULT.lon;
+  const initRad=Number(row?.radius_m)||CHURCH_DEFAULT.radius;
 
   const content=`
    <div class="ca-fields">
@@ -163,14 +169,14 @@ export function churchAttendanceUI({api,e}){
      </div>
     </div>
     <div class="ca-map-detected-label" data-ca-geo-detected>Arraste o pin no mapa ou clique para ajustar o local exato do culto.</div>
-    <div class="full-width">${field('Local / endereço','location','text',row?.location||'','maxlength="180" placeholder="Rua, número e bairro"')}</div>
+    <div class="full-width">${field('Local / endereço','location','text',row?.location||CHURCH_DEFAULT.address,'maxlength="180" placeholder="Rua, número e bairro"')}</div>
     ${field('Início · horário de Brasília','starts_at','datetime-local',row?localValue(row.starts_at):'')}
     ${field('Fim · horário de Brasília','ends_at','datetime-local',row?localValue(row.ends_at):'')}
     ${field('Latitude do local','latitude','number',initLat.toFixed(6),'step="any" min="-90" max="90"')}
     ${field('Longitude do local','longitude','number',initLon.toFixed(6),'step="any" min="-180" max="180"')}
     ${field('Raio de tolerância (metros)','radius_m','number',initRad,'min="30" max="1000"')}
-    ${field('Abrir antes do início · minutos','early_minutes','number',row?Math.round((new Date(row.starts_at)-new Date(row.opens_at))/60000):15,'min="0" max="180"')}
-    ${field('Fechar após o início · minutos','late_minutes','number',row?Math.round((new Date(row.closes_at)-new Date(row.starts_at))/60000):30,'min="0" max="480"')}
+    ${field('Abrir antes do início · minutos','early_minutes','number',row?Math.round((new Date(row.starts_at)-new Date(row.opens_at))/60000):45,'min="0" max="180"')}
+    ${field('Fechar após o início · minutos','late_minutes','number',row?Math.round((new Date(row.closes_at)-new Date(row.starts_at))/60000):150,'min="0" max="480"')}
    </div>
   `;
 
@@ -453,7 +459,7 @@ export function churchAttendanceUI({api,e}){
  async function refresh(){
   const target=host;if(!target?.isConnected)return;
   const info=await api(base+filter);if(target!==host||!target.isConnected)return;
-  data=info;enabled=info.auto_enabled;
+  data=info;enabled=info.auto_enabled;if(info?.my_user_id&&!uid)uid=info.my_user_id;
 
   target.querySelector('[data-ca-auto]').textContent=enabled?'Desativar check-in automático':'Ativar check-in automático';
   target.querySelector('[data-ca-auto]').disabled=!info.linked_member&&!enabled;
@@ -588,6 +594,7 @@ export function churchAttendanceUI({api,e}){
 
   try{
    await refresh();
+   if(enabled)void automatic();
    // Pre-detect position silently if permission was already granted
    if(navigator.permissions){
     navigator.permissions.query({name:'geolocation'}).then(status=>{

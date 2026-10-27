@@ -435,6 +435,102 @@ async function fetchReverseGeocode(lat, lon, env = {}) {
   };
 }
 
+
+const CHURCH_LOCATION = {
+  address: 'Rua José Otávio da Fonseca, 228, Vila Isa, Governador Valadares, Minas Gerais, 35044-170, Brasil',
+  latitude: -18.888042,
+  longitude: -41.947946,
+  radius_m: 180
+};
+
+function parseBrasiliaDate(str) {
+  if (!str) return new Date();
+  if (typeof str !== 'string') return new Date(str);
+  const trimmed = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    return new Date(trimmed.length === 16 ? `${trimmed}:00-03:00` : `${trimmed}-03:00`);
+  }
+  return new Date(trimmed);
+}
+
+let lastChurchTemplateSync = 0;
+async function syncChurchServicesFromTemplates(db, force = false) {
+  const now = Date.now();
+  if (!force && (now - lastChurchTemplateSync < 60000)) return;
+  lastChurchTemplateSync = now;
+  try {
+    const templates = await db.all('SELECT * FROM service_templates WHERE active=1');
+    if (!templates || !templates.length) return;
+
+    const spNow = new Date(now - 3 * 3600 * 1000);
+    const startDay = new Date(Date.UTC(spNow.getUTCFullYear(), spNow.getUTCMonth(), spNow.getUTCDate()));
+
+    for (let dayOffset = -7; dayOffset <= 45; dayOffset++) {
+      const tDate = new Date(startDay.getTime() + dayOffset * 86400000);
+      const isoWeekday = (tDate.getUTCDay() + 6) % 7;
+      const yyyy = tDate.getUTCFullYear();
+      const mm = String(tDate.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(tDate.getUTCDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      for (const t of templates) {
+        if (Number(t.weekday) === isoWeekday) {
+          const hiddenList = (t.hidden_dates || '').split(',').map(s => s.trim()).filter(Boolean);
+          const isHidden = hiddenList.includes(dateStr);
+          const serviceId = `ca_${t.id.slice(0, 8)}_${dateStr.replace(/-/g, '')}`;
+
+          if (isHidden) {
+            await db.run('UPDATE church_services SET active=0 WHERE id=?', [serviceId]);
+            continue;
+          }
+
+          const duration = Number(t.duration_minutes || 120);
+          const startsAt = `${dateStr}T${t.service_time}:00-03:00`;
+          const startTimeMs = new Date(startsAt).getTime();
+          const endsAtMs = startTimeMs + duration * 60000;
+          const startsAtIso = new Date(startTimeMs).toISOString();
+          const endsAtIso = new Date(endsAtMs).toISOString();
+
+          // Check-in opens 45 mins before and closes 30 mins after the service ends
+          const opensAtIso = new Date(startTimeMs - 45 * 60000).toISOString();
+          const closesAtIso = new Date(endsAtMs + 30 * 60000).toISOString();
+
+          await db.run(
+            `INSERT INTO church_services(id,title,starts_at,ends_at,location,latitude,longitude,radius_m,opens_at,closes_at,active,version,created_by,created_at)
+             VALUES(?,?,?,?,?,?,?,?,?,1,1,NULL,?)
+             ON CONFLICT(id) DO UPDATE SET
+               title=excluded.title,
+               starts_at=excluded.starts_at,
+               ends_at=excluded.ends_at,
+               location=excluded.location,
+               latitude=excluded.latitude,
+               longitude=excluded.longitude,
+               radius_m=excluded.radius_m,
+               opens_at=excluded.opens_at,
+               closes_at=excluded.closes_at,
+               active=1`,
+            [
+              serviceId,
+              t.title,
+              startsAtIso,
+              endsAtIso,
+              CHURCH_LOCATION.address,
+              CHURCH_LOCATION.latitude,
+              CHURCH_LOCATION.longitude,
+              CHURCH_LOCATION.radius_m,
+              opensAtIso,
+              closesAtIso,
+              nowIso()
+            ]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in syncChurchServicesFromTemplates:', err);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -950,16 +1046,27 @@ export default {
 
       // Church Attendance (Presença nos cultos com geofence)
       if (path === '/api/workspace/church-attendance' && method === 'GET') {
+        await syncChurchServicesFromTemplates(db);
         const now = nowIso();
+        const nowIsoUtc = new Date().toISOString();
+        const nowMs = Date.now();
         const person = await linkedPerson(db, user);
-        const services = await db.all('SELECT * FROM church_services ORDER BY starts_at DESC LIMIT 200');
+        const services = await db.all(
+          `SELECT * FROM church_services 
+           ORDER BY CASE WHEN closes_at >= ? THEN 0 ELSE 1 END ASC,
+                    CASE WHEN closes_at >= ? THEN starts_at END ASC,
+                    starts_at DESC LIMIT 100`,
+          [nowIsoUtc, nowIsoUtc]
+        );
         const items = [];
         for (const s of services) {
           if (!isGlobal && !s.active) continue;
           const own = person
             ? await db.first('SELECT checked_at,method,voided FROM church_presences WHERE service_id=? AND person_id=?', [s.id, person.id])
             : null;
-          const canCheckin = Boolean(s.active && s.opens_at <= now && now <= s.closes_at);
+          const opensMs = new Date(s.opens_at).getTime();
+          const closesMs = new Date(s.closes_at).getTime();
+          const canCheckin = Boolean(s.active && opensMs <= nowMs && nowMs <= closesMs);
           const presentCount = isGlobal
             ? Number(await db.scalar('SELECT count(*) FROM church_presences WHERE service_id=? AND voided=0', [s.id]) || 0)
             : undefined;
@@ -978,7 +1085,8 @@ export default {
           can_remove_others: isGlobal,
           linked_member: Boolean(person),
           my_person_id: person ? person.id : null,
-          auto_enabled: Boolean(autoRow?.church_auto_checkin),
+          my_user_id: user.id,
+          auto_enabled: autoRow ? (autoRow.church_auto_checkin !== 0) : true,
           server_time: now,
           timezone: 'America/Sao_Paulo'
         });
@@ -988,12 +1096,21 @@ export default {
         if (!isGlobal) fail('permission', 'A gestão de presença é exclusiva da liderança.', 403);
         const body = await request.json();
         const rid = String(body.request_id || randomBytes(16).toString('hex'));
-        const start = new Date(body.starts_at);
-        const opensAt = new Date(start.getTime() - Number(body.early_minutes || 15) * 60000).toISOString();
-        const closesAt = new Date(Math.min(new Date(body.ends_at).getTime(), start.getTime() + Number(body.late_minutes || 30) * 60000)).toISOString();
+        const start = parseBrasiliaDate(body.starts_at);
+        const end = parseBrasiliaDate(body.ends_at || body.starts_at);
+        const earlyMin = Number(body.early_minutes != null ? body.early_minutes : 45);
+        const lateMin = Number(body.late_minutes != null ? body.late_minutes : 150);
+        const opensAt = new Date(start.getTime() - earlyMin * 60000).toISOString();
+        const closesAt = new Date(Math.max(end.getTime() + 30 * 60000, start.getTime() + lateMin * 60000)).toISOString();
+        const startsAtIso = start.toISOString();
+        const endsAtIso = end.toISOString();
+        const loc = (body.location || '').trim() || CHURCH_LOCATION.address;
+        const lat = Number(body.latitude) || CHURCH_LOCATION.latitude;
+        const lon = Number(body.longitude) || CHURCH_LOCATION.longitude;
+        const rad = Number(body.radius_m) || CHURCH_LOCATION.radius_m;
         await db.run(
           'INSERT OR REPLACE INTO church_services(id,title,starts_at,ends_at,location,latitude,longitude,radius_m,opens_at,closes_at,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-          [rid, body.title.trim(), body.starts_at, body.ends_at, body.location.trim(), Number(body.latitude), Number(body.longitude), Number(body.radius_m || 150), opensAt, closesAt, user.id, nowIso()]
+          [rid, body.title.trim(), startsAtIso, endsAtIso, loc, lat, lon, rad, opensAt, closesAt, user.id, nowIso()]
         );
         return jsonResp({ id: rid, ok: true });
       }
@@ -1026,6 +1143,12 @@ export default {
         if (!srv || !srv.active) fail('missing', 'Culto não encontrado ou inativo.', 404);
         const person = await linkedPerson(db, user);
         if (!person) fail('member', 'Seu cadastro de membro precisa estar vinculado à conta.', 409);
+        const nowMs = Date.now();
+        const opensMs = new Date(srv.opens_at).getTime();
+        const closesMs = new Date(srv.closes_at).getTime();
+        if (nowMs < opensMs || nowMs > closesMs) {
+          fail('window', 'Fora da janela de check-in deste culto.', 409);
+        }
         const meters = haversineMeters(Number(body.latitude), Number(body.longitude), Number(srv.latitude), Number(srv.longitude));
         const accuracy = Number(body.accuracy) || 0;
         // Allow buffer for phone GPS accuracy in buildings
@@ -2313,6 +2436,7 @@ export default {
           'INSERT OR REPLACE INTO service_templates(id,title,weekday,service_time,duration_minutes,created_by,created_at,hidden_dates) VALUES(?,?,?,?,?,?,?,coalesce(?, \'\'))',
           [rid, String(body.title || 'Culto').trim(), Number(body.weekday || 0), body.service_time || '18:00', Number(body.duration_minutes || 90), user.id, nowIso(), body.hidden_dates || '']
         );
+        await syncChurchServicesFromTemplates(db, true);
         return jsonResp({ ok: true, id: rid });
       }
 
@@ -2332,12 +2456,14 @@ export default {
         }
         const newHiddenStr = dates.join(',');
         await db.run('UPDATE service_templates SET hidden_dates=? WHERE id=?', [newHiddenStr, rid]);
+        await syncChurchServicesFromTemplates(db, true);
         return jsonResp({ ok: true, id: rid, hidden_dates: newHiddenStr });
       }
 
       if (path.startsWith('/api/workspace/services/') && method === 'DELETE') {
         const rid = path.split('/')[4];
         await db.run('UPDATE service_templates SET active=0 WHERE id=?', [rid]);
+        await syncChurchServicesFromTemplates(db, true);
         return jsonResp({ ok: true });
       }
 
@@ -2478,12 +2604,21 @@ export default {
           return jsonResp({ ok: true });
         }
         const body = await request.json();
-        const start = new Date(body.starts_at);
-        const opensAt = new Date(start.getTime() - Number(body.early_minutes || 15) * 60000).toISOString();
-        const closesAt = new Date(Math.min(new Date(body.ends_at).getTime(), start.getTime() + Number(body.late_minutes || 30) * 60000)).toISOString();
+        const start = parseBrasiliaDate(body.starts_at);
+        const end = parseBrasiliaDate(body.ends_at || body.starts_at);
+        const earlyMin = Number(body.early_minutes != null ? body.early_minutes : 45);
+        const lateMin = Number(body.late_minutes != null ? body.late_minutes : 150);
+        const opensAt = new Date(start.getTime() - earlyMin * 60000).toISOString();
+        const closesAt = new Date(Math.max(end.getTime() + 30 * 60000, start.getTime() + lateMin * 60000)).toISOString();
+        const startsAtIso = start.toISOString();
+        const endsAtIso = end.toISOString();
+        const loc = (body.location || '').trim() || CHURCH_LOCATION.address;
+        const lat = Number(body.latitude) || CHURCH_LOCATION.latitude;
+        const lon = Number(body.longitude) || CHURCH_LOCATION.longitude;
+        const rad = Number(body.radius_m) || CHURCH_LOCATION.radius_m;
         await db.run(
           'UPDATE church_services SET title=?, starts_at=?, ends_at=?, location=?, latitude=?, longitude=?, radius_m=?, opens_at=?, closes_at=?, version=version+1 WHERE id=?',
-          [body.title.trim(), body.starts_at, body.ends_at, body.location.trim(), Number(body.latitude), Number(body.longitude), Number(body.radius_m || 150), opensAt, closesAt, rid]
+          [body.title.trim(), startsAtIso, endsAtIso, loc, lat, lon, rad, opensAt, closesAt, rid]
         );
         return jsonResp({ ok: true, id: rid });
       }
