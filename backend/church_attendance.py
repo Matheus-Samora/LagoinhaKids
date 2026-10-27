@@ -66,8 +66,8 @@ def listing(start:str='',end:str='',u=Depends(session)):
         for r in c.execute('SELECT * FROM church_services WHERE starts_at>=? AND starts_at<? ORDER BY starts_at LIMIT 200',(str(a),str(b+timedelta(days=1)))):
             d=dict(r)
             if not admin and not d['active']:continue
-            own=c.execute('SELECT checked_at,method FROM church_presences WHERE service_id=? AND person_id=? AND voided=0',(d['id'],person['id'] if person else '')).fetchone()
-            d.update({'can_checkin':bool(d['active'] and in_window(d,now)),'my_presence':dict(own) if own else None})
+            own=c.execute('SELECT checked_at,method,voided FROM church_presences WHERE service_id=? AND person_id=?',(d['id'],person['id'] if person else '')).fetchone()
+            d.update({'can_checkin':bool(d['active'] and in_window(d,now)),'my_presence':dict(own) if own and not own['voided'] else None,'automatic_blocked':bool(own and own['voided'])})
             if admin:d['present_count']=c.execute('SELECT count(*) FROM church_presences WHERE service_id=? AND voided=0',(d['id'],)).fetchone()[0]
             else:d.pop('created_by',None)
             rows.append(d)
@@ -118,6 +118,7 @@ def preferences(data:Preference,u=Depends(session)):
     return {'ok':True,'enabled':data.enabled}
 
 class Position(BaseModel):
+    automatic:bool=False
     latitude:float=Field(ge=-90,le=90,allow_inf_nan=False)
     longitude:float=Field(ge=-180,le=180,allow_inf_nan=False)
     accuracy:float=Field(gt=0,le=10000,allow_inf_nan=False)
@@ -131,11 +132,13 @@ def checkin(rid:str,data:Position,u=Depends(session)):
         c.execute('BEGIN IMMEDIATE');row=event(c,rid)
         person=linked_person(c,u,review=True)
         if not person:fail('member','Seu cadastro de membro precisa estar vinculado à conta.',409)
+        if data.automatic and not c.execute('SELECT church_auto_checkin FROM users WHERE id=?',(u['id'],)).fetchone()[0]:fail('consent','Check-in automático desativado nesta conta.',409)
         if not row['active'] or not in_window(row,now):fail('window','O check-in está fora do horário permitido.',409)
         meters=distance(data.latitude,data.longitude,row['latitude'],row['longitude'])
         if data.accuracy>min(100,row['radius_m']/2) or meters+data.accuracy>row['radius_m']:
             fail('location','Localização fora da área ou imprecisa. Aproxime-se do local e tente novamente.',409)
         old=c.execute('SELECT * FROM church_presences WHERE service_id=? AND person_id=?',(rid,person['id'])).fetchone()
+        if data.automatic and old and old['voided']:fail('withdrawn','Presença removida. Confirme novamente de forma explícita, se desejar.',409)
         if old and not old['voided']:return {'ok':True,'already_present':True,'checked_at':old['checked_at']}
         c.execute('INSERT INTO church_presences(service_id,person_id,user_id,method,checked_at,actor,service_version,voided) VALUES(?,?,?,?,?,?,?,0) ON CONFLICT(service_id,person_id) DO UPDATE SET user_id=excluded.user_id,method=excluded.method,checked_at=excluded.checked_at,actor=excluded.actor,service_version=excluded.service_version,voided=0,reason=\'\'',(rid,person['id'],u['id'],'location',now.isoformat(),u['id'],row['version']))
         s.audit(c,u['id'],'church_presence_location:'+rid)

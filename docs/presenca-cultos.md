@@ -16,6 +16,7 @@ A liderança pode consultar a lista com paginação e confirmar manualmente um m
 - A lista nominal e a busca de membros são exclusivas da gestão de Members, pastores e TI. O membro consulta apenas a própria presença, sem totais nem nomes de outras pessoas.
 - Cancelar culto preserva presenças. A edição usa versão para impedir sobrescrever alterações simultâneas. TI/pastores cancelam qualquer culto; responsáveis de setor cancelam os que criaram.
 - Apenas TI, pastores ou a própria pessoa podem remover uma presença. A remoção é lógica e a auditoria registra a ação.
+- Uma presença removida não volta por uma execução automática. A própria pessoa precisa confirmar novamente de forma explícita, ou a recepção pode registrar uma confirmação auditada. O servidor também exige a preferência automática ativa para chamadas identificadas como automáticas.
 - A confirmação armazena membro, culto, horário, método, versão e responsável. A posição do membro não é persistida. Motivos de confirmação manual são criptografados no banco.
 
 ## Limites

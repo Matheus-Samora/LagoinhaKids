@@ -20,13 +20,13 @@ export function churchAttendanceUI({api,e}){
    const info=await api(base);if(gen!==generation)return;
    enabled=info.auto_enabled;
    if(!info.linked_member)return;
-   const open=info.items.filter(r=>r.can_checkin&&!r.my_presence);
+   const open=info.items.filter(r=>r.can_checkin&&!r.my_presence&&!r.automatic_blocked);
    if(!enabled||!open.length)return;
    const position=await locate();if(gen!==generation||document.hidden||!enabled)return;
    let issue='';
    for(const row of open){
     if(gen!==generation||!enabled)break;
-    try{await api(base+'/'+row.id+'/check-in',{method:'POST',body:{latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy,captured_at:position.timestamp}});}catch(err){if(err.code==='location'||err.code==='window'){issue=err.message;continue;}throw err;}
+    try{await api(base+'/'+row.id+'/check-in',{method:'POST',body:{automatic:true,latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy,captured_at:position.timestamp}});}catch(err){if(['location','window','withdrawn'].includes(err.code)){issue=err.message;continue;}throw err;}
     if(gen!==generation)return;
     message('Presença confirmada em '+row.title+'.');
    }

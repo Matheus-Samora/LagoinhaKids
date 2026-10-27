@@ -22,7 +22,7 @@ test('automatic check-in uses a fresh location only for an unconfirmed service',
  const s=setup({auto_enabled:true,items:[{id:'now',title:'Culto',can_checkin:true},{id:'done',can_checkin:true,my_presence:{}}]});
  await s.ui.setUser(3);await flush();assert.equal(s.gps,1);
  const writes=s.calls.filter(x=>x.options);assert.equal(writes.length,1);assert.ok(writes[0].path.endsWith('/now/check-in'));
- assert.deepEqual(Object.keys(writes[0].options.body).sort(),['accuracy','captured_at','latitude','longitude']);s.ui.stop();
+ assert.deepEqual(Object.keys(writes[0].options.body).sort(),['accuracy','automatic','captured_at','latitude','longitude']);assert.equal(writes[0].options.body.automatic,true);s.ui.stop();
 });
 test('leaving the visible app prevents a pending GPS check-in',async()=>{
  const s=setup({auto_enabled:true,items:[{id:'now',can_checkin:true}]},{defer:true});
@@ -31,4 +31,8 @@ test('leaving the visible app prevents a pending GPS check-in',async()=>{
 test('logout discards a pending location instead of using a new session',async()=>{
  const s=setup({auto_enabled:true,items:[{id:'now',can_checkin:true}]},{defer:true});
  await s.ui.setUser(3);await flush();s.ui.stop();s.resolve();await flush();assert.equal(s.calls.filter(x=>x.options).length,0);
+});
+test('automatic mode respects a previously removed presence',async()=>{
+ const s=setup({auto_enabled:true,items:[{id:'removed',can_checkin:true,automatic_blocked:true}]});
+ await s.ui.setUser(3);await flush();assert.equal(s.gps,0);assert.equal(s.calls.filter(x=>x.options).length,0);s.ui.stop();
 });

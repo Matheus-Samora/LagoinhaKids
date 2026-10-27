@@ -104,3 +104,14 @@ def test_creation_retry_and_bad_dates(setup):
     assert setup.post(BASE,json=bad).status_code==400
     assert setup.get(BASE+'?start=invalid').status_code==400
     assert setup.get(BASE+'?start=2026-01-01&end=2028-01-01').status_code==400
+
+def test_automatic_consent_and_withdrawal_are_enforced_on_server(setup):
+    row=create(setup);u=client(3);path=BASE+'/'+row['request_id']
+    sample=position(automatic=True)
+    assert u.post(path+'/check-in',json=sample).json()['detail']['code']=='consent'
+    assert u.patch(BASE+'/preferences/automatic',json={'enabled':True}).status_code==200
+    assert u.post(path+'/check-in',json=sample).status_code==200
+    assert u.delete(path+'/presences/p3').status_code==200
+    assert u.get(BASE).json()['items'][0]['automatic_blocked'] is True
+    assert u.post(path+'/check-in',json=sample).json()['detail']['code']=='withdrawn'
+    assert u.post(path+'/check-in',json=position()).status_code==200
