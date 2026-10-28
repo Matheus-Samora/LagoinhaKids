@@ -194,14 +194,41 @@ function login(message='',prefillEmail=''){
 let pagingWatcherTimer = null;
 const silencedCalls = new Set();
 
+function isMobileClientDevice() {
+  if (typeof window === 'undefined') return false;
+  if (window.Capacitor?.isNativePlatform?.()) return true;
+  if (window.AndroidNativeApp) return true;
+  const ua = navigator.userAgent || '';
+  const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  const isSmallScreen = window.innerWidth <= 820;
+  return isMobileUA || isSmallScreen;
+}
+
 async function checkActiveEmergencyPaging() {
   if (!identity?.user) return;
+
+  // Sync user info with native Android Background Service
+  if (window.AndroidNativeApp) {
+    try {
+      window.AndroidNativeApp.syncUser(String(identity.user.id), identity.user.role || '');
+    } catch {}
+  }
+
+  // DESKTOP RESTRICTION: Never display full-screen phone call dialer or siren on desktop!
+  if (!isMobileClientDevice()) {
+    if (document.getElementById('emergency-call-overlay')) {
+      dismissIncomingCallOverlay();
+    }
+    return;
+  }
+
   try {
     const list = await api('/paging/active');
     if (!Array.isArray(list)) return;
     const myUserId = Number(identity.user.id || 0);
     const isAdmin = Boolean(identity.platform_admin || identity.user.role === 'admin' || identity.pastor);
 
+    // On mobile: rings for the child's parent, test caller (actor), or admin testing on mobile
     const urgentActive = list.find(p => p.status === 'active' && (
       Number(p.parent_id) === myUserId ||
       Number(p.actor) === myUserId ||
@@ -212,6 +239,9 @@ async function checkActiveEmergencyPaging() {
       if (!silencedCalls.has(urgentActive.id) && !document.getElementById('emergency-call-overlay')) {
         showIncomingCallOverlay(urgentActive, async ({ child_id, paging_id }) => {
           silencedCalls.add(urgentActive.id);
+          if (window.AndroidNativeApp) {
+            try { window.AndroidNativeApp.stopCall(); } catch {}
+          }
           try {
             await api('/paging/on-my-way', { method: 'POST', body: { child_id, paging_id } });
             showRealtimeToast({
@@ -227,6 +257,9 @@ async function checkActiveEmergencyPaging() {
     } else {
       if (document.getElementById('emergency-call-overlay') && !list.some(p => p.status === 'active')) {
         dismissIncomingCallOverlay();
+        if (window.AndroidNativeApp) {
+          try { window.AndroidNativeApp.stopCall(); } catch {}
+        }
       }
     }
   } catch {}
@@ -949,7 +982,7 @@ function render(message=''){
  };
  bindPushBtn(root.querySelector('#enable-push'));
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
- const handleLogout=async()=>{try{churchAttendance.stop();stopPagingWatcher();dismissIncomingCallOverlay();realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
+ const handleLogout=async()=>{try{churchAttendance.stop();stopPagingWatcher();dismissIncomingCallOverlay();if(window.AndroidNativeApp){try{window.AndroidNativeApp.syncUser('','');window.AndroidNativeApp.stopCall();}catch{}}realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
  root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());

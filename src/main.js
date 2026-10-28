@@ -1124,6 +1124,7 @@ document.addEventListener('click',async e=>{
   const cid=Number(el.dataset.childId||0)||null;
   const pid=Number(el.dataset.id||0)||null;
   if(pid) sessionStorage.setItem('call_silenced_' + pid, 'true');
+  if(window.AndroidNativeApp){ try{ window.AndroidNativeApp.stopCall(); }catch{} }
   try{
     const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:cid,paging_id:pid}});
     dismissIncomingCallOverlay();
@@ -1455,6 +1456,17 @@ async function syncLive(){
     }
   }
   if(S.user){
+    if (window.AndroidNativeApp) {
+      try { window.AndroidNativeApp.syncUser(String(S.user.id), S.user.role || ''); } catch {}
+    }
+
+    const isMobileNow = (typeof window !== 'undefined') && (
+      Boolean(window.Capacitor?.isNativePlatform?.()) ||
+      Boolean(window.AndroidNativeApp) ||
+      /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '') ||
+      (window.innerWidth <= 820)
+    );
+
     const myUserId = Number(S.user.id || 0);
     const myChildIds = new Set((S.children||[]).map(c=>c.id));
     const isAdmin = Boolean(S.user.role === 'admin' || S.user.role === 'pastor');
@@ -1464,7 +1476,13 @@ async function syncLive(){
       (S.user.role === 'parent' && (myChildIds.size === 0 || myChildIds.has(p.child_id))) ||
       isAdmin
     ));
-    if(urgentActive){
+
+    // DESKTOP RESTRICTION: On desktop, NEVER pop up the full-screen call overlay or siren!
+    if (!isMobileNow) {
+      if(document.getElementById('emergency-call-overlay')){
+        dismissIncomingCallOverlay();
+      }
+    } else if(urgentActive){
       const key = 'call_silenced_' + urgentActive.id;
       if(!sessionStorage.getItem(key) && !document.getElementById('emergency-call-overlay')){
         showIncomingCallOverlay(urgentActive);
@@ -1483,6 +1501,9 @@ async function syncLive(){
     }else{
       if(document.getElementById('emergency-call-overlay')){
         dismissIncomingCallOverlay();
+        if (window.AndroidNativeApp) {
+          try { window.AndroidNativeApp.stopCall(); } catch {}
+        }
       }
     }
   }
