@@ -1058,16 +1058,16 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     <div style="background:var(--subtle-bg,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;margin:8px 0;">
      <strong style="display:block;font-size:13px;color:#1a2451;margin-bottom:8px;">Dados Oficiais da ATA DE REGISTRO</strong>
      <div class="form-grid-2">
-      ${field('church_name','Igreja / GC','Lagoinha Global - Matriz','text',true)}
-      ${field('service_name','Culto / Descrição','Culto de Celebração - Domingo','text',true)}
+      ${field('church_name','Igreja / GC',data.church_name||'','text',false)}
+      ${field('service_name','Culto / Descrição','','text',false)}
      </div>
      <div class="form-grid-2">
-      ${field('service_time','Horário do Culto','19:00','time',true)}
-      ${field('pastor','Pastor','Pr. Titular','text',true)}
+      ${field('service_time','Horário do Culto','','time',false)}
+      ${field('pastor','Pastor','','text',false)}
      </div>
      <div class="form-grid-2">
-      ${field('treasurer','Tesoureiro',data.user_name||'Tesouraria Lagoinha','text',true)}
-      ${field('deacon','Diácono / 2º Conferente','Diaconia de Plantão','text',true)}
+      ${field('treasurer','Tesoureiro',data.user_name||'','text',false)}
+      ${field('deacon','Diácono / 2º Conferente','','text',false)}
      </div>
     </div>
     <div class="form-grid-2">
@@ -1269,12 +1269,12 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(kind==='cost-centers'){
    html=field('name','Nome',r.name,'text',true)
     +field('ministry','Ministério',r.ministry,'text',false,[['','Sem vínculo'],...Object.keys(MINISTRY_META).map(x=>[x,x])])
-    +field('budget_value','Orçamento (R$)',r.budget_cents!==undefined?(r.budget_cents/100).toFixed(2):'0','text',true);
+    +field('budget_value','Orçamento (R$)',r.budget_cents!==undefined?(r.budget_cents/100).toFixed(2):'','text',true);
   }
   if(kind==='accounts'){
    html=field('name','Nome da conta',r.name,'text',true)
     +field('bank','Banco / Instituição',r.bank)
-    +field('opening_value','Saldo inicial (R$)',r.opening_cents!==undefined?(r.opening_cents/100).toFixed(2):'0','text',true);
+    +field('opening_value','Saldo inicial (R$)',r.opening_cents!==undefined?(r.opening_cents/100).toFixed(2):'','text',true);
   }
   if(kind==='entries'){
    html=field('account_id','Conta',r.account_id,'text',true,opt(data.accounts,r.account_id,r.account_name))
@@ -1289,14 +1289,14 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     +`<input name="file_id" type="hidden" value="${e(r.file_id||'')}"><label>Nota Fiscal / Comprovante (PDF ou Imagem)<input type="file" id="invoice-file" accept="application/pdf,image/jpeg,image/png,image/webp"></label><p id="invoice-status" role="status">${r.file_id?`<a href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Ver anexo atual</a>`:''}</p>`;
   }
   if(kind==='closings'){
-   html=field('service_name','Culto',r.service_name,'text',true)
+   html=field('service_name','Culto / Descrição',r.service_name||'','text',true)
     +field('service_date','Data',r.service_date||today(),'date',true)
     +field('account_id','Conta de destino',r.account_id,'text',true,opt(data.accounts,r.account_id,r.account_name))
-    +field('tithes','Dízimos (R$)',r.tithes_cents!==undefined?(r.tithes_cents/100).toFixed(2):'0','text',true)
-    +field('offerings_cash','Ofertas em Espécie (R$)',r.offerings_cash_cents!==undefined?(r.offerings_cash_cents/100).toFixed(2):'0','text',true)
-    +field('offerings_pix','Ofertas PIX (R$)',r.offerings_pix_cents!==undefined?(r.offerings_pix_cents/100).toFixed(2):'0','text',true)
-    +field('offerings_card','Ofertas Cartão (R$)',r.offerings_card_cents!==undefined?(r.offerings_card_cents/100).toFixed(2):'0','text',true)
-    +field('counted_by','1º Conferente',r.counted_by,'text',true)
+    +field('tithes','Dízimos (R$)',r.tithes_cents!==undefined?(r.tithes_cents/100).toFixed(2):'','text',false)
+    +field('offerings_cash','Ofertas em Espécie (R$)',r.offerings_cash_cents!==undefined?(r.offerings_cash_cents/100).toFixed(2):'','text',false)
+    +field('offerings_pix','Ofertas PIX (R$)',r.offerings_pix_cents!==undefined?(r.offerings_pix_cents/100).toFixed(2):'','text',false)
+    +field('offerings_card','Ofertas Cartão (R$)',r.offerings_card_cents!==undefined?(r.offerings_card_cents/100).toFixed(2):'','text',false)
+    +field('counted_by','1º Conferente',r.counted_by||data.user_name||'','text',true)
     +field('verified_by','2º Conferente (opcional)',r.verified_by,'text',false)
     +field('notes','Observações (opcional)',r.notes)
     +`<input name="file_id" type="hidden" value="${e(r.file_id||'')}"><label>Comprovante / Borderô Digitalizado (PDF ou Imagem)<input type="file" id="invoice-file" accept="application/pdf,image/jpeg,image/png,image/webp"></label><p id="invoice-status" role="status">${r.file_id?`<a href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Ver anexo atual</a>`:''}</p>`;

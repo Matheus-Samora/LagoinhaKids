@@ -2902,12 +2902,12 @@ export default {
         const costCenterId = urlObj.searchParams.get('cost_center_id') || '';
         const direction = urlObj.searchParams.get('direction') || 'all';
         const paymentStatus = urlObj.searchParams.get('payment_status') || 'all';
-        const churchName = urlObj.searchParams.get('church_name') || 'Lagoinha Global - Matriz';
-        const serviceName = urlObj.searchParams.get('service_name') || 'Culto de Celebração - Domingo';
-        const serviceTime = urlObj.searchParams.get('service_time') || '19:00';
-        const pastor = urlObj.searchParams.get('pastor') || 'Pr. Titular';
-        const treasurer = urlObj.searchParams.get('treasurer') || user.name || 'Tesouraria Lagoinha';
-        const deacon = urlObj.searchParams.get('deacon') || 'Diaconia de Plantão';
+        const churchName = (urlObj.searchParams.get('church_name') || '').trim();
+        const serviceName = (urlObj.searchParams.get('service_name') || '').trim();
+        const serviceTime = (urlObj.searchParams.get('service_time') || '').trim();
+        const pastor = (urlObj.searchParams.get('pastor') || '').trim();
+        const treasurer = (urlObj.searchParams.get('treasurer') || user.name || '').trim();
+        const deacon = (urlObj.searchParams.get('deacon') || '').trim();
         const includeAttachments = urlObj.searchParams.get('include_attachments') !== 'false';
 
         // Automatic period preset date resolution
@@ -3665,11 +3665,11 @@ export default {
     <section class="ata-info-card">
       <div class="info-row">
         <span class="info-label">Igreja/GC:</span>
-        <span class="info-value">${churchName}</span>
+        <span class="info-value">${churchName || '&nbsp;'}</span>
       </div>
       <div class="info-row">
         <span class="info-label">Culto:</span>
-        <span class="info-value">${serviceName}</span>
+        <span class="info-value">${serviceName || '&nbsp;'}</span>
       </div>
       <div class="info-row-datetime">
         <div class="date-col">
@@ -3678,7 +3678,7 @@ export default {
         </div>
         <div class="time-col">
           <span class="info-label">Horário:</span>
-          <span class="time-box">${serviceTime}</span>
+          <span class="time-box">${serviceTime || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>
         </div>
       </div>
     </section>
@@ -3769,7 +3769,7 @@ export default {
       <div class="participant-row">
         <div class="participant-info">
           <span class="participant-role">Pastor:</span>
-          <span class="participant-name">${pastor}</span>
+          <span class="participant-name">${pastor || '&nbsp;'}</span>
         </div>
         <div class="participant-sign">
           <span class="sign-label">Assinatura:</span>
@@ -3780,7 +3780,7 @@ export default {
       <div class="participant-row">
         <div class="participant-info">
           <span class="participant-role">Tesoureiro:</span>
-          <span class="participant-name">${treasurer}</span>
+          <span class="participant-name">${treasurer || '&nbsp;'}</span>
         </div>
         <div class="participant-sign">
           <span class="sign-label">Assinatura:</span>
@@ -3791,7 +3791,7 @@ export default {
       <div class="participant-row">
         <div class="participant-info">
           <span class="participant-role">Diácono:</span>
-          <span class="participant-name">${deacon}</span>
+          <span class="participant-name">${deacon || '&nbsp;'}</span>
         </div>
         <div class="participant-sign">
           <span class="sign-label">Assinatura:</span>
