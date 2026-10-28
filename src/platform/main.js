@@ -16,6 +16,7 @@ import {subscribeWebPush} from '../web-push.js';
 import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
 import {t,getLang,setLang,getTheme,toggleTheme,SUPPORTED_LANGS,translateDOM} from './i18n.js';
+import {showIncomingCallOverlay,dismissIncomingCallOverlay,emergencyRingtone} from '../emergency-call.js';
 
 const noticeCenter=notificationCenterUI({api,e:x=>e(x),subscribe:()=>subscribeWebPush(api),onChange:count=>{
  if(identity)identity.notification_unread_count=count;
@@ -189,6 +190,87 @@ function login(message='',prefillEmail=''){
  });
 }
 
+
+let pagingWatcherTimer = null;
+const silencedCalls = new Set();
+
+async function checkActiveEmergencyPaging() {
+  if (!identity?.user) return;
+  try {
+    const list = await api('/paging/active');
+    if (!Array.isArray(list)) return;
+    const myUserId = Number(identity.user.id || 0);
+    const isAdmin = Boolean(identity.platform_admin || identity.user.role === 'admin' || identity.pastor);
+
+    const urgentActive = list.find(p => p.status === 'active' && (
+      Number(p.parent_id) === myUserId ||
+      Number(p.actor) === myUserId ||
+      isAdmin
+    ));
+
+    if (urgentActive) {
+      if (!silencedCalls.has(urgentActive.id) && !document.getElementById('emergency-call-overlay')) {
+        showIncomingCallOverlay(urgentActive, async ({ child_id, paging_id }) => {
+          silencedCalls.add(urgentActive.id);
+          try {
+            await api('/paging/on-my-way', { method: 'POST', body: { child_id, paging_id } });
+            showRealtimeToast({
+              title: 'Aviso Enviado!',
+              message: 'A salinha já foi avisada que você está a caminho.'
+            });
+            void checkActiveEmergencyPaging();
+          } catch (err) {
+            console.error('Falha ao avisar a caminho:', err);
+          }
+        });
+      }
+    } else {
+      if (document.getElementById('emergency-call-overlay') && !list.some(p => p.status === 'active')) {
+        dismissIncomingCallOverlay();
+      }
+    }
+  } catch {}
+}
+
+function startPagingWatcher() {
+  if (pagingWatcherTimer) clearInterval(pagingWatcherTimer);
+  void checkActiveEmergencyPaging();
+  pagingWatcherTimer = setInterval(checkActiveEmergencyPaging, 2500);
+}
+
+function stopPagingWatcher() {
+  if (pagingWatcherTimer) {
+    clearInterval(pagingWatcherTimer);
+    pagingWatcherTimer = null;
+  }
+}
+
+function mobileAppBannerHtml() {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return '';
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator?.standalone || window.Capacitor?.isNativePlatform?.();
+  if (isStandalone || (!isAndroid && !isIos)) return '';
+
+  if (isAndroid) {
+    return `<div class="mobile-app-banner">
+      <div class="app-banner-icon">📱</div>
+      <div class="app-banner-info">
+        <strong>Instalar Aplicativo Oficial Android</strong>
+        <span>Receba chamadas do telão e notificações na tela bloqueada</span>
+      </div>
+      <a class="button app-banner-download-btn" href="/download/lagoinha-kids.apk" download="lagoinha-kids.apk">Baixar APK</a>
+    </div>`;
+  }
+  return `<div class="mobile-app-banner">
+    <div class="app-banner-icon">🍎</div>
+    <div class="app-banner-info">
+      <strong>Instalar no iPhone</strong>
+      <span>Toque no botão Compartilhar ⎋ e "Adicionar à Tela de Início"</span>
+    </div>
+  </div>`;
+}
+
 async function load(justLoggedIn=false){
  identity=await api('/platform/me');
  if(identity?.user)saveAccount(identity.user);
@@ -208,6 +290,7 @@ async function load(justLoggedIn=false){
  }
  if(identity.platform_admin&&(!path||path==='systems'))users=await api('/platform/users');
  render();
+ startPagingWatcher();
 }
 
 function profileSaved(user){
@@ -731,6 +814,7 @@ function render(message=''){
      <button type="button" class="quiet topbar-btn-compact" id="logout">${uiIcon('exit',18)} ${t("nav.sign_out", "Sair")}</button>
     </div>
    </header>
+   ${mobileAppBannerHtml()}
    <div class="mobile-sector-switcher" aria-label="Atalhos de setores">
     ${sectorLinksHtml}
    </div>
@@ -865,7 +949,7 @@ function render(message=''){
  };
  bindPushBtn(root.querySelector('#enable-push'));
  root.querySelectorAll('[data-enable-push]').forEach(bindPushBtn);
- const handleLogout=async()=>{try{churchAttendance.stop();realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
+ const handleLogout=async()=>{try{churchAttendance.stop();stopPagingWatcher();dismissIncomingCallOverlay();realtime.disconnect();await api('/auth/logout',{method:'POST'});identity=null;csrf='';users=[];await welcome('systems');login();}catch(error){render(error.message);}};
  root.querySelector('#logout')?.addEventListener('click',handleLogout);
  root.querySelector('#topbar-profile-btn')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
  root.querySelector('#account-profile')?.addEventListener('click',()=>accountProfileUI({api,e,onSaved:profileSaved}).open());
@@ -1071,3 +1155,9 @@ realtime.on('ministries:my_schedule',()=>void communityRefresh.request());
 realtime.on('announcement:new',()=>void communityRefresh.request());
 
 window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkActiveEmergencyPaging(); });
+window.addEventListener('focus', () => void checkActiveEmergencyPaging());
+window.addEventListener('lagoinha:realtime:kids:paging', () => void checkActiveEmergencyPaging());
+window.addEventListener('lagoinha:realtime:kids:sync', () => void checkActiveEmergencyPaging());
+realtime.on('kids:paging', () => void checkActiveEmergencyPaging());

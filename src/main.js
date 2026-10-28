@@ -1123,6 +1123,7 @@ document.addEventListener('click',async e=>{
   emergencyRingtone.stop();
   const cid=Number(el.dataset.childId||0)||null;
   const pid=Number(el.dataset.id||0)||null;
+  if(pid) sessionStorage.setItem('call_silenced_' + pid, 'true');
   try{
     const res=await api('/paging/on-my-way',{method:'POST',body:{child_id:cid,paging_id:pid}});
     dismissIncomingCallOverlay();
@@ -1135,6 +1136,8 @@ document.addEventListener('click',async e=>{
  }
  if(action==='silence-call-overlay'){
   emergencyRingtone.stop();
+  const urgent = S.activePaging?.find(p=>p.status==='active');
+  if(urgent) sessionStorage.setItem('call_silenced_' + urgent.id, 'true');
   const btn=document.getElementById('silence-call-btn');
   if(btn){
     btn.innerHTML='🔕 Toque Silenciado ✓';
@@ -1451,13 +1454,19 @@ async function syncLive(){
       });
     }
   }
-  if(S.user.role==='parent'){
+  if(S.user){
+    const myUserId = Number(S.user.id || 0);
     const myChildIds = new Set((S.children||[]).map(c=>c.id));
-    const urgentActive = activePaging && activePaging.find(p=>p.status==='active' && (myChildIds.size===0 || myChildIds.has(p.child_id)));
+    const isAdmin = Boolean(S.user.role === 'admin' || S.user.role === 'pastor');
+    const urgentActive = activePaging && activePaging.find(p => p.status === 'active' && (
+      Number(p.parent_id) === myUserId ||
+      Number(p.actor) === myUserId ||
+      (S.user.role === 'parent' && (myChildIds.size === 0 || myChildIds.has(p.child_id))) ||
+      isAdmin
+    ));
     if(urgentActive){
-      const key='call_prompted_'+urgentActive.id;
-      if(!sessionStorage.getItem(key)){
-        sessionStorage.setItem(key,'true');
+      const key = 'call_silenced_' + urgentActive.id;
+      if(!sessionStorage.getItem(key) && !document.getElementById('emergency-call-overlay')){
         showIncomingCallOverlay(urgentActive);
         sendSystemNotification({
           title:'🚨 Chamado no Telão: '+urgentActive.child_name,
@@ -1472,7 +1481,7 @@ async function syncLive(){
         });
       }
     }else{
-      if(document.getElementById('emergency-call-overlay') && (!activePaging || !activePaging.some(p=>p.status==='active' && (myChildIds.size===0 || myChildIds.has(p.child_id))))){
+      if(document.getElementById('emergency-call-overlay')){
         dismissIncomingCallOverlay();
       }
     }

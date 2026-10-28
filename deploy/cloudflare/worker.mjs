@@ -607,6 +607,17 @@ export default {
       });
     }
 
+    // Serve direct APK download
+    if (path === '/lagoinha-kids.apk' || path === '/download/lagoinha-kids.apk' || path === '/downloads/lagoinha-kids.apk') {
+      const apkResp = await env.ASSETS.fetch(new Request(new URL('/lagoinha-kids.apk', url.origin), request));
+      if (apkResp.status === 200) {
+        const h = new Headers(apkResp.headers);
+        h.set('Content-Type', 'application/vnd.android.package-archive');
+        h.set('Content-Disposition', 'attachment; filename="lagoinha-kids.apk"');
+        return new Response(apkResp.body, { status: 200, headers: h });
+      }
+    }
+
     // Serve static frontend and SPA routes via Cloudflare Assets
     if (!path.startsWith('/api/')) {
       const spaRoutes = new Set(['/kids', '/kids/', '/systems', '/systems/', '/access', '/access/', '/membro', '/membro/', '/finance', '/finance/', '/members', '/members/', '/ministries', '/ministries/']);
@@ -1083,7 +1094,7 @@ export default {
 
       if (path === '/api/paging/active' && method === 'GET') {
         const rows = await db.all(`
-          SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
+          SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, ch.parent_id as parent_id, r.name as room_name, u.name as ack_user_name
           FROM paging_requests p
           JOIN children ch ON ch.id=p.child_id
           LEFT JOIN rooms r ON r.id=p.room_id
@@ -1231,7 +1242,7 @@ export default {
         let activePaging;
         if (user.role === 'parent') {
           activePaging = await db.all(`
-            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
+            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, ch.parent_id as parent_id, r.name as room_name, u.name as ack_user_name
             FROM paging_requests p
             JOIN children ch ON ch.id=p.child_id
             LEFT JOIN rooms r ON r.id=p.room_id
@@ -1241,7 +1252,7 @@ export default {
           `, [user.id]);
         } else {
           activePaging = await db.all(`
-            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
+            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, ch.parent_id as parent_id, r.name as room_name, u.name as ack_user_name
             FROM paging_requests p
             JOIN children ch ON ch.id=p.child_id
             LEFT JOIN rooms r ON r.id=p.room_id

@@ -1,3 +1,5 @@
+@import "../emergency-call.css";
+
 /* ==========================================================================
    Lagoinha Systems — Unified Institutional Design, Auth, Animations & Sectors
    Matches Lagoinha Kids Executive Monochrome & Sector Visual Identity
@@ -4018,4 +4020,61 @@ button.mini-button.success-button:hover {
   display: block;
   font-size: 12px;
   color: var(--muted, #71717a);
+}
+
+
+/* Mobile App Installation Banner */
+.mobile-app-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(24, 24, 27, 0.95), rgba(9, 9, 11, 0.98));
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin: 8px 12px 12px 12px;
+  color: #fafafa;
+}
+.app-banner-icon {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.app-banner-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.app-banner-info strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f4d068;
+  letter-spacing: -0.2px;
+}
+.app-banner-info span {
+  font-size: 11.5px;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-banner-download-btn {
+  flex-shrink: 0;
+  padding: 8px 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  background: #d4af37 !important;
+  color: #09090b !important;
+  border: none !important;
+  border-radius: 999px !important;
+  text-decoration: none !important;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3) !important;
+}
+@media (min-width: 860px) {
+  .mobile-app-banner {
+    display: none !important;
+  }
 }
