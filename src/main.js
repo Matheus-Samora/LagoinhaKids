@@ -20,7 +20,7 @@ import {getTheme, toggleTheme, getLang, setLang, SUPPORTED_LANGS, t, translateDO
 
 const app=document.getElementById('app'), modal=document.getElementById('modal');
 const NATIVE=Capacitor.isNativePlatform();
-const DEFAULT_SERVER='https://lagoinha-kids-82569578125.southamerica-east1.run.app';
+const DEFAULT_SERVER='https://lagoinha-kids.lagoinha-systems.workers.dev';
 let storedServer='';
 try{
  if(NATIVE){
@@ -1452,7 +1452,8 @@ async function syncLive(){
     }
   }
   if(S.user.role==='parent'){
-    const urgentActive = activePaging && activePaging.find(p=>p.status==='active');
+    const myChildIds = new Set((S.children||[]).map(c=>c.id));
+    const urgentActive = activePaging && activePaging.find(p=>p.status==='active' && (myChildIds.size===0 || myChildIds.has(p.child_id)));
     if(urgentActive){
       const key='call_prompted_'+urgentActive.id;
       if(!sessionStorage.getItem(key)){
@@ -1471,7 +1472,7 @@ async function syncLive(){
         });
       }
     }else{
-      if(document.getElementById('emergency-call-overlay') && (!activePaging || !activePaging.some(p=>p.status==='active'))){
+      if(document.getElementById('emergency-call-overlay') && (!activePaging || !activePaging.some(p=>p.status==='active' && (myChildIds.size===0 || myChildIds.has(p.child_id))))){
         dismissIncomingCallOverlay();
       }
     }
@@ -1484,11 +1485,15 @@ window.addEventListener('lagoinha:realtime:kids:attendance', () => void syncLive
 window.addEventListener('lagoinha:realtime:kids:paging', () => void syncLive());
 window.addEventListener('lagoinha:realtime:notification:new', () => void syncLive());
 
-// On-demand focus sync with 5-minute cooldown to allow Cloud Run scale-to-zero
-let lastFocusSync=Date.now();
+// High-frequency reactive poller: checks /api/sync every 2.5 seconds when tab/app is visible
+setInterval(() => {
+  if (!document.hidden && S.user && !S.busy) {
+    void syncLive();
+  }
+}, 2500);
+
 function syncOnDemand(){
- if(document.hidden||Date.now()-lastFocusSync<300000)return;
- lastFocusSync=Date.now();
+ if(document.hidden)return;
  void syncLive();
  void checkLiveUpdate();
 }

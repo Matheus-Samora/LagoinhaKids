@@ -3,7 +3,7 @@
   "appName": "Lagoinha Kids",
   "webDir": "dist",
   "server": {
-    "url": "https://lagoinha-kids-82569578125.southamerica-east1.run.app",
+    "url": "https://lagoinha-kids.lagoinha-systems.workers.dev",
     "cleartext": false
   },
   "plugins": {

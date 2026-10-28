@@ -154,6 +154,7 @@ class D1Wrap {
   }
 }
 
+let currentCorsHeaders = {};
 function jsonResp(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -163,6 +164,7 @@ function jsonResp(data, status = 200, extraHeaders = {}) {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'same-origin',
       'X-Frame-Options': 'DENY',
+      ...currentCorsHeaders,
       ...extraHeaders
     }
   });
@@ -576,6 +578,35 @@ export default {
     const path = url.pathname;
     const method = request.method.toUpperCase();
 
+    const origin = request.headers.get('origin');
+    const isAllowedOrigin = origin && (
+      origin === 'capacitor://localhost' ||
+      origin === 'https://localhost' ||
+      origin === 'http://localhost' ||
+      origin.startsWith('http://localhost:') ||
+      origin.startsWith('https://localhost:') ||
+      origin.endsWith('.workers.dev') ||
+      origin.endsWith('.pages.dev') ||
+      origin.endsWith('.lagoinha.com')
+    );
+
+    currentCorsHeaders = isAllowedOrigin ? {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token, X-Requested-With'
+    } : {};
+
+    if (method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...currentCorsHeaders,
+          'Access-Control-Max-Age': '86400'
+        }
+      });
+    }
+
     // Serve static frontend and SPA routes via Cloudflare Assets
     if (!path.startsWith('/api/')) {
       const spaRoutes = new Set(['/kids', '/kids/', '/systems', '/systems/', '/access', '/access/', '/membro', '/membro/', '/finance', '/finance/', '/members', '/members/', '/ministries', '/ministries/']);
@@ -609,6 +640,14 @@ export default {
       }
       if (path === '/api/version' && method === 'GET') {
         return jsonResp({ version: '3.3.0', application: 'Lagoinha Systems', build: 'cloudflare-d1' });
+      }
+      if (path === '/api/capabilities' && method === 'GET') {
+        return jsonResp({
+          push_platforms: ['android', 'ios', 'web'],
+          password_recovery: false,
+          push: true,
+          google: false
+        });
       }
       if (path === '/api/terms/privacy' && method === 'GET') {
         return jsonResp({
@@ -982,16 +1021,341 @@ export default {
         return jsonResp({ items, unread_count: Number(unread || 0), next_before: null });
       }
 
+      // ==========================================
+      // REALTIME PAGING & TELÃO SYSTEM
+      // ==========================================
+      if (path === '/api/paging' && method === 'POST') {
+        const body = await request.json();
+        const childId = Number(body.child_id);
+        if (!childId) fail('child_id', 'Criança não especificada.', 400);
+        const child = await db.first('SELECT * FROM children WHERE id=?', [childId]);
+        if (!child) fail('child_not_found', 'Criança não encontrada.', 404);
+
+        // Check if there is already an active paging request
+        const existing = await db.first("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way','pending','acknowledged')", [childId]);
+        if (existing) {
+          return jsonResp({ ...existing, child_name: child.name, ok: true });
+        }
+
+        const claimCode = 'CH-' + randomBytes(2).toString('hex').toUpperCase();
+        const reason = String(body.reason || 'Acolhimento da família necessário').trim();
+        const now = nowIso();
+
+        const ins = await db.run(
+          "INSERT INTO paging_requests(child_id, room_id, claim_code, reason, status, created_at, actor) VALUES(?,?,?,?, 'active', ?, ?)",
+          [childId, child.room_id || null, claimCode, reason, now, user.id]
+        );
+        const pagingId = ins.lastrowid;
+
+        // Create urgent notification for parent if linked
+        if (child.parent_id) {
+          await db.run(
+            "INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at, sector, context_id) VALUES(?,?,?,?,?,?,?,'kids',?)",
+            [
+              child.parent_id,
+              childId,
+              'urgent_call',
+              '🚨 Chamado no Telão - Ministério Infantil',
+              `Atenção responsável: Por favor, compareça à salinha de ${child.name}. Motivo: ${reason}. Código no Telão: ${claimCode}`,
+              user.id,
+              now,
+              String(pagingId)
+            ]
+          );
+        }
+
+        await db.run(
+          "INSERT INTO audit(actor, action, child_id, created_at) VALUES(?, 'paging_call', ?, ?)",
+          [user.id, childId, now]
+        );
+
+        return jsonResp({
+          id: pagingId,
+          child_id: childId,
+          child_name: child.name,
+          claim_code: claimCode,
+          reason,
+          status: 'active',
+          created_at: now,
+          ok: true
+        });
+      }
+
       if (path === '/api/paging/active' && method === 'GET') {
         const rows = await db.all(`
-          SELECT p.*, ch.name as child_name, r.name as room_name
+          SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
           FROM paging_requests p
           JOIN children ch ON ch.id=p.child_id
-          JOIN rooms r ON r.id=p.room_id
-          WHERE p.status IN ('pending','acknowledged')
-          ORDER BY p.created_at DESC
+          LEFT JOIN rooms r ON r.id=p.room_id
+          LEFT JOIN users u ON u.id=p.acknowledged_by
+          WHERE p.status IN ('active', 'on_my_way', 'pending', 'acknowledged')
+          ORDER BY p.id DESC
         `);
         return jsonResp(rows);
+      }
+
+      if (path === '/api/paging/on-my-way' && method === 'POST') {
+        const body = await request.json();
+        const pagingId = Number(body.paging_id || 0) || null;
+        const childId = Number(body.child_id || 0) || null;
+
+        let p = null;
+        if (pagingId) {
+          p = await db.first("SELECT * FROM paging_requests WHERE id=? AND status IN ('active','on_my_way','pending','acknowledged')", [pagingId]);
+          if (!p) {
+            const resolved = await db.first("SELECT * FROM paging_requests WHERE id=?", [pagingId]);
+            if (resolved) {
+              const chRes = await db.first("SELECT name FROM children WHERE id=?", [resolved.child_id]);
+              return jsonResp({ ok: true, child_name: chRes?.name || 'seu filho', status: 'resolved', claim_code: resolved.claim_code, message: 'Este chamado já havia sido concluído.' });
+            }
+          }
+        }
+        if (!p && childId) {
+          p = await db.first("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way','pending','acknowledged') ORDER BY id DESC LIMIT 1", [childId]);
+        }
+        if (!p) {
+          p = await db.first(`
+            SELECT p.* FROM paging_requests p
+            JOIN children ch ON ch.id=p.child_id
+            WHERE (ch.parent_id=?) AND p.status IN ('active','on_my_way','pending','acknowledged')
+            ORDER BY p.id DESC LIMIT 1
+          `, [user.id]);
+        }
+        if (!p) fail('paging_not_found', 'Chamado ativo não encontrado.', 404);
+
+        const ch = await db.first("SELECT * FROM children WHERE id=?", [p.child_id]);
+        const now = nowIso();
+
+        if (p.status === 'on_my_way') {
+          return jsonResp({ ok: true, status: 'on_my_way', child_name: ch?.name || 'seu filho', claim_code: p.claim_code });
+        }
+
+        await db.run(
+          "UPDATE paging_requests SET status='on_my_way', acknowledged_at=?, acknowledged_by=? WHERE id=?",
+          [now, user.id, p.id]
+        );
+
+        // Notify room teachers and admins
+        const teachers = await db.all("SELECT user_id FROM teacher_rooms WHERE room_id=?", [p.room_id]);
+        const adminsList = await db.all("SELECT id FROM users WHERE role='admin' AND active=1");
+        const recipientIds = new Set([...teachers.map(t => t.user_id), ...adminsList.map(a => a.id)]);
+
+        const msg = `O responsável ${user.name} confirmou que ESTÁ A CAMINHO para atender o chamado de ${ch?.name || 'sua criança'}.`;
+        for (const uid of recipientIds) {
+          await db.run(
+            "INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at, sector, context_id) VALUES(?,?, 'arriving', '🏃 Responsável a Caminho!', ?, ?, ?, 'kids', ?)",
+            [uid, ch?.id || null, msg, user.id, now, String(p.id)]
+          );
+        }
+
+        // Mark parent's urgent_call notification as read
+        await db.run(
+          "UPDATE notifications SET read_at=coalesce(read_at,?) WHERE user_id=? AND child_id=? AND kind='urgent_call'",
+          [now, user.id, p.child_id]
+        );
+
+        await db.run("INSERT INTO audit(actor, action, child_id, created_at) VALUES(?, 'paging_on_my_way', ?, ?)", [user.id, p.child_id, now]);
+
+        return jsonResp({ ok: true, child_name: ch?.name || 'seu filho', status: 'on_my_way', claim_code: p.claim_code });
+      }
+
+      if (path.startsWith('/api/paging/') && path.endsWith('/resolve') && method === 'POST') {
+        const pagingId = Number(path.split('/')[3]);
+        if (!pagingId) fail('invalid_id', 'ID inválido.', 400);
+
+        const now = nowIso();
+        await db.run(
+          "UPDATE paging_requests SET status='resolved', resolved_at=? WHERE id=? AND status IN ('active','on_my_way','pending','acknowledged')",
+          [now, pagingId]
+        );
+
+        await db.run("INSERT INTO audit(actor, action, created_at) VALUES(?, 'paging_resolve', ?)", [user.id, now]);
+        return jsonResp({ ok: true });
+      }
+
+      // ==========================================
+      // REALTIME SYNC & SNAPSHOT PIPELINE
+      // ==========================================
+      if (path === '/api/sync' && method === 'GET') {
+        const maxAudit = await db.scalar('SELECT coalesce(max(id), 0) FROM audit');
+        const noticeInfo = await db.first('SELECT coalesce(max(id), 0) as max_id, coalesce(max(read_at), "") as read_stamp FROM notifications WHERE user_id=?', [user.id]);
+        const activePagingCount = await db.scalar("SELECT count(*) FROM paging_requests WHERE status IN ('active','on_my_way')");
+        const activePagingMax = await db.scalar("SELECT coalesce(max(id), 0) FROM paging_requests WHERE status IN ('active','on_my_way')");
+        const currentMinute = Math.floor(Date.now() / 60000);
+        const raw = `${maxAudit}|${noticeInfo?.max_id || 0}|${noticeInfo?.read_stamp || ''}|${activePagingCount}|${activePagingMax}|${currentMinute}`;
+        const revision = sha256Hex(raw);
+        return jsonResp({ revision });
+      }
+
+      if (path === '/api/snapshot' && method === 'GET') {
+        const day = todayStr();
+        const childRows = await db.all(`
+          SELECT ch.*, r.name as room_name, r.color as room_color, u.name as parent_name, u.phone as parent_phone, u.email as parent_email,
+            a.status as attendance_status, a.in_at, a.out_at, a.guardian, a.claim_code, a.checkout_guardian
+          FROM children ch
+          LEFT JOIN rooms r ON r.id=ch.room_id
+          LEFT JOIN users u ON u.id=ch.parent_id
+          LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=?
+          WHERE ch.archived=0
+          ORDER BY ch.name
+        `, [day]);
+
+        const filteredChildren = user.role === 'parent' && !isGlobal
+          ? childRows.filter(r => Number(r.parent_id) === user.id)
+          : childRows;
+        const children = filteredChildren.map(r => decryptRecord(r, env));
+
+        const rooms = await db.all(`
+          SELECT r.*, u.name as teacher_name, m.name as monitor_name,
+            (SELECT count(*) FROM children ch WHERE ch.room_id=r.id AND ch.archived=0) as student_count,
+            (SELECT count(*) FROM attendance a JOIN children ch ON ch.id=a.child_id WHERE ch.room_id=r.id AND ch.archived=0 AND a.day=? AND a.status='present') as present_count
+          FROM rooms r
+          LEFT JOIN users u ON u.id=r.teacher_id
+          LEFT JOIN users m ON m.id=r.monitor_id
+          WHERE r.active=1
+          ORDER BY r.min_age, r.name
+        `, [day]);
+        const lessons = await db.all("SELECT * FROM lessons WHERE active=1 AND starts_at >= datetime('now', '-1 day') ORDER BY starts_at ASC LIMIT 25");
+
+        const notifications = await db.all(`
+          SELECT n.*, ch.name as child_name, u.name as sender_name
+          FROM notifications n
+          LEFT JOIN children ch ON ch.id=n.child_id
+          LEFT JOIN users u ON u.id=n.sender
+          WHERE n.user_id=?
+          ORDER BY n.id DESC LIMIT 50
+        `, [user.id]);
+
+        const events = await db.all("SELECT * FROM events WHERE active=1 ORDER BY starts_at ASC LIMIT 20");
+
+        let activePaging;
+        if (user.role === 'parent') {
+          activePaging = await db.all(`
+            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
+            FROM paging_requests p
+            JOIN children ch ON ch.id=p.child_id
+            LEFT JOIN rooms r ON r.id=p.room_id
+            LEFT JOIN users u ON u.id=p.acknowledged_by
+            WHERE (ch.parent_id=?) AND p.status IN ('active', 'on_my_way')
+            ORDER BY p.id DESC
+          `, [user.id]);
+        } else {
+          activePaging = await db.all(`
+            SELECT p.*, ch.name as child_name, ch.avatar_url as child_avatar_url, r.name as room_name, u.name as ack_user_name
+            FROM paging_requests p
+            JOIN children ch ON ch.id=p.child_id
+            LEFT JOIN rooms r ON r.id=p.room_id
+            LEFT JOIN users u ON u.id=p.acknowledged_by
+            WHERE p.status IN ('active', 'on_my_way')
+            ORDER BY p.id DESC
+          `);
+        }
+
+        const activeGuests = user.role !== 'parent' ? await db.all(`
+          SELECT g.*, r.name as room_name
+          FROM guest_checkins g
+          JOIN rooms r ON r.id=g.room_id
+          WHERE substr(g.created_at,1,10)=? AND g.status='present'
+          ORDER BY g.created_at DESC
+        `, [todayStr()]) : [];
+
+        return jsonResp({
+          children,
+          rooms,
+          lessons,
+          notifications,
+          events,
+          activePaging,
+          activeGuests: activeGuests.map(g => decryptRecord(g, env))
+        });
+      }
+
+      if (path === '/api/capabilities' && method === 'GET') {
+        return jsonResp({
+          push_platforms: ['android', 'ios', 'web'],
+          password_recovery: false,
+          push: true,
+          google: false
+        });
+      }
+
+      if (path === '/api/devices/token' && method === 'POST') {
+        const body = await request.json();
+        const token = String(body.token || '').trim();
+        const platform = String(body.platform || 'android').trim();
+        if (!token) fail('token', 'Token obrigatório.', 400);
+
+        await db.run(
+          "INSERT INTO device_tokens(user_id, token, platform, updated_at, session_token) VALUES(?,?,?,?,?) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id, platform=excluded.platform, updated_at=excluded.updated_at, session_token=excluded.session_token",
+          [user.id, token, platform, nowIso(), user.token || '']
+        );
+        return jsonResp({ ok: true });
+      }
+
+      if (path.startsWith('/api/children/') && path.endsWith('/notify') && method === 'POST') {
+        const cid = Number(path.split('/')[3]);
+        const body = await request.json();
+        const child = await db.first('SELECT * FROM children WHERE id=?', [cid]);
+        if (!child) fail('child_not_found', 'Criança não encontrada.', 404);
+
+        const titles = {
+          please_pickup: 'A professora solicita sua presença',
+          arriving: 'Responsável a caminho da salinha',
+          pickup_ready: 'Responsável chegou para buscar',
+          consent_request: 'Conheça a conferência facial auxiliar'
+        };
+        const title = titles[body.kind] || 'Aviso sobre a criança';
+        const msg = String(body.message || '').trim() || `Aviso sobre ${child.name}.`;
+        const now = nowIso();
+
+        let recipients = [];
+        if (user.role === 'parent') {
+          const teachers = await db.all('SELECT user_id FROM teacher_rooms WHERE room_id=?', [child.room_id]);
+          const adminsList = await db.all("SELECT id FROM users WHERE role='admin' AND active=1");
+          recipients = [...teachers.map(t => t.user_id), ...adminsList.map(a => a.id)];
+        } else {
+          if (child.parent_id) recipients = [child.parent_id];
+        }
+
+        for (const uid of new Set(recipients)) {
+          await db.run(
+            "INSERT INTO notifications(user_id, child_id, kind, title, message, sender, created_at, sector, context_id) VALUES(?,?,?,?,?,?,?,'kids',?)",
+            [uid, cid, body.kind || 'please_pickup', title, msg, user.id, now, String(cid)]
+          );
+        }
+
+        await db.run("INSERT INTO audit(actor, action, child_id, created_at) VALUES(?, ?, ?, ?)", [user.id, 'notification_' + (body.kind || 'please_pickup'), cid, now]);
+        return jsonResp({ ok: true, recipients: recipients.length });
+      }
+
+      if (path.startsWith('/api/children/') && path.endsWith('/guardian') && method === 'POST') {
+        const cid = Number(path.split('/')[3]);
+        const body = await request.json();
+        const parentId = Number(body.parent_id);
+        await db.run('UPDATE children SET parent_id=? WHERE id=?', [parentId, cid]);
+        await db.run("INSERT INTO audit(actor, action, child_id, created_at) VALUES(?, 'link_guardian', ?, ?)", [user.id, cid, nowIso()]);
+        return jsonResp({ ok: true });
+      }
+
+      if ((path === '/api/upload' || path === '/api/avatar/upload') && method === 'POST') {
+        const fd = await request.formData();
+        const file = fd.get('file') || fd.get('image');
+        if (!file || typeof file.arrayBuffer !== 'function') fail('file', 'Selecione um arquivo válido.');
+        const buf = Buffer.from(await file.arrayBuffer());
+        const mid = randomBytes(16).toString('hex');
+        await db.run(
+          'INSERT INTO media(id,filename,content_type,data,created_by,created_at) VALUES(?,?,?,?,?,?)',
+          [mid, file.name || 'foto.jpg', file.type || 'image/jpeg', buf, user.id, nowIso()]
+        );
+        const fileUrl = `/api/media/${mid}`;
+        return jsonResp({ ok: true, id: mid, url: fileUrl });
+      }
+
+      if (path === '/api/me/avatar' && method === 'POST') {
+        const body = await request.json();
+        const avatarUrl = String(body.avatar_url || '').trim();
+        await db.run('UPDATE users SET avatar_url=? WHERE id=?', [avatarUrl, user.id]);
+        return jsonResp({ ok: true, avatar_url: avatarUrl });
       }
 
       if (path === '/api/guests/active' && method === 'GET') {

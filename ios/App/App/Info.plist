@@ -70,5 +70,7 @@
 	<string>A câmera é utilizada para conferência facial auxiliar autorizada dos alunos no ministério infantil.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Permite selecionar fotos autorizadas para o cadastro do aluno no ministério infantil.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>A localização é necessária para confirmar sua presença automática no culto presencial quando estiver no templo.</string>
 </dict>
 </plist>
