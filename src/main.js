@@ -125,12 +125,12 @@ async function load(){
 }
 function navItems(){
  if(S.user.role==='parent')return [['overview',t('kids.my_children','Meus filhos'),'kids'],['events',t('kids.events','Eventos'),'calendar'],['lessons',t('kids.lessons','Aulinhas'),'clock'],['notifications',t('kids.notifications','Avisos'),'bell']];
- if(S.user.role==='teacher')return [['rooms',t('kids.my_rooms','Minhas turmas'),'rooms'],['team',t('kids.team_short','Equipe'),'volunteers'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell']];
+ if(S.user.role==='teacher'||S.user.role==='monitor'||S.user.staff_role==='monitor')return [['rooms',S.user.staff_role==='monitor'||S.user.role==='monitor'?'Minhas turmas':t('kids.my_rooms','Minhas turmas'),'rooms'],['team',t('kids.team_short','Equipe'),'volunteers'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell']];
  return [['overview',t('kids.overview','Visão geral'),'home'],['rooms',t('kids.rooms','Turmas'),'rooms'],['team',t('kids.team','Professores e Monitores'),'volunteers'],['children',t('kids.students','Alunos'),'kids'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar'],['notifications',t('kids.notifications','Avisos'),'bell'],['users',t('kids.users','Usuários e acessos'),'permissions'],['settings',t('kids.settings','Minha conta'),'settings']].filter(([id])=>id!=='users'||S.user.platform_admin);
 }
 function mobileNavItems(){
  if(S.user.role==='parent')return [['overview',t('kids.my_children','Meus filhos'),'kids'],['lessons',t('kids.lessons','Aulinhas'),'clock'],['events',t('kids.events','Eventos'),'calendar']];
- if(S.user.role==='teacher')return [['rooms',t('kids.rooms','Turmas'),'rooms'],['attendance',t('kids.attendance','Chamada'),'check'],['team',t('kids.team_short','Equipe'),'volunteers'],['events',t('kids.events','Eventos'),'calendar']];
+ if(S.user.role==='teacher'||S.user.role==='monitor'||S.user.staff_role==='monitor')return [['rooms',t('kids.rooms','Turmas'),'rooms'],['attendance',t('kids.attendance','Chamada'),'check'],['team',t('kids.team_short','Equipe'),'volunteers'],['events',t('kids.events','Eventos'),'calendar']];
  return [['overview',t('kids.overview','Visão'),'home'],['rooms',t('kids.rooms','Turmas'),'rooms'],['children',t('kids.students','Alunos'),'kids'],['attendance',t('kids.attendance','Chamada'),'check'],['events',t('kids.events','Eventos'),'calendar']];
 }
 const navHistory=[];
@@ -138,7 +138,7 @@ let lastBackTime=0;
 
 function initialPage(){
  if(!S.user)return 'overview';
- return S.user.role==='teacher'?'rooms':'overview';
+ return (S.user.role==='teacher'||S.user.role==='monitor'||S.user.staff_role==='monitor')?'rooms':'overview';
 }
 
 function canGoBack(){
@@ -303,8 +303,9 @@ function teamPage(){
   <button class="filter-chip ${filter==='admins'?'active':''}" data-action="filter-team" data-filter="admins">🛡️ Coordenação (${adminsCount})</button>
  </div>
  ${filtered.length?`<div class="team-grid">${filtered.map(m=>{
-  const roleLabel=m.role==='admin'?'🛡️ Coordenação':m.staff_role==='monitor'?'🤝 Monitor(a)':'👨‍🏫 Professor(a)';
-  const rolePillClass=m.role==='admin'?'admin':m.staff_role==='monitor'?'monitor':'teacher';
+  const isMon=m.staff_role==='monitor'||m.role==='monitor';
+  const roleLabel=m.role==='admin'?'🛡️ Coordenação':isMon?'🤝 Monitor(a)':'👨‍🏫 Professor(a)';
+  const rolePillClass=m.role==='admin'?'admin':isMon?'monitor':'teacher';
   const cleanPhone=(m.phone||'').replace(/\D/g,'');
     const assignedRooms=(m.rooms||[]).map(rid=>S.rooms.find(r=>r.id===rid)?.name).filter(Boolean);
   const canEdit=Boolean(S.user.platform_admin);

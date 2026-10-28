@@ -192,11 +192,12 @@ function buildPublicUser(row, admins, pastors) {
   else if (!staffRole && row.role === 'admin') staffRole = 'admin';
   const pastor = pastors.has(uid) || ['pastor', 'pastora'].includes(staffRole.trim().toLowerCase());
   if (pastor && !staffRole) staffRole = 'pastor';
+  const effectiveRole = staffRole === 'monitor' ? 'monitor' : row.role;
   return {
     id: uid,
     name: row.name,
     email: row.email,
-    role: row.role,
+    role: effectiveRole,
     active: row.active,
     platform_admin: central,
     pastor,
@@ -268,6 +269,44 @@ async function linkedPerson(db, user) {
     p = await db.first('SELECT * FROM members_people WHERE lower(email)=lower(?) AND active=1', [user.email]);
   }
   return p;
+}
+
+async function canManageGC(db, user, cellId, isGlobal, isPastor) {
+  if (isGlobal || isPastor) return true;
+  const grant = await db.first("SELECT role FROM module_access WHERE user_id=? AND module='members' AND enabled=1", [user.id]);
+  if (grant && (grant.role === 'admin' || grant.role === 'pastor')) return true;
+  if (cellId) {
+    const isLead = await db.first('SELECT 1 FROM gc_leaders WHERE cell_id=? AND user_id=?', [cellId, user.id]);
+    if (isLead) return true;
+    const isPersonLead = await db.first(
+      "SELECT 1 FROM members_people WHERE cell_id=? AND (account_user_id=? OR lower(email)=lower(?)) AND gc_role='leader' AND active=1",
+      [cellId, user.id, user.email]
+    );
+    if (isPersonLead) return true;
+  }
+  return false;
+}
+
+async function canManageMinistry(db, user, ministryName, isGlobal, isPastor) {
+  if (isGlobal || isPastor) return true;
+  const grant = await db.first("SELECT role FROM module_access WHERE user_id=? AND module='ministries' AND enabled=1", [user.id]);
+  if (grant && (grant.role === 'admin' || grant.role === 'pastor')) return true;
+  if (grant && grant.role === 'leader') {
+    const scRow = await db.first("SELECT scope FROM module_scopes WHERE user_id=? AND module='ministries'", [user.id]);
+    let allowedScopes = [];
+    try {
+      if (scRow?.scope) allowedScopes = scRow.scope.startsWith('[') ? JSON.parse(scRow.scope) : [scRow.scope];
+    } catch {}
+    if (!allowedScopes.length || !ministryName || allowedScopes.includes(ministryName)) return true;
+  }
+  if (ministryName) {
+    const isLead = await db.first(
+      "SELECT 1 FROM ministries_assignments ma JOIN members_people p ON p.id=ma.person_id WHERE (p.account_user_id=? OR lower(p.email)=lower(?)) AND ma.ministry=? AND ma.is_leader=1 AND ma.active=1",
+      [user.id, user.email, ministryName]
+    );
+    if (isLead) return true;
+  }
+  return false;
 }
 
 function haversineMeters(lat1, lon1, lat2, lon2) {
@@ -697,25 +736,41 @@ export default {
         const scopes = Object.fromEntries(scopeRows.map(r => [r.module, r.scope]));
         const notifs = await db.all('SELECT id,kind,title,message,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 25', [user.id]);
         const unread = await db.scalar('SELECT count(*) FROM notifications WHERE user_id=? AND read_at IS NULL', [user.id]);
-        const gcLeader = Boolean(await db.first('SELECT 1 FROM gc_leaders WHERE user_id=?', [user.id]));
+        const gcLeader = Boolean(
+          await db.first('SELECT 1 FROM gc_leaders WHERE user_id=?', [user.id]) ||
+          await db.first("SELECT 1 FROM members_people WHERE (account_user_id=? OR lower(email)=lower(?)) AND gc_role='leader' AND active=1", [user.id, user.email])
+        );
+        const minLeader = Boolean(
+          await db.first('SELECT 1 FROM ministries_assignments ma JOIN members_people p ON p.id=ma.person_id WHERE (p.account_user_id=? OR lower(p.email)=lower(?)) AND ma.is_leader=1 AND ma.active=1', [user.id, user.email])
+        );
+        const publicUser = buildPublicUser(user, admins, pastors);
         return jsonResp({
           active_module: null,
-          user: buildPublicUser(user, admins, pastors),
+          user: publicUser,
           platform_admin: isRoot,
           pastor: isPastor,
           gc_leader: gcLeader,
+          ministry_leader: minLeader,
           encryption: 'AES-128-Fernet-HMAC-SHA256',
           notifications: notifs,
           notification_unread_count: Number(unread || 0),
-          modules: Object.entries(MODULES).map(([key, name]) => ({
-            id: key,
-            name,
-            url: '/' + key,
-            enabled: Boolean(isGlobal || grants[key]?.enabled || key === 'kids'),
-            role: isRoot ? (key !== 'kids' ? 'admin' : user.role) : (isPastor ? 'pastor' : (key === 'kids' ? user.role : grants[key]?.role || 'viewer')),
-            scope: isGlobal ? '' : (scopes[key] || ''),
-            status: 'operational'
-          }))
+          modules: Object.entries(MODULES).map(([key, name]) => {
+            let roleForMod = grants[key]?.role || 'viewer';
+            if (isRoot) roleForMod = key === 'kids' ? publicUser.role : 'admin';
+            else if (isPastor) roleForMod = 'pastor';
+            else if (key === 'kids') roleForMod = publicUser.role;
+            else if (key === 'members' && (grants[key]?.role === 'leader' || gcLeader)) roleForMod = 'leader';
+            else if (key === 'ministries' && (grants[key]?.role === 'leader' || minLeader)) roleForMod = 'leader';
+            return {
+              id: key,
+              name,
+              url: '/' + key,
+              enabled: Boolean(isGlobal || grants[key]?.enabled || key === 'kids'),
+              role: roleForMod,
+              scope: isGlobal ? '' : (scopes[key] || ''),
+              status: 'operational'
+            };
+          })
         });
       }
 
@@ -809,7 +864,7 @@ export default {
       }
 
       if (path === '/api/team' && method === 'GET') {
-        const staffRows = await db.all("SELECT * FROM users WHERE role IN ('admin','teacher') ORDER BY name");
+        const staffRows = await db.all("SELECT * FROM users WHERE role IN ('admin','teacher') OR staff_role='monitor' ORDER BY name");
         const trRows = await db.all('SELECT user_id, room_id FROM teacher_rooms');
         const tr = {};
         for (const r of trRows) (tr[r.user_id] ||= []).push(r.room_id);
@@ -855,6 +910,7 @@ export default {
       if (path === '/api/lessons' && method === 'GET') {
         const rows = await db.all(`
           SELECT l.*, r.name as room_name, r.color as room_color, r.capacity as room_capacity,
+            r.min_age, r.max_age,
             u.name as teacher_name, m.name as monitor_name,
             (SELECT count(*) FROM reservations b WHERE b.lesson_id=l.id AND b.confirmed=1) as reserved_count
           FROM lessons l
@@ -865,7 +921,16 @@ export default {
           ORDER BY l.starts_at DESC
           LIMIT 200
         `);
-        return jsonResp(rows);
+        const resRows = await db.all('SELECT lesson_id, child_id FROM reservations WHERE confirmed=1');
+        const byLesson = {};
+        for (const r of resRows) (byLesson[r.lesson_id] ||= []).push(Number(r.child_id));
+        const out = rows.map(l => ({
+          ...l,
+          confirmed_children: byLesson[l.id] || [],
+          confirmed_count: (byLesson[l.id] || []).length,
+          available: Math.max(0, Number(l.room_capacity || 20) - (byLesson[l.id] || []).length)
+        }));
+        return jsonResp(out);
       }
 
       if (path === '/api/events' && method === 'GET') {
@@ -1172,9 +1237,9 @@ export default {
           const page = Math.max(1, Number(url.searchParams.get('page') || 1));
           const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 200)));
           const rawCells = (await db.all('SELECT mc.*,(SELECT count(*) FROM members_people p WHERE p.cell_id=mc.id AND p.active=1) member_count,(SELECT count(*) FROM members_families f WHERE f.cell_id=mc.id AND f.active=1) family_count FROM members_cells mc WHERE mc.active=1 ORDER BY mc.name LIMIT 300')).map(r => decryptRecord(r, env));
-          const cellMembersRows = await db.all("SELECT id, name, cell_id FROM members_people WHERE active=1 AND cell_id IS NOT NULL AND cell_id != '' ORDER BY name");
+          const cellMembersRows = await db.all("SELECT id, name, cell_id, gc_role FROM members_people WHERE active=1 AND cell_id IS NOT NULL AND cell_id != '' ORDER BY name");
           const byCellId = {};
-          for (const cm of cellMembersRows) (byCellId[cm.cell_id] ||= []).push({ id: cm.id, name: cm.name });
+          for (const cm of cellMembersRows) (byCellId[cm.cell_id] ||= []).push({ id: cm.id, name: cm.name, gc_role: cm.gc_role || 'member' });
           const cells = rawCells.map(c => ({ ...c, members: byCellId[c.id] || [], member_count: (byCellId[c.id] || []).length }));
           const families = (await db.all("SELECT f.*,coalesce(mc.name,'') cell_name,(SELECT count(*) FROM members_people p WHERE f.id=p.family_id AND p.active=1) member_count FROM members_families f LEFT JOIN members_cells mc ON mc.id=f.cell_id WHERE f.active=1 ORDER BY f.name LIMIT 500")).map(r => decryptRecord(r, env));
           const peopleRows = (await db.all(`
@@ -1316,10 +1381,16 @@ export default {
         const body = await request.json();
         const status = body.status;
         if (!['confirmed', 'declined', 'pending'].includes(status)) fail('status', 'Status inválido.');
+        const sched = await db.first('SELECT * FROM ministries_schedules WHERE id=?', [sid]);
+        if (!sched) fail('missing', 'Escala não encontrada.', 404);
+        const myP = await linkedPerson(db, user);
+        const canManage = await canManageMinistry(db, user, sched.ministry, isGlobal, isPastor);
+        if (!canManage && (!myP || myP.id !== sched.person_id)) {
+          fail('forbidden', 'Você só pode responder às escalas atribuídas a você.', 403);
+        }
         const reason = encryptText(body.reason || body.decline_reason || body.notes || '', env);
-        const oldSched = await db.first('SELECT status FROM ministries_schedules WHERE id=?', [sid]);
         await db.run('UPDATE ministries_schedules SET status=?, version=version+1 WHERE id=?', [status, sid]);
-        await db.run('INSERT INTO schedule_responses(id,schedule_id,actor,previous_status,status,reason,created_at) VALUES(?,?,?,?,?,?,?)', [randomBytes(16).toString('hex'), sid, user.id, oldSched?.status || 'pending', status, reason, nowIso()]);
+        await db.run('INSERT INTO schedule_responses(id,schedule_id,actor,previous_status,status,reason,created_at) VALUES(?,?,?,?,?,?,?)', [randomBytes(16).toString('hex'), sid, user.id, sched.status || 'pending', status, reason, nowIso()]);
         return jsonResp({ ok: true, id: sid, status });
       }
 
@@ -1869,8 +1940,16 @@ export default {
           await db.run('DELETE FROM module_scopes WHERE user_id=? AND module=?', [uid, mod]);
         }
         if (mod === 'kids') {
-          const kRole = ['admin', 'teacher', 'parent'].includes(role) ? role : 'parent';
-          await db.run('UPDATE users SET role=? WHERE id=?', [kRole, uid]);
+          const kRole = ['admin', 'teacher', 'monitor', 'parent'].includes(role) ? role : 'parent';
+          if (kRole === 'monitor') {
+            await db.run("UPDATE users SET role='teacher', staff_role='monitor' WHERE id=?", [uid]);
+          } else if (kRole === 'teacher') {
+            await db.run("UPDATE users SET role='teacher', staff_role='teacher' WHERE id=?", [uid]);
+          } else if (kRole === 'admin') {
+            await db.run("UPDATE users SET role='admin', staff_role='admin' WHERE id=?", [uid]);
+          } else {
+            await db.run("UPDATE users SET role='parent', staff_role='' WHERE id=?", [uid]);
+          }
         }
         await writeAudit(db, user.id, `module_access:${uid}:${mod}:${role}:${enabled}`, null, ip);
         return jsonResp({ ok: true });
@@ -2009,8 +2088,9 @@ export default {
       if (path === '/api/members/people' && method === 'POST') {
         const body = await request.json();
         const pid = String(body.request_id || randomBytes(16).toString('hex'));
+        const gcRole = body.gc_role === 'leader' ? 'leader' : 'member';
         await db.run(
-          'INSERT OR REPLACE INTO members_people(id,family_id,cell_id,name,relationship,phone,email,birthday,baptism_date,joined_on,integration_stage,pastoral_notes,active,version,created_at,created_by,address,marital_status,profession,bio) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,1,?,?,?,?,?,?)',
+          'INSERT OR REPLACE INTO members_people(id,family_id,cell_id,name,relationship,phone,email,birthday,baptism_date,joined_on,integration_stage,pastoral_notes,active,version,created_at,created_by,address,marital_status,profession,bio,gc_role) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?)',
           [
             pid,
             body.family_id || null,
@@ -2029,9 +2109,13 @@ export default {
             encryptText(body.address || '', env),
             body.marital_status || '',
             body.profession || '',
-            body.bio || ''
+            body.bio || '',
+            gcRole
           ]
         );
+        if (gcRole === 'leader' && body.cell_id) {
+          await db.run('UPDATE members_cells SET leader_name=?, version=version+1 WHERE id=?', [String(body.name || '').trim(), body.cell_id]);
+        }
         return jsonResp({ ok: true, id: pid, version: 1 });
       }
 
@@ -2044,8 +2128,10 @@ export default {
         const body = await request.json();
         const old = await db.first('SELECT * FROM members_people WHERE id=?', [pid]);
         if (!old) fail('missing', 'Membro não encontrado.', 404);
+        const gcRole = body.gc_role !== undefined ? (body.gc_role === 'leader' ? 'leader' : 'member') : (old.gc_role || 'member');
+        const targetCellId = body.cell_id !== undefined ? (body.cell_id || null) : old.cell_id;
         await db.run(
-          'UPDATE members_people SET name=?, phone=?, email=?, birthday=?, integration_stage=?, family_id=?, cell_id=?, address=?, version=version+1 WHERE id=?',
+          'UPDATE members_people SET name=?, phone=?, email=?, birthday=?, integration_stage=?, family_id=?, cell_id=?, address=?, gc_role=?, version=version+1 WHERE id=?',
           [
             body.name !== undefined ? String(body.name).trim() : old.name,
             body.phone !== undefined ? String(body.phone) : old.phone,
@@ -2053,11 +2139,21 @@ export default {
             body.birthday !== undefined ? (body.birthday || null) : old.birthday,
             body.integration_stage || old.integration_stage || 'active_member',
             body.family_id !== undefined ? (body.family_id || null) : old.family_id,
-            body.cell_id !== undefined ? (body.cell_id || null) : old.cell_id,
+            targetCellId,
             body.address !== undefined ? encryptText(body.address || '', env) : old.address,
+            gcRole,
             pid
           ]
         );
+        const linkedUid = old.account_user_id || (old.email ? (await db.first('SELECT id FROM users WHERE lower(email)=lower(?)', [old.email]))?.id : null);
+        if (linkedUid && targetCellId) {
+          if (gcRole === 'leader') {
+            await db.run('INSERT OR IGNORE INTO gc_leaders(cell_id,user_id) VALUES(?,?)', [targetCellId, linkedUid]);
+            await db.run('UPDATE members_cells SET leader_name=?, version=version+1 WHERE id=?', [body.name !== undefined ? String(body.name).trim() : old.name, targetCellId]);
+          } else {
+            await db.run('DELETE FROM gc_leaders WHERE cell_id=? AND user_id=?', [targetCellId, linkedUid]);
+          }
+        }
         return jsonResp({ ok: true, id: pid, version: Number(old.version || 1) + 1 });
       }
 
@@ -2098,8 +2194,12 @@ export default {
       if (path.startsWith('/api/members/cells/') && (method === 'PUT' || method === 'DELETE')) {
         const cid = path.split('/')[4];
         if (method === 'DELETE') {
+          if (!isGlobal && !isPastor) fail('forbidden', 'Apenas administradores podem excluir um GC.', 403);
           await db.run('UPDATE members_cells SET active=0, version=version+1 WHERE id=?', [cid]);
           return jsonResp({ ok: true });
+        }
+        if (!await canManageGC(db, user, cid, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas o líder deste GC ou a administração podem alterar suas informações.', 403);
         }
         const body = await request.json();
         await db.run(
@@ -2144,6 +2244,9 @@ export default {
         if (!app) fail('missing', 'Solicitação não encontrada.', 404);
         const cell = await db.first('SELECT id FROM members_cells WHERE id=? OR lower(name)=lower(?)', [app.target_id, app.target_name]);
         const cellId = cell ? cell.id : app.target_id;
+        if (!await canManageGC(db, user, cellId, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas o líder deste GC ou a administração podem aprovar inscrições.', 403);
+        }
         let p = app.user_id ? await db.first('SELECT * FROM members_people WHERE account_user_id=? AND active=1', [app.user_id]) : null;
         if (!p && app.email) p = await db.first('SELECT * FROM members_people WHERE lower(email)=lower(?) AND active=1', [app.email]);
         if (p) {
@@ -2168,6 +2271,9 @@ export default {
       // === MINISTRIES CRUD, WORSHIP SCALE & APPROVALS ===
       if (path === '/api/ministries/assignments' && method === 'POST') {
         const body = await request.json();
+        if (!await canManageMinistry(db, user, body.ministry, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas líderes deste ministério ou a administração podem vincular integrantes.', 403);
+        }
         const aid = String(body.request_id || randomBytes(16).toString('hex'));
         const isLeader = body.is_leader === true || body.is_leader === 'true' || body.is_leader === 1 ? 1 : 0;
         const existing = await db.first('SELECT id FROM ministries_assignments WHERE person_id=? AND ministry=? AND active=1', [body.person_id, body.ministry]);
@@ -2184,6 +2290,10 @@ export default {
 
       if (path.startsWith('/api/ministries/assignments/') && (method === 'PUT' || method === 'DELETE')) {
         const aid = path.split('/')[4];
+        const old = await db.first('SELECT ministry FROM ministries_assignments WHERE id=?', [aid]);
+        if (!await canManageMinistry(db, user, old?.ministry, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas líderes deste ministério ou a administração podem alterar integrantes.', 403);
+        }
         if (method === 'DELETE') {
           await db.run('UPDATE ministries_assignments SET active=0, version=version+1 WHERE id=?', [aid]);
           return jsonResp({ ok: true });
@@ -2199,6 +2309,9 @@ export default {
 
       if (path === '/api/ministries/schedules' && method === 'POST') {
         const body = await request.json();
+        if (!await canManageMinistry(db, user, body.ministry, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas líderes deste ministério podem criar escalas.', 403);
+        }
         const sid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
           'INSERT OR REPLACE INTO ministries_schedules(id,title,ministry,service_date,service_time,person_id,role_notes,status,active,version,created_at,created_by,duration_minutes,response_due_at,reminder_enabled) VALUES(?,?,?,?,?,?,?,?,1,1,?,?,?,?,?)',
@@ -2223,6 +2336,10 @@ export default {
 
       if (path.startsWith('/api/ministries/schedules/') && !path.endsWith('/respond') && (method === 'PUT' || method === 'DELETE')) {
         const sid = path.split('/')[4];
+        const old = await db.first('SELECT ministry FROM ministries_schedules WHERE id=?', [sid]);
+        if (!await canManageMinistry(db, user, old?.ministry, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas líderes deste ministério podem alterar ou excluir escalas.', 403);
+        }
         if (method === 'DELETE') {
           await db.run('UPDATE ministries_schedules SET active=0, version=version+1 WHERE id=?', [sid]);
           return jsonResp({ ok: true });
@@ -2272,6 +2389,9 @@ export default {
 
       if (path === '/api/ministries/resources' && method === 'POST') {
         const body = await request.json();
+        if (!await canManageMinistry(db, user, body.ministry, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas líderes deste ministério podem publicar materiais.', 403);
+        }
         const rid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
           'INSERT OR REPLACE INTO ministries_resources(id,ministry,title,category,notes,resource_url,active,version,created_at,created_by) VALUES(?,?,?,?,?,?,1,1,?,?)',
@@ -2364,6 +2484,9 @@ export default {
 
       if (path.startsWith('/api/workspace/groups/') && path.endsWith('/meetings') && method === 'POST') {
         const gid = path.split('/')[4];
+        if (!await canManageGC(db, user, gid, isGlobal, isPastor)) {
+          fail('forbidden', 'Apenas o líder deste GC pode cadastrar reuniões.', 403);
+        }
         const body = await request.json();
         const rid = String(body.request_id || randomBytes(16).toString('hex'));
         await db.run(
@@ -2862,12 +2985,121 @@ export default {
       }
 
       if (path === '/api/lessons' && method === 'POST') {
+        const isMonitor = user.role === 'monitor' || user.staff_role === 'monitor';
+        if (!isGlobal && user.role !== 'admin' && (user.role !== 'teacher' || isMonitor)) {
+          fail('forbidden', 'Apenas professores e coordenação podem criar novas aulinhas.', 403);
+        }
         const body = await request.json();
         const ins = await db.run(
-          'INSERT INTO lessons(room_id,title,theme,memory_verse,starts_at,ends_at,created_by,teacher_id,monitor_id,notes,active) VALUES(?,?,?,?,?,?,?,?,?,?,1)',
-          [Number(body.room_id || 1), String(body.title || '').trim(), body.theme || '', body.memory_verse || body.bible_verse || '', body.starts_at || nowIso(), body.ends_at || nowIso(), user.id, body.teacher_id ? Number(body.teacher_id) : user.id, body.monitor_id ? Number(body.monitor_id) : null, body.notes || '']
+          'INSERT INTO lessons(room_id,title,theme,memory_verse,starts_at,ends_at,created_by,teacher_id,monitor_id,materials_url,notes,family_question,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1)',
+          [
+            Number(body.room_id || 1),
+            String(body.title || '').trim(),
+            body.theme || '',
+            body.memory_verse || body.bible_verse || '',
+            body.starts_at || nowIso(),
+            body.ends_at || nowIso(),
+            user.id,
+            body.teacher_id ? Number(body.teacher_id) : user.id,
+            body.monitor_id ? Number(body.monitor_id) : null,
+            (body.materials_url || '').trim(),
+            (body.notes || '').trim(),
+            body.family_question || ''
+          ]
         );
         return jsonResp({ ok: true, id: ins.lastrowid });
+      }
+
+      if (path.startsWith('/api/lessons/') && path.endsWith('/curriculum') && method === 'GET') {
+        const lid = Number(path.split('/')[3]);
+        const lesson = await db.first('SELECT theme, memory_verse, family_question, materials_url, notes, monitor_status FROM lessons WHERE id=?', [lid]);
+        if (!lesson) fail('missing', 'Aulinha não encontrada.', 404);
+        return jsonResp(lesson);
+      }
+
+      if (path.startsWith('/api/lessons/') && path.endsWith('/curriculum') && method === 'POST') {
+        const lid = Number(path.split('/')[3]);
+        const isMonitor = user.role === 'monitor' || user.staff_role === 'monitor';
+        if (!isGlobal && user.role !== 'admin' && (user.role !== 'teacher' || isMonitor)) {
+          fail('forbidden', 'Apenas professores e coordenação podem configurar o discipulado e tema da aula.', 403);
+        }
+        const body = await request.json();
+        await db.run('UPDATE lessons SET theme=?, memory_verse=?, family_question=? WHERE id=?', [
+          body.theme || '',
+          body.memory_verse || body.bible_verse || '',
+          body.family_question || '',
+          lid
+        ]);
+        return jsonResp({ ok: true });
+      }
+
+      if (path.startsWith('/api/lessons/') && (path.endsWith('/presence-response') || path.endsWith('/monitor-response')) && method === 'POST') {
+        const lid = Number(path.split('/')[3]);
+        const lesson = await db.first('SELECT * FROM lessons WHERE id=?', [lid]);
+        if (!lesson) fail('missing', 'Aulinha não encontrada.', 404);
+        const canManage = isGlobal || user.role === 'admin' || user.role === 'teacher';
+        if (!canManage && lesson.monitor_id !== user.id) {
+          fail('forbidden', 'Você só pode responder escalas em que estiver vinculado como monitor.', 403);
+        }
+        const body = await request.json();
+        const status = body.status === 'confirmed' ? 'confirmed' : 'declined';
+        await db.run('UPDATE lessons SET monitor_status=? WHERE id=?', [status, lid]);
+        return jsonResp({ ok: true, status });
+      }
+
+      if (path.startsWith('/api/lessons/') && path.endsWith('/presence') && method === 'POST') {
+        const lid = Number(path.split('/')[3]);
+        const body = await request.json();
+        const cid = Number(body.child_id);
+        if (!cid) fail('invalid', 'Aluno obrigatório.', 400);
+        await db.run(
+          'INSERT INTO reservations(lesson_id, child_id, confirmed, created_by, updated_at) VALUES(?,?,1,?,?) ON CONFLICT(lesson_id, child_id) DO UPDATE SET confirmed=1, updated_at=excluded.updated_at',
+          [lid, cid, user.id, nowIso()]
+        );
+        return jsonResp({ ok: true });
+      }
+
+      if (path.startsWith('/api/lessons/') && path.endsWith('/presence') && method === 'DELETE') {
+        const lid = Number(path.split('/')[3]);
+        const cid = Number(url.searchParams.get('child_id') || 0);
+        await db.run('DELETE FROM reservations WHERE lesson_id=? AND child_id=?', [lid, cid]);
+        return jsonResp({ ok: true });
+      }
+
+      if (path.startsWith('/api/lessons/') && !path.includes('/', 14) && (method === 'PATCH' || method === 'PUT')) {
+        const lid = Number(path.split('/')[3]);
+        const isMonitor = user.role === 'monitor' || user.staff_role === 'monitor';
+        if (!isGlobal && user.role !== 'admin' && (user.role !== 'teacher' || isMonitor)) {
+          fail('forbidden', 'Apenas professores e coordenação podem editar aulinhas.', 403);
+        }
+        const body = await request.json();
+        const old = await db.first('SELECT * FROM lessons WHERE id=?', [lid]);
+        if (!old) fail('missing', 'Aulinha não encontrada.', 404);
+        await db.run(
+          'UPDATE lessons SET room_id=?, title=?, starts_at=?, ends_at=?, teacher_id=?, monitor_id=?, materials_url=?, notes=? WHERE id=?',
+          [
+            body.room_id ? Number(body.room_id) : old.room_id,
+            body.title !== undefined ? String(body.title).trim() : old.title,
+            body.starts_at || old.starts_at,
+            body.ends_at || old.ends_at,
+            body.teacher_id !== undefined ? (body.teacher_id ? Number(body.teacher_id) : null) : old.teacher_id,
+            body.monitor_id !== undefined ? (body.monitor_id ? Number(body.monitor_id) : null) : old.monitor_id,
+            body.materials_url !== undefined ? String(body.materials_url).trim() : old.materials_url,
+            body.notes !== undefined ? String(body.notes).trim() : old.notes,
+            lid
+          ]
+        );
+        return jsonResp({ ok: true });
+      }
+
+      if (path.startsWith('/api/lessons/') && !path.includes('/', 14) && method === 'DELETE') {
+        const lid = Number(path.split('/')[3]);
+        const isMonitor = user.role === 'monitor' || user.staff_role === 'monitor';
+        if (!isGlobal && user.role !== 'admin' && (user.role !== 'teacher' || isMonitor)) {
+          fail('forbidden', 'Apenas professores e coordenação podem cancelar aulinhas.', 403);
+        }
+        await db.run('UPDATE lessons SET active=0 WHERE id=?', [lid]);
+        return jsonResp({ ok: true });
       }
 
       if (path === '/api/events' && method === 'POST') {

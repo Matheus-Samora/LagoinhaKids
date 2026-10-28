@@ -17,8 +17,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(identity().pastor)return 'pastor';
   return identity().modules.find(m=>m.id===key)?.role;
  };
- const edit=()=>['admin','pastor','editor'].includes(role());
- const canArchive=()=>['admin','pastor'].includes(role());
+ const edit=()=>['admin','pastor','editor','leader'].includes(role());
+ const canArchive=()=>['admin','pastor','leader'].includes(role());
 
  const labels={
   cells:'GCs',
@@ -352,7 +352,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border,#e4e4e7);font-size:12px;">
        <strong style="display:block;margin-bottom:4px;color:var(--muted,#52525b);">Membros vinculados (${gcMembers.length}):</strong>
        ${gcMembers.length
-        ?`<div style="display:flex;flex-wrap:wrap;gap:4px;">${gcMembers.slice(0,8).map(m=>`<span class="badge" style="font-size:11px;">${e(m.name)}</span>`).join('')}${gcMembers.length>8?`<span class="badge" style="font-size:11px;">+${gcMembers.length-8}</span>`:''}</div>`
+        ?`<div style="display:flex;flex-wrap:wrap;gap:4px;">${gcMembers.slice(0,10).map(m=>`<span class="badge" style="font-size:11px;${m.gc_role==='leader'?'background:#09090b;color:#fff;font-weight:700;':''}">${m.gc_role==='leader'?'⭐ ':''}${e(m.name)}${m.gc_role==='leader'?' (Líder)':''}</span>`).join('')}${gcMembers.length>10?`<span class="badge" style="font-size:11px;">+${gcMembers.length-10}</span>`:''}</div>`
         :`<span class="subtle" style="font-size:11.5px;">Nenhum membro vinculado ainda.</span>`}
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
@@ -555,7 +555,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(kind==='families')return `<td><strong>${e(r.name)}</strong><small>${e(r.neighborhood||'')}</small></td><td><span class="badge">${r.member_count} integrante(s)</span>${r.cell_name?`<small>GC: ${e(r.cell_name)}</small>`:''}</td><td>${date(r.joined_on)}</td>`;
   if(kind==='people'){
       if(r.profile_restricted)return `<td><strong>${e(r.name)}</strong></td><td>—</td><td>—</td>`;
-      return `<td><strong>${e(r.name)}</strong><small>${e(r.phone||r.email||'')}</small></td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
+      return `<td><strong>${e(r.name)}</strong>${r.gc_role==='leader'?' <span class="badge" style="background:#09090b;color:#fff;font-size:10px;">⭐ Líder de GC</span>':''}<small>${e(r.phone||r.email||'')}</small></td><td>${e(r.family_name||'—')}<small>${e(r.relationship||'Membro')}${r.cell_name?` · GC: ${e(r.cell_name)}`:''}</small><span class="badge" style="margin-top:4px;">${e(stageLabels[r.integration_stage||'active_member']||r.integration_stage)}</span></td><td>${date(r.joined_on)}<small>Nasc.: ${date(r.birthday)}</small></td>`;
   }
   if(kind==='schedules')return `<td><strong>${e(r.title)}</strong><small>${date(r.service_date)} às ${e(r.service_time||'18:00')}</small></td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.person_name)} ${r.role_notes?`· <strong>${e(r.role_notes)}</strong>`:''}</small></td><td><span class="badge badge-status-${e(r.status)}">${e(scheduleStatusLabels[r.status]||r.status)}</span></td>`;
   if(kind==='assignments')return `<td><strong>${e(r.person_name)}</strong>${r.is_leader?' <span class="badge">⭐ Líder</span>':''}</td><td><span class="badge">${e(r.ministry)}</span><small>${e(r.position)}</small></td><td><span class="badge" style="background:#09090b;color:#fff;">${r.is_leader?'Líder':'Equipe'}</span></td>`;
@@ -1171,6 +1171,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     +field('integration_stage','Jornada',r.integration_stage||'active_member','text',true,Object.entries(stageLabels))
     +field('family_id','Família (opcional)',r.family_id,'text',false,[['','Sem família'],...opt(data.families,r.family_id,r.family_name)])
     +field('cell_id','GC (opcional)',r.cell_id,'text',false,[['','Sem GC'],...opt(data.cells,r.cell_id,r.cell_name)])
+    +field('gc_role','Função no GC',r.gc_role||'member','text',true,[['leader','⭐ Líder de GC'],['member','Participante / Membro']])
     +field('address','Bairro / Endereço',r.address):'');
   }
   if(kind==='assignments'){

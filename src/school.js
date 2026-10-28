@@ -403,22 +403,48 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
            <h2>${e(r.name)}</h2>
            <p>${r.min_age} a ${r.max_age} anos · ${r.capacity} vagas</p>
          </div>
-         <div class="room-card-actions">
-           <button type="button" class="room-action-btn" data-action="edit-room" data-id="${r.id}" title="Editar">${icon('settings',14)} <span>Editar</span></button>
-           <button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir">${icon('close',14)} <span>Excluir</span></button>
-         </div>
+         ${(S.user.role==='admin'||S.user.platform_admin)?`
+           <div class="room-card-actions">
+             <button type="button" class="room-action-btn" data-action="edit-room" data-id="${r.id}" title="Editar">${icon('settings',14)} <span>Editar</span></button>
+             <button type="button" class="room-action-btn danger" data-action="delete-room" data-id="${r.id}" title="Excluir">${icon('close',14)} <span>Excluir</span></button>
+           </div>
+         `:''}
        </header>
         <div class="room-staff-info-row">
           <span class="room-staff-pill">👨‍🏫 <strong>${e(r.teacher_name || r.owner_name || 'A definir')}</strong></span>
           ${r.monitor_name ? `<span class="room-staff-pill">🤝 <strong>${e(r.monitor_name)}</strong></span>` : ''}
         </div>
        <div class="simple-room-actions">
-         <button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button>
+         ${(S.user.role!=='monitor'&&S.user.staff_role!=='monitor')?`<button class="btn primary" data-action="new-lesson" data-id="${r.id}">${icon('plus',16)} Publicar horário</button>`:''}
          <button class="btn secondary" data-action="room-students" data-id="${r.id}">Alunos (${r.total})</button>
        </div>
        <section class="room-schedule">
          <h3>Próximas aulinhas</h3>
-         ${lessons.length?lessons.map(l=>`<div class="schedule-row"><div><strong>${dateLabel(l.starts_at)}</strong><span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count} conf.</span></div><button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}">📖 Tema</button><button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button><button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar">${icon('settings',16)}</button></div>`).join(''):'<p class="muted-note">Sem horários publicados.</p>'}
+         ${lessons.length?lessons.map(l=>{
+           const isMon = S.user.role==='monitor'||S.user.staff_role==='monitor';
+           const isMyMon = isMon && (l.monitor_id===S.user.id || r.monitor_id===S.user.id);
+           return `<div class="schedule-row">
+             <div>
+               <strong>${dateLabel(l.starts_at)}</strong>
+               <span>${time(l.starts_at)} – ${time(l.ends_at)} · ${l.confirmed_count||0} conf.</span>
+               ${isMyMon ? `
+                 <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                   ${l.monitor_status==='confirmed'?`<span class="badge" style="background:#059669;color:#fff;font-size:10px;">✓ Presença confirmada</span>`:''}
+                   ${l.monitor_status==='declined'?`<span class="badge" style="background:#dc2626;color:#fff;font-size:10px;">✕ Indisponível</span>`:''}
+                   ${(!l.monitor_status||l.monitor_status==='pending')?`
+                     <button type="button" class="mini-button" data-action="monitor-respond" data-id="${l.id}" data-status="confirmed" style="background:#059669;color:#fff;font-size:10px;padding:2px 8px;">✓ Confirmar Presença</button>
+                     <button type="button" class="mini-button secondary" data-action="monitor-respond" data-id="${l.id}" data-status="declined" style="color:#dc2626;font-size:10px;padding:2px 8px;">✕ Declinar</button>
+                   `:''}
+                 </div>
+               ` : ''}
+             </div>
+             <div style="display:flex;gap:6px;align-items:center;">
+               <button class="mini-button" data-action="lesson-curriculum" data-id="${l.id}">📖 Tema & Materiais</button>
+               <button class="mini-button" data-action="lesson-roster" data-id="${l.id}">Chamada</button>
+               ${!isMon?`<button class="icon-button" data-action="edit-lesson" data-id="${l.id}" aria-label="Editar">${icon('settings',16)}</button>`:''}
+             </div>
+           </div>`;
+         }).join(''):'<p class="muted-note">Sem horários publicados.</p>'}
        </section>
      </div>
    </article>`;
@@ -700,8 +726,20 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   if(action==='child-lessons'){S.selectedChild=id;if(navigateTo)navigateTo('lessons');else{S.page='lessons';render();}return true;}
   if(action==='new-room'){roomForm();return true;}
   if(action==='edit-room'){roomForm(room);return true;}
-  if(action==='new-lesson'){lessonForm(id);return true;}
-  if(action==='edit-lesson'){lessonForm(lesson.room_id,lesson);return true;}
+  if(action==='new-lesson'||action==='edit-lesson'){
+   if(S.user.role==='monitor'||S.user.staff_role==='monitor'){
+    toast('Apenas professores e coordenação podem cadastrar ou editar aulinhas.');
+    return true;
+   }
+   if(action==='new-lesson'){lessonForm(id);return true;}
+   if(action==='edit-lesson'){lessonForm(lesson.room_id,lesson);return true;}
+  }
+  if(action==='monitor-respond'){
+   const status=el.dataset.status;
+   await api(`/lessons/${id}/presence-response`,{method:'POST',body:{status}});
+   await changed(status==='confirmed'?'Presença confirmada com sucesso!':'Indisponibilidade informada à coordenação.');
+   return true;
+  }
   if(action==='lesson-roster'){S.selectedLesson=id;if(navigateTo)navigateTo('attendance');else{S.page='attendance';render();}return true;}
   if(action==='room-students'||action==='filter-room'){
     S.room=String(id);
@@ -757,7 +795,47 @@ export function createSchoolUI({S,api,escape:e,icon,title,showModal,toast,refres
   }
   if(action==='lesson-curriculum'){
    const l=S.lessons.find(x=>x.id===id);
-   const curr=await api(`/lessons/${id}/curriculum`).catch(()=>({theme:l?.theme||'',memory_verse:l?.memory_verse||'',family_question:l?.family_question||''}));
+   const curr=await api(`/lessons/${id}/curriculum`).catch(()=>({theme:l?.theme||'',memory_verse:l?.memory_verse||'',family_question:l?.family_question||'',materials_url:l?.materials_url||''}));
+   const isMonitor=S.user.role==='monitor'||S.user.staff_role==='monitor';
+   if(isMonitor){
+    showModal('Tema & Materiais da Aulinha',l?`${e(l.room_name)} · ${dateLabel(l.starts_at)}`:'Salinha',`
+     <div class="lesson-curriculum-viewer" style="display:flex;flex-direction:column;gap:14px;padding:4px 0;">
+      <div style="background:#27272a;border-radius:10px;padding:12px 14px;">
+       <span style="font-size:11px;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.05em;">📖 Tema da Aula</span>
+       <h3 style="margin:4px 0 0;font-size:16px;color:#f4f4f5;">${e(curr.theme||l?.theme||'Tema ainda não publicado pelo professor')}</h3>
+      </div>
+      ${(curr.memory_verse||l?.memory_verse)?`
+       <div style="background:#18181b;border:1px solid #27272a;border-radius:10px;padding:12px 14px;">
+        <span style="font-size:11px;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.05em;">Versículo para Memorizar</span>
+        <p style="margin:4px 0 0;font-size:14px;color:#e4e4e7;font-style:italic;">"${e(curr.memory_verse||l?.memory_verse)}"</p>
+       </div>
+      `:''}
+      ${(curr.family_question||l?.family_question)?`
+       <div style="background:#18181b;border:1px solid #27272a;border-radius:10px;padding:12px 14px;">
+        <span style="font-size:11px;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.05em;">Pergunta para a Família (Discipulado)</span>
+        <p style="margin:4px 0 0;font-size:13.5px;color:#d4d4d8;">${e(curr.family_question||l?.family_question)}</p>
+       </div>
+      `:''}
+      ${(curr.materials_url||l?.materials_url)?`
+       <div style="margin-top:4px;">
+        <a href="${e(curr.materials_url||l?.materials_url)}" target="_blank" rel="noopener noreferrer" class="btn primary full" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;padding:12px;font-weight:700;">
+         ${icon('download',18)} Acessar Materiais da Aula
+        </a>
+       </div>
+      `:'<p class="soft-info" style="text-align:center;">Nenhum link de materiais anexado para esta aula.</p>'}
+      ${(l&&(l.monitor_id===S.user.id||l.monitor_name===S.user.name))?`
+       <div style="border-top:1px solid #27272a;padding-top:12px;margin-top:4px;text-align:center;">
+        <span style="display:block;font-size:12px;color:#a1a1aa;margin-bottom:8px;">Sua presença como monitor nesta aula:</span>
+        <div style="display:flex;gap:8px;justify-content:center;">
+         <button type="button" class="btn primary" data-action="monitor-respond" data-id="${l.id}" data-status="confirmed" style="background:#059669;">✓ Confirmar Presença</button>
+         <button type="button" class="btn secondary" data-action="monitor-respond" data-id="${l.id}" data-status="declined" style="color:#ef4444;">✕ Informar Indisponibilidade</button>
+        </div>
+       </div>
+      `:''}
+     </div>
+    `);
+    return true;
+   }
    showModal('Discipulado Familiar & Tema da Aulinha',l?`${e(l.room_name)} · ${dateLabel(l.starts_at)}`:'Salinha',`<form data-form="lesson-curriculum" data-id="${id}"><label>Tema da Aulinha<input name="theme" placeholder="Ex.: A Arca de Noé e a Obediência" value="${e(curr.theme||'')}" required/></label><label>Versículo para Memorizar<input name="memory_verse" placeholder="Ex.: Confia no Senhor de todo o teu coração - Pv 3:5" value="${e(curr.memory_verse||'')}"/></label><label>Conversa no Caminho de Volta (Pergunta para os pais)<textarea name="family_question" rows="3" placeholder="Ex.: O que Noé fez quando Deus pediu algo difícil? E nós, quando é difícil obedecer?">${e(curr.family_question||'')}</textarea></label><p class="muted-note">As famílias verão essas informações no aplicativo para continuar o discipulado em casa.</p>${errorSlot}<button class="btn primary full" type="submit">Salvar Discipulado</button></form>`);return true;
   }
   return false;
