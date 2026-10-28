@@ -2,14 +2,27 @@
   "id": "/systems",
   "name": "Lagoinha Systems",
   "short_name": "Lagoinha",
-  "description": "Portal de sistemas da Lagoinha.",
-  "start_url": "/systems",
+  "description": "Portal de membros, turmas e gestão da Lagoinha.",
+  "start_url": "/access",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "theme_color": "#111318",
-  "background_color": "#f5f6f8",
+  "background_color": "#09090b",
   "lang": "pt-BR",
   "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icon.svg",
       "sizes": "any",
