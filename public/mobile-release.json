@@ -1,0 +1,10 @@
+{
+  "version": "3.3.1",
+  "version_code": 6,
+  "platform": "android",
+  "url": "/download/lagoinha-kids.apk",
+  "sha256": "db0f29ad6f6cb0b46218148484d53f3a46a23bc6285743399b12ce06cd5fc449",
+  "bytes": 14850600,
+  "signing_matches_previous_apk": true,
+  "distribution": "debug-signed test APK"
+}

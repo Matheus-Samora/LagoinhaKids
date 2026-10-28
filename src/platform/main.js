@@ -1,4 +1,5 @@
 import {readApiResponse} from '../api-response.js';
+import {updateNativeCallReadiness} from '../native-call-alerts.js';
 import {workspaceUI} from './workspace.js';
 import {churchAttendanceUI} from './church-attendance.js';
 import {hasPendingForms} from '../form-lifecycle.js';
@@ -133,6 +134,7 @@ function authBrand(areaKey=currentAreaKey()){
 }
 
 function login(message='',prefillEmail=''){
+ if(window.AndroidNativeApp){try{window.AndroidNativeApp.syncUser('','');window.AndroidNativeApp.stopCall();}catch{}}
  const areaKey=currentAreaKey();
  const saved=getSavedAccounts();
  const savedHtml=saved.length?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos salvos</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-saved-email="${e(a.email)}"><span class="avatar mini">${e(initials(a.name||a.email))}</span><div class="saved-account-text"><strong>${e(a.name||a.email)}</strong><small>${e(a.email)}</small></div></button><button type="button" class="saved-account-del" data-remove-email="${e(a.email)}" title="Remover conta" aria-label="Remover"></button></div>`).join('')}</div></div>`:'';
@@ -211,6 +213,7 @@ async function checkActiveEmergencyPaging() {
   if (window.AndroidNativeApp) {
     try {
       window.AndroidNativeApp.syncUser(String(identity.user.id), identity.user.role || '');
+      updateNativeCallReadiness();
     } catch {}
   }
 
@@ -230,9 +233,7 @@ async function checkActiveEmergencyPaging() {
 
     // On mobile: rings for the child's parent, test caller (actor), or admin testing on mobile
     const urgentActive = list.find(p => p.status === 'active' && (
-      Number(p.parent_id) === myUserId ||
-      Number(p.actor) === myUserId ||
-      isAdmin
+      p.recipient_for_me===true || Number(p.parent_id) === myUserId
     ));
 
     if (urgentActive) {

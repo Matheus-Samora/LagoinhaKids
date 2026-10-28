@@ -1,11 +1,11 @@
 {
   "name": "lagoinha-systems",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build && node scratch/copy_apk_to_dist.mjs",
+    "build": "vite build",
     "mobile:android": "npm run build && cap sync android",
     "mobile:ios": "npm run build && cap sync ios"
   },

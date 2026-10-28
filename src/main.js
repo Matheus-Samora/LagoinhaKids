@@ -1,4 +1,5 @@
 import {readApiResponse} from './api-response.js';
+import {presentNativeCall,updateNativeCallReadiness} from './native-call-alerts.js';
 import {churchAttendanceUI} from './platform/church-attendance.js';
 import {hasPendingForms} from './form-lifecycle.js';
 import {accountProfileUI} from './account-profile.js';
@@ -84,6 +85,7 @@ function authBrand(){
 }
 function brand(){return `<div class="brand"><img src="/logo.png" alt="Logo Lagoinha"/><div>Lagoinha <strong>Kids</strong><small>${t('brand.kids_tagline', 'CUIDADO QUE CONECTA')}</small></div></div>`;}
 function renderLogin(register=false,prefillEmail=''){
+ if(window.AndroidNativeApp){try{window.AndroidNativeApp.syncUser('','');window.AndroidNativeApp.stopCall();}catch{}}
  churchPresence.stop();
  const saved=getSavedAccounts();
  const savedSection=(!register&&saved.length)?`<div class="saved-accounts-card"><div class="saved-accounts-head"><span>Acessos neste dispositivo</span><small>Toque para entrar</small></div><div class="saved-accounts-chips">${saved.map(a=>`<div class="saved-account-chip"><button type="button" class="saved-account-main" data-action="select-saved" data-email="${escape(a.email)}"><span class="avatar mini">${initials(a.name||a.email)}</span><div class="saved-account-text"><strong>${escape(a.name||a.email)}</strong><small>${escape(roles[a.role]||a.role||'Acesso')}</small></div></button><button type="button" class="saved-account-del" data-action="remove-saved" data-email="${escape(a.email)}" title="Remover conta deste aparelho" aria-label="Remover">✕</button></div>`).join('')}</div></div>`:'';
@@ -1457,7 +1459,7 @@ async function syncLive(){
   }
   if(S.user){
     if (window.AndroidNativeApp) {
-      try { window.AndroidNativeApp.syncUser(String(S.user.id), S.user.role || ''); } catch {}
+      try { window.AndroidNativeApp.syncUser(String(S.user.id), S.user.role || '');updateNativeCallReadiness(); } catch {}
     }
 
     const isMobileNow = (typeof window !== 'undefined') && (
@@ -1471,10 +1473,7 @@ async function syncLive(){
     const myChildIds = new Set((S.children||[]).map(c=>c.id));
     const isAdmin = Boolean(S.user.role === 'admin' || S.user.role === 'pastor');
     const urgentActive = activePaging && activePaging.find(p => p.status === 'active' && (
-      Number(p.parent_id) === myUserId ||
-      Number(p.actor) === myUserId ||
-      (S.user.role === 'parent' && (myChildIds.size === 0 || myChildIds.has(p.child_id))) ||
-      isAdmin
+      p.recipient_for_me===true || Number(p.parent_id) === myUserId
     ));
 
     // DESKTOP RESTRICTION: On desktop, NEVER pop up the full-screen call overlay or siren!
@@ -1664,6 +1663,7 @@ const emergencyRingtone = new EmergencyRingtone();
 
 function showIncomingCallOverlay(call) {
   if (!call) return;
+  if(presentNativeCall(call)||document.hidden)return;
   if (document.getElementById('emergency-call-overlay')) return;
 
   emergencyRingtone.start();

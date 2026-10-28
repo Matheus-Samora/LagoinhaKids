@@ -5,6 +5,7 @@
 
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+import {presentNativeCall} from './native-call-alerts.js';
 export class EmergencyRingtone {
   constructor() {
     this.ctx = null;
@@ -92,6 +93,7 @@ export const emergencyRingtone = new EmergencyRingtone();
 
 export function showIncomingCallOverlay(call, onMyWayCb) {
   if (!call) return;
+  if(presentNativeCall(call)||document.hidden)return;
   if (document.getElementById('emergency-call-overlay')) return;
 
   emergencyRingtone.start();

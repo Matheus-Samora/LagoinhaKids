@@ -1,4 +1,5 @@
 import { scryptSync, randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
+import {enqueuePagingPush,deliverPagingPush,pagingPushReady} from './paging-push.mjs';
 
 const COOKIE = 'lagoinha_session';
 const ENC_PREFIX = 'enc:v1:';
@@ -572,8 +573,32 @@ async function syncChurchServicesFromTemplates(db, force = false) {
   }
 }
 
+async function pagingGuardian(db,user,child) {
+  return Number(child?.parent_id)===Number(user.id)||Boolean(await db.first('SELECT 1 FROM family_links WHERE child_id=? AND user_id=? AND active=1',[child?.id,user.id]));
+}
+async function pagingStaff(db,user,roomId) {
+  if(user.privacy_admin)return true;
+  const grant=await db.first("SELECT role FROM module_access WHERE user_id=? AND module='kids' AND enabled=1",[user.id]);
+  if(!grant)return false;
+  if(grant.role==='admin'||grant.role==='pastor')return true;
+  return grant.role==='teacher'&&Boolean(await db.first('SELECT 1 FROM teacher_rooms WHERE user_id=? AND room_id=? UNION SELECT 1 FROM rooms WHERE id=? AND (teacher_id=? OR monitor_id=?)',[user.id,roomId,roomId,user.id,user.id]));
+}
+async function scopedPaging(db,user,rows) {
+  const result=[];
+  for(const row of rows){
+    const recipient=await pagingGuardian(db,user,{id:row.child_id,parent_id:row.parent_id});
+    if(recipient||await pagingStaff(db,user,row.room_id))result.push({...row,recipient_for_me:recipient});
+  }
+  return result;
+}
+function dispatchPaging(env,db,ctx) {
+  const task=deliverPagingPush(env,db,{limit:5}).catch(()=>console.warn('paging_delivery_deferred'));
+  if(ctx?.waitUntil)ctx.waitUntil(task);
+  return task;
+}
 export default {
-  async fetch(request, env) {
+  async scheduled(_event,env,ctx){ctx.waitUntil(deliverPagingPush(env,new D1Wrap(env.DB)).catch(()=>console.warn('paging_delivery_deferred')));},
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method.toUpperCase();
@@ -583,11 +608,7 @@ export default {
       origin === 'capacitor://localhost' ||
       origin === 'https://localhost' ||
       origin === 'http://localhost' ||
-      origin.startsWith('http://localhost:') ||
-      origin.startsWith('https://localhost:') ||
-      origin.endsWith('.workers.dev') ||
-      origin.endsWith('.pages.dev') ||
-      origin.endsWith('.lagoinha.com')
+      origin === url.origin
     );
 
     currentCorsHeaders = isAllowedOrigin ? {
@@ -606,6 +627,7 @@ export default {
         }
       });
     }
+    if(origin&&!isAllowedOrigin&&['POST','PUT','PATCH','DELETE'].includes(method))return jsonResp({detail:{code:'origin',message:'Origem não autorizada.'}},403);
 
     // Serve direct APK download
     if (path === '/lagoinha-kids.apk' || path === '/download/lagoinha-kids.apk' || path === '/downloads/lagoinha-kids.apk') {
@@ -614,6 +636,7 @@ export default {
         const h = new Headers(apkResp.headers);
         h.set('Content-Type', 'application/vnd.android.package-archive');
         h.set('Content-Disposition', 'attachment; filename="lagoinha-kids.apk"');
+        h.set('Cache-Control','no-store');
         return new Response(apkResp.body, { status: 200, headers: h });
       }
     }
@@ -644,19 +667,19 @@ export default {
           application: 'Lagoinha Systems',
           hosting: 'Cloudflare Workers + D1',
           google_enabled: false,
-          push_enabled: true,
-          native_push_enabled: false,
+          push_enabled: pagingPushReady(env),
+          native_push_enabled: pagingPushReady(env),
           biometric_liveness: false
         });
       }
       if (path === '/api/version' && method === 'GET') {
-        return jsonResp({ version: '3.3.0', application: 'Lagoinha Systems', build: 'cloudflare-d1' });
+        return jsonResp({ version: '3.3.1', application: 'Lagoinha Systems', build: 'cloudflare-d1-paging-v2' });
       }
       if (path === '/api/capabilities' && method === 'GET') {
         return jsonResp({
-          push_platforms: ['android', 'ios', 'web'],
+          push_platforms: pagingPushReady(env)?['android']:[],
           password_recovery: false,
-          push: true,
+          push: pagingPushReady(env),
           google: false
         });
       }
@@ -756,6 +779,7 @@ export default {
       if (path === '/api/auth/logout' && method === 'POST') {
         const cookies = parseCookies(request.headers.get('cookie') || '');
         if (cookies[COOKIE]) {
+          await db.run('DELETE FROM native_paging_devices WHERE session_token=?',[sha256Hex(cookies[COOKIE])]);
           await db.run('DELETE FROM sessions WHERE token=?', [sha256Hex(cookies[COOKIE])]);
         }
         return jsonResp({ ok: true }, 200, {
@@ -769,6 +793,10 @@ export default {
       const isRoot = admins.has(user.id);
       const isPastor = pastors.has(user.id) || ['pastor', 'pastora'].includes(String(user.staff_role || '').toLowerCase());
       const isGlobal = isRoot || isPastor;
+      if((path.startsWith('/api/paging')||path==='/api/devices/token')&&['POST','PUT','DELETE','PATCH'].includes(method)&&!request.headers.get('authorization')?.startsWith('Bearer ')){
+        const given=Buffer.from(request.headers.get('x-csrf-token')||'');const expected=Buffer.from(user.csrf||'');
+        if(given.length!==expected.length||!expected.length||!timingSafeEqual(given,expected))fail('csrf','Sessão inválida. Atualize a página.',403);
+      }
 
       if (path === '/api/me' && method === 'GET') {
         return jsonResp({
@@ -1042,9 +1070,12 @@ export default {
         const child = await db.first('SELECT * FROM children WHERE id=?', [childId]);
         if (!child) fail('child_not_found', 'Criança não encontrada.', 404);
 
+        if(!await pagingStaff(db,user,child.room_id))fail('forbidden','Somente a equipe autorizada da turma pode chamar a família.',403);
+
         // Check if there is already an active paging request
         const existing = await db.first("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way','pending','acknowledged')", [childId]);
         if (existing) {
+          if(existing.status==='active'){await enqueuePagingPush(db,existing.id);dispatchPaging(env,db,ctx);}
           return jsonResp({ ...existing, child_name: child.name, ok: true });
         }
 
@@ -1053,10 +1084,18 @@ export default {
         const now = nowIso();
 
         const ins = await db.run(
-          "INSERT INTO paging_requests(child_id, room_id, claim_code, reason, status, created_at, actor) VALUES(?,?,?,?, 'active', ?, ?)",
-          [childId, child.room_id || null, claimCode, reason, now, user.id]
+          "INSERT INTO paging_requests(child_id, room_id, claim_code, reason, status, created_at, actor) SELECT ?,?,?,?,'active',?,? WHERE NOT EXISTS(SELECT 1 FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way','pending','acknowledged'))",
+          [childId, child.room_id || null, claimCode, reason, now, user.id,childId]
         );
+        if(!ins.rowcount){
+          const concurrent=await db.first("SELECT * FROM paging_requests WHERE child_id=? AND status IN ('active','on_my_way','pending','acknowledged') ORDER BY id DESC LIMIT 1",[childId]);
+          if(!concurrent)fail('conflict','Atualize a lista de chamados e tente novamente.',409);
+          if(concurrent.status==='active'){await enqueuePagingPush(db,concurrent.id);dispatchPaging(env,db,ctx);}
+          return jsonResp({...concurrent,child_name:child.name,ok:true});
+        }
         const pagingId = ins.lastrowid;
+        await enqueuePagingPush(db,pagingId);
+        dispatchPaging(env,db,ctx);
 
         // Create urgent notification for parent if linked
         if (child.parent_id) {
@@ -1102,7 +1141,7 @@ export default {
           WHERE p.status IN ('active', 'on_my_way', 'pending', 'acknowledged')
           ORDER BY p.id DESC
         `);
-        return jsonResp(rows);
+        return jsonResp(await scopedPaging(db,user,rows));
       }
 
       if (path === '/api/paging/on-my-way' && method === 'POST') {
@@ -1116,6 +1155,8 @@ export default {
           if (!p) {
             const resolved = await db.first("SELECT * FROM paging_requests WHERE id=?", [pagingId]);
             if (resolved) {
+              const ownerChild=await db.first('SELECT id,parent_id FROM children WHERE id=?',[resolved.child_id]);
+              if(!await pagingGuardian(db,user,ownerChild))fail('forbidden','Este chamado pertence a outra família.',403);
               const chRes = await db.first("SELECT name FROM children WHERE id=?", [resolved.child_id]);
               return jsonResp({ ok: true, child_name: chRes?.name || 'seu filho', status: 'resolved', claim_code: resolved.claim_code, message: 'Este chamado já havia sido concluído.' });
             }
@@ -1135,9 +1176,11 @@ export default {
         if (!p) fail('paging_not_found', 'Chamado ativo não encontrado.', 404);
 
         const ch = await db.first("SELECT * FROM children WHERE id=?", [p.child_id]);
+        if(!await pagingGuardian(db,user,ch))fail('forbidden','Este chamado pertence a outra família.',403);
         const now = nowIso();
 
         if (p.status === 'on_my_way') {
+          await enqueuePagingPush(db,p.id,'cancel');dispatchPaging(env,db,ctx);
           return jsonResp({ ok: true, status: 'on_my_way', child_name: ch?.name || 'seu filho', claim_code: p.claim_code });
         }
 
@@ -1145,6 +1188,7 @@ export default {
           "UPDATE paging_requests SET status='on_my_way', acknowledged_at=?, acknowledged_by=? WHERE id=?",
           [now, user.id, p.id]
         );
+        await enqueuePagingPush(db,p.id,'cancel');dispatchPaging(env,db,ctx);
 
         // Notify room teachers and admins
         const teachers = await db.all("SELECT user_id FROM teacher_rooms WHERE room_id=?", [p.room_id]);
@@ -1173,6 +1217,9 @@ export default {
       if (path.startsWith('/api/paging/') && path.endsWith('/resolve') && method === 'POST') {
         const pagingId = Number(path.split('/')[3]);
         if (!pagingId) fail('invalid_id', 'ID inválido.', 400);
+        const call=await db.first('SELECT * FROM paging_requests WHERE id=?',[pagingId]);
+        if(!call)fail('missing','Chamado não encontrado.',404);
+        if(!await pagingStaff(db,user,call.room_id))fail('forbidden','Somente a equipe responsável pode concluir este chamado.',403);
 
         const now = nowIso();
         await db.run(
@@ -1181,6 +1228,7 @@ export default {
         );
 
         await db.run("INSERT INTO audit(actor, action, created_at) VALUES(?, 'paging_resolve', ?)", [user.id, now]);
+        await enqueuePagingPush(db,pagingId,'cancel');dispatchPaging(env,db,ctx);
         return jsonResp({ ok: true });
       }
 
@@ -1270,6 +1318,7 @@ export default {
           ORDER BY g.created_at DESC
         `, [todayStr()]) : [];
 
+        activePaging=await scopedPaging(db,user,activePaging);
         return jsonResp({
           children,
           rooms,
@@ -1283,9 +1332,9 @@ export default {
 
       if (path === '/api/capabilities' && method === 'GET') {
         return jsonResp({
-          push_platforms: ['android', 'ios', 'web'],
+          push_platforms: pagingPushReady(env)?['android']:[],
           password_recovery: false,
-          push: true,
+          push: pagingPushReady(env),
           google: false
         });
       }
@@ -1295,12 +1344,19 @@ export default {
         const token = String(body.token || '').trim();
         const platform = String(body.platform || 'android').trim();
         if (!token) fail('token', 'Token obrigatório.', 400);
+        if(token.length>4096)fail('token','Registro do aparelho inválido.',400);
 
         await db.run(
           "INSERT INTO device_tokens(user_id, token, platform, updated_at, session_token) VALUES(?,?,?,?,?) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id, platform=excluded.platform, updated_at=excluded.updated_at, session_token=excluded.session_token",
           [user.id, token, platform, nowIso(), user.token || '']
         );
-        return jsonResp({ ok: true });
+        if(platform==='android'&&Number(body.call_alerts_version)===2){
+          await db.run('INSERT INTO native_paging_devices(token,user_id,session_token,updated_at) VALUES(?,?,?,?) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,session_token=excluded.session_token,updated_at=excluded.updated_at',[token,user.id,user.token,nowIso()]);
+          const currentCalls=await db.all("SELECT p.id FROM paging_requests p JOIN children ch ON ch.id=p.child_id WHERE p.status='active' AND julianday(p.created_at)>=julianday(?) AND (ch.parent_id=? OR EXISTS(SELECT 1 FROM family_links f WHERE f.child_id=ch.id AND f.user_id=? AND f.active=1)) ORDER BY p.id DESC LIMIT 5",[new Date(Date.now()-600000).toISOString(),user.id,user.id]);
+          for(const call of currentCalls)await enqueuePagingPush(db,call.id);
+          dispatchPaging(env,db,ctx);
+        }
+        return jsonResp({ ok: true,user_id:user.id,call_alerts:platform==='android'&&Number(body.call_alerts_version)===2&&pagingPushReady(env) });
       }
 
       if (path.startsWith('/api/children/') && path.endsWith('/notify') && method === 'POST') {

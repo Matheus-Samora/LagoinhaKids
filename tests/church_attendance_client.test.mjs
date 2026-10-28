@@ -22,7 +22,7 @@ test('automatic check-in uses a fresh location only for an unconfirmed service',
  const s=setup({auto_enabled:true,items:[{id:'now',title:'Culto',can_checkin:true},{id:'done',can_checkin:true,my_presence:{}}]});
  await s.ui.setUser(3);await flush();assert.equal(s.gps,1);
  const writes=s.calls.filter(x=>x.options);assert.equal(writes.length,1);assert.ok(writes[0].path.endsWith('/now/check-in'));
- assert.deepEqual(Object.keys(writes[0].options.body).sort(),['accuracy','automatic','captured_at','latitude','longitude']);assert.equal(writes[0].options.body.automatic,true);s.ui.stop();
+ assert.deepEqual(Object.keys(writes[0].options.body).sort(),['accuracy','automatic','captured_at','latitude','longitude','region_label']);assert.equal(writes[0].options.body.automatic,true);s.ui.stop();
 });
 test('leaving the visible app prevents a pending GPS check-in',async()=>{
  const s=setup({auto_enabled:true,items:[{id:'now',can_checkin:true}]},{defer:true});
