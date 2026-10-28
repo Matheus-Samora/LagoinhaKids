@@ -565,7 +565,7 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
   if(kind==='accounts')return `<td><strong>${e(r.name)}</strong><small>${e(r.bank||'Caixa Interno')}</small></td><td>${cash(r.opening_cents)}</td><td><strong>${cash(r.balance_cents)}</strong></td>`;
   if(kind==='entries'){
    const isPending=(r.payment_status||'paid')==='pending';
-   return `<td><strong>${e(r.description)}</strong><small>${e(r.account_name)}${r.category?` · ${e(r.category)}`:''} · ${e(paymentMethodLabels[r.payment_method]||r.payment_method||'PIX')}</small></td><td>${date(r.occurred_on)}${r.due_date?`<small>Venc.: ${date(r.due_date)}</small>`:''}<span class="badge" style="margin-top:4px;">${isPending?'⏳ Pendente':'Liquidado'}</span></td><td><span class="money ${r.direction}">${r.direction==='income'?'+':'−'} ${cash(r.amount_cents)}</span></td>`;
+   return `<td><strong>${e(r.description)}</strong><small>${e(r.account_name)}${r.category?` · ${e(r.category)}`:''} · ${e(paymentMethodLabels[r.payment_method]||r.payment_method||'PIX')}</small></td><td>${date(r.occurred_on)}${r.due_date?`<small>Venc.: ${date(r.due_date)}</small>`:''}<span class="badge" style="margin-top:4px;">${isPending?'⏳ Pendente':'Liquidado'}</span></td><td><span class="money ${r.direction}">${r.direction==='income'?'+':'−'} ${cash(r.amount_cents)}</span> ${r.file_id?`<a class="badge" href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Anexo</a>`:''}</td>`;
   }
   return `<td><strong>${e(r.number)}</strong><small>${e(r.supplier)}</small></td><td>${date(r.issued_on)}</td><td><strong>${cash(r.amount_cents)}</strong> ${r.file_id?`<a class="badge" href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Anexo</a>`:''}</td>`;
  }
@@ -1033,34 +1033,91 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
 
  function openFinanceReportModal(){
   const dialog=host.querySelector('dialog');
-  const firstDayMonth=today().slice(0,8)+'01';
+  const now=new Date();
+  const todayStr=today();
+  const firstDayMonth=todayStr.slice(0,8)+'01';
+
   dialog.querySelector('.sector-modal').innerHTML=`
    <div class="section-title">
-    <h2>Relatórios</h2>
+    <h2>Emissão de ATA &amp; Relatório Financeiro</h2>
     ${button('close','Fechar','class="secondary"')}
    </div>
    <form class="record-form" id="finance-report-form">
+    ${field('preset','Período do Relatório','mensal','text',true,[
+      ['mensal','📅 Mensal (Mês atual)'],
+      ['dia','📅 Diário (Culto de hoje / Data específica)'],
+      ['semanal','📅 Semanal (Últimos 7 dias)'],
+      ['trimestral','📅 Trimestral (Últimos 3 meses)'],
+      ['semestral','📅 Semestral (Últimos 6 meses)'],
+      ['custom','⚙️ Personalizado (Intervalo de datas)']
+    ])}
     <div class="form-grid-2">
      ${field('start_date','Data inicial',firstDayMonth,'date',false,null,true)}
-     ${field('end_date','Data final',today(),'date',false,null,true)}
+     ${field('end_date','Data final',todayStr,'date',false,null,true)}
     </div>
-    ${field('account_id','Conta','','text',false,[['','Todas'],...opt(data.accounts)])}
-    ${field('cost_center_id','Centro de Custo','','text',false,[['','Todos'],...opt(data.cost_centers)])}
+    <div style="background:var(--subtle-bg,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;margin:8px 0;">
+     <strong style="display:block;font-size:13px;color:#1a2451;margin-bottom:8px;">Dados Oficiais da ATA DE REGISTRO</strong>
+     <div class="form-grid-2">
+      ${field('church_name','Igreja / GC','Lagoinha Global - Matriz','text',true)}
+      ${field('service_name','Culto / Descrição','Culto de Celebração - Domingo','text',true)}
+     </div>
+     <div class="form-grid-2">
+      ${field('service_time','Horário do Culto','19:00','time',true)}
+      ${field('pastor','Pastor','Pr. Titular','text',true)}
+     </div>
+     <div class="form-grid-2">
+      ${field('treasurer','Tesoureiro',data.user_name||'Tesouraria Lagoinha','text',true)}
+      ${field('deacon','Diácono / 2º Conferente','Diaconia de Plantão','text',true)}
+     </div>
+    </div>
+    <div class="form-grid-2">
+     ${field('account_id','Conta','','text',false,[['','Todas as contas'],...opt(data.accounts)])}
+     ${field('cost_center_id','Centro de Custo','','text',false,[['','Todos os centros'],...opt(data.cost_centers)])}
+    </div>
     <div class="form-grid-2">
      ${field('direction','Movimentação','all','text',true,[['all','Entradas e Saídas'],['income','Somente Entradas'],['expense','Somente Saídas']])}
      ${field('payment_status','Status','all','text',true,[['all','Todos'],['paid','Liquidados'],['pending','Pendentes']])}
     </div>
-    ${field('format','Formato','xlsx','text',true,[
-     ['xlsx','Excel (.xlsx)'],
-     ['html','PDF / Impressão'],
-     ['csv','CSV (.csv)'],
-     ['json','JSON (.json)']
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin:10px 0;cursor:pointer;">
+     <input type="checkbox" name="include_attachments" value="true" checked style="width:18px;height:18px;accent-color:#1a2451;">
+     Anexar Notas Fiscais e Comprovantes do período (PDF, Imagens)
+    </label>
+    ${field('format','Modelo / Formato','html','text',true,[
+     ['html','📄 ATA DE REGISTRO Oficial com Anexos (PDF / Impressão)'],
+     ['xlsx','📊 Planilha Excel (.xlsx)'],
+     ['csv','📄 CSV (.csv)'],
+     ['json','🔍 JSON de Auditoria (.json)']
     ])}
-    <button type="submit">Baixar relatório</button>
+    <button type="submit" style="background:#1a2451;color:#ffffff;font-weight:700;padding:12px 20px;border-radius:10px;">📄 Emitir ATA / Relatório</button>
    </form>`;
 
+  const f=dialog.querySelector('#finance-report-form');
   dialog.querySelector('[data-sector-action="close"]').onclick=()=>dialog.close();
-  dialog.querySelector('#finance-report-form').onsubmit=ev=>{
+
+  // Dynamic date adjustment based on preset
+  f.querySelector('[name=preset]')?.addEventListener('change', ev=>{
+    const p=ev.target.value;
+    const sInp=f.querySelector('[name=start_date]');
+    const eInp=f.querySelector('[name=end_date]');
+    const curToday=today();
+    eInp.value=curToday;
+    if(p==='dia'){
+      sInp.value=curToday;
+    }else if(p==='semanal'){
+      const d=new Date();d.setDate(d.getDate()-6);
+      sInp.value=d.toISOString().slice(0,10);
+    }else if(p==='mensal'){
+      sInp.value=curToday.slice(0,8)+'01';
+    }else if(p==='trimestral'){
+      const d=new Date();d.setDate(d.getDate()-89);
+      sInp.value=d.toISOString().slice(0,10);
+    }else if(p==='semestral'){
+      const d=new Date();d.setDate(d.getDate()-179);
+      sInp.value=d.toISOString().slice(0,10);
+    }
+  });
+
+  f.onsubmit=ev=>{
    ev.preventDefault();
    const fd=new FormData(ev.currentTarget);
    const params=new URLSearchParams();
@@ -1228,7 +1285,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     +field('description','Descrição',r.description,'text',true)
     +field('occurred_on','Data',r.occurred_on||today(),'date',true)
     +field('due_date','Vencimento',r.due_date,'date',false,null,true)
-    +field('amount','Valor (R$)',r.amount_cents!==undefined?(r.amount_cents/100).toFixed(2):'','text',true);
+    +field('amount','Valor (R$)',r.amount_cents!==undefined?(r.amount_cents/100).toFixed(2):'','text',true)
+    +`<input name="file_id" type="hidden" value="${e(r.file_id||'')}"><label>Nota Fiscal / Comprovante (PDF ou Imagem)<input type="file" id="invoice-file" accept="application/pdf,image/jpeg,image/png,image/webp"></label><p id="invoice-status" role="status">${r.file_id?`<a href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Ver anexo atual</a>`:''}</p>`;
   }
   if(kind==='closings'){
    html=field('service_name','Culto',r.service_name,'text',true)
@@ -1240,7 +1298,8 @@ export function createSectors({api,e,identity,openQrModal,onTabChange,onProfileS
     +field('offerings_card','Ofertas Cartão (R$)',r.offerings_card_cents!==undefined?(r.offerings_card_cents/100).toFixed(2):'0','text',true)
     +field('counted_by','1º Conferente',r.counted_by,'text',true)
     +field('verified_by','2º Conferente (opcional)',r.verified_by,'text',false)
-    +field('notes','Observações (opcional)',r.notes);
+    +field('notes','Observações (opcional)',r.notes)
+    +`<input name="file_id" type="hidden" value="${e(r.file_id||'')}"><label>Comprovante / Borderô Digitalizado (PDF ou Imagem)<input type="file" id="invoice-file" accept="application/pdf,image/jpeg,image/png,image/webp"></label><p id="invoice-status" role="status">${r.file_id?`<a href="/api/finance/files/${e(r.file_id)}" target="_blank" rel="noopener">Ver anexo atual</a>`:''}</p>`;
   }
   if(kind==='invoices'){
    html=field('number','Número da nota',r.number,'text',true)
