@@ -629,6 +629,14 @@ export default {
     }
     if(origin&&!isAllowedOrigin&&['POST','PUT','PATCH','DELETE'].includes(method))return jsonResp({detail:{code:'origin',message:'Origem não autorizada.'}},403);
 
+    // Revalidate entry documents and the release manifest on every launch/reload.
+    const freshAsset=async(target)=>{
+      const response=await env.ASSETS.fetch(new Request(new URL(target,url.origin),request));
+      const headers=new Headers(response.headers);headers.set('Cache-Control','no-store');
+      return new Response(response.body,{status:response.status,headers});
+    };
+    if(['/app-release.json','/mobile-release.json','/sw.js','/index.html','/systems.html'].includes(path))return freshAsset(path);
+
     // Serve direct APK download
     if (path === '/lagoinha-kids.apk' || path === '/download/lagoinha-kids.apk' || path === '/downloads/lagoinha-kids.apk') {
       const apkResp = await env.ASSETS.fetch(new Request(new URL('/lagoinha-kids.apk', url.origin), request));
@@ -646,14 +654,14 @@ export default {
       const spaRoutes = new Set(['/kids', '/kids/', '/systems', '/systems/', '/access', '/access/', '/membro', '/membro/', '/finance', '/finance/', '/members', '/members/', '/ministries', '/ministries/']);
       if (spaRoutes.has(path)) {
         const target = path.startsWith('/kids') ? '/index.html' : '/systems.html';
-        return env.ASSETS.fetch(new Request(new URL(target, url.origin), request));
+        return freshAsset(target);
       }
       if (path === '/') {
-        return env.ASSETS.fetch(new Request(new URL('/systems.html', url.origin), request));
+        return freshAsset('/systems.html');
       }
       const assetResp = await env.ASSETS.fetch(request);
       if (assetResp.status !== 404) return assetResp;
-      return env.ASSETS.fetch(new Request(new URL('/systems.html', url.origin), request));
+      return freshAsset('/systems.html');
     }
 
     const db = new D1Wrap(env.DB);
