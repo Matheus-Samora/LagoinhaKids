@@ -329,7 +329,7 @@ async function load(justLoggedIn=false){
    return;
   }
  }
- if(identity.platform_admin&&(!path||path==='systems'))users=await api('/platform/users');
+ if(identity.platform_admin||identity.pastor)users=await api('/platform/users');
  render();
  startPagingWatcher();
 }
@@ -773,6 +773,7 @@ function render(message=''){
  const personalOnly=false;
  const canHall=identity.platform_admin||identity.pastor||identity.modules.some(m=>m.id==='members'&&m.enabled);
  const tabs=(AREA_TABS[areaKey]||AREA_TABS.membro).filter(item=>(item.id!=='hall'||canHall));
+ if(isMemberPortal&&(identity.platform_admin||identity.pastor))tabs.push({id:'permissions',label:'Usuários e acessos',icon:'permissions'});
  if(!tabs.some(tItem=>tItem.id===activeSectionTab))activeSectionTab='all';
 
  const currentTabObj=tabs.find(tItem=>tItem.id===activeSectionTab)||tabs[0];
@@ -874,8 +875,8 @@ function render(message=''){
      `:''}
      ${isMemberPortal?memberCommunityPortal(activeSectionTab):''}
     `}
+    ${(identity.platform_admin||identity.pastor)&&!module&&activeSectionTab==='permissions'?permissions():''}
     ${identity.platform_admin&&!module&&!isMemberPortal?`
-     ${(activeSectionTab==='permissions')?permissions():''}
      ${(activeSectionTab==='audit')?auditSection():''}
     `:''}
    </main>
@@ -1068,7 +1069,12 @@ function render(message=''){
   const uid=btn.dataset.uid,kind=btn.dataset.userPatch;
   btn.disabled=true;
   try{
-   if(kind==='toggle-active'){
+   if(kind==='delete-user'||kind==='restore-user'){
+    const restore=kind==='restore-user';
+    if(!confirm(restore?'Restaurar esta conta e permitir o acesso novamente?':'Excluir esta conta? O acesso será interrompido. O histórico será preservado e a conta poderá ser restaurada.')){btn.disabled=false;return;}
+    await api(`/platform/users/${uid}`+(restore?'/restore':''),{method:restore?'POST':'DELETE'});
+    await load();root.querySelector('.status').textContent=restore?'Conta restaurada.':'Conta excluída. Histórico preservado.';
+   }else if(kind==='toggle-active'){
     const active=btn.dataset.active==='true';
     await api(`/platform/users/${uid}`,{method:'PATCH',body:{active:!active}});
     await load();root.querySelector('.status').textContent=!active?'Conta reativada.':'Conta bloqueada.';
@@ -1108,8 +1114,20 @@ function card(m){
 function moduleView(m){if(!m.enabled)return `<section class="panel"><h2>Acesso restrito</h2><a class="button secondary" href="/membro">Voltar</a></section>`;return '<div id="sector-content"><p>Carregando…</p></div>';}
 
 function permissions(){
- const filteredUsers=users.filter(u=>!userSearch||(u.name+' '+u.email).toLowerCase().includes(userSearch.toLowerCase()));
- return `<section class="permissions" id="permissions-section"><div class="permissions-header"><div><h2>Usuários e Permissões</h2></div><label style="min-width:240px;font-size:13px;font-weight:600;">Buscar<input id="user-filter-input" value="${e(userSearch)}" placeholder="Nome ou e-mail..." maxlength="100"></label></div><details class="panel"><summary><strong>+ Novo usuário</strong></summary><form id="create-identity" class="create-identity"><label>Nome<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label><label>E-mail<input name="email" type="email" required maxlength="200" autocomplete="email"></label><p class="subtle">A pessoa define a própria senha por um link individual.</p><p class="error" role="alert"></p><button>Criar usuário</button></form></details>${filteredUsers.map(u=>`<details class="panel"><summary><span class="avatar mini">${e(initials(u.name))}</span><strong>${e(u.name)}</strong><span>${e(u.email)}</span>${!u.active?'<span class="badge" style="background:#fee2e2;color:#991b1b;">Bloqueado</span>':''}${u.pastor?'<span class="badge" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">Pastor(a)</span>':''}${u.platform_admin?'<span class="badge">Admin TI</span>':`<span class="badge">${u.pastor?'Todos os setores':`${(u.grants||[]).filter(g=>g.enabled).length} setor(es)`}</span>`}</summary><div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:8px;"><button type="button" class="secondary" data-user-patch="reset-pwd" data-uid="${u.id}">Redefinir senha</button><button type="button" class="secondary" data-user-patch="toggle-pastor" data-uid="${u.id}" data-pastor="${Boolean(u.pastor)}">${u.pastor?'Remover Pastor(a)':'Definir Pastor(a)'}</button>${u.id!==identity.user.id?`<button type="button" class="secondary" data-user-patch="toggle-active" data-uid="${u.id}" data-active="${u.active}">${u.active?'Bloquear':'Reativar'}</button><button type="button" class="secondary" data-user-patch="toggle-admin" data-uid="${u.id}" data-admin="${u.platform_admin}">${u.platform_admin?'Remover Admin TI':'Tornar Admin TI'}</button>`:'<span class="subtle" style="align-self:center;">Sua conta</span>'}</div>${u.platform_admin?'':Object.entries(names).map(([id,name])=>{const g=u.grants.find(g=>g.module===id);const modRoleMap={kids:[['admin','🛡️ Coordenação / Admin Kids'],['teacher','👨‍🏫 Professor(a)'],['monitor','🤝 Monitor(a)'],['parent','👨‍👩‍👧 Responsável'],['pastor','✝️ Pastor(a)']],members:[['admin','🛡️ Administrador Geral'],['leader','⭐ Líder de GC'],['member','👥 Participante / Membro'],['pastor','✝️ Pastor(a)']],ministries:[['admin','🛡️ Administrador Geral'],['leader','⭐ Líder de Ministério'],['volunteer','🤝 Voluntário'],['pastor','✝️ Pastor(a)']],finance:[['admin','🛡️ Administrador Financeiro'],['editor','💼 Tesoureiro / Operador'],['viewer','👁️ Visualizador'],['pastor','✝️ Pastor(a)']]} ;const roles=modRoleMap[id]||[['admin','Administrador'],['editor','Editor'],['viewer','Visualizador']];const activeRoleVal=u.pastor?'pastor':(g?.role||(id==='kids'?'parent':id==='members'?'member':id==='ministries'?'volunteer':'viewer'));const selectedScopes=(()=>{try{return g?.scope?.startsWith('[')?JSON.parse(g.scope):g?.scope?[g.scope]:[];}catch{return [];}})();const scopeSelect=id==='ministries'?`<label>Ministérios<select name="scope" multiple size="5"><option value="" ${!selectedScopes.length?'selected':''}>Todos os ministérios</option>${MINISTRY_CATALOG.map(m=>`<option value="${e(m)}" ${selectedScopes.includes(m)?'selected':''}>${e(m)}</option>`).join('')}</select></label>`:'';return `<form class="grant" data-user="${u.id}" data-grant="${id}" style="${id==='ministries'?'grid-template-columns:minmax(160px,1.2fr) minmax(150px,1fr) minmax(180px,1fr) auto;':''}"><label class="check"><input name="enabled" type="checkbox" ${g?.enabled||u.pastor?'checked':''}>${e(name)}</label><label>Perfil<select name="role">${roles.map(([rVal,rTxt])=>`<option value="${rVal}" ${rVal===activeRoleVal?'selected':''}>${rTxt}</option>`).join('')}</select></label>${scopeSelect}<button>Salvar</button><p role="alert" class="error"></p></form>`;}).join('')}</details>`).join('')}</section>`;
+ const filteredUsers=users.filter(u=>(u.name+' '+u.email).toLocaleLowerCase('pt-BR').includes(userSearch.toLocaleLowerCase('pt-BR')));
+ const rolesByModule={kids:[['admin','Coordenação Kids'],['teacher','Professor(a)'],['monitor','Monitor(a)'],['parent','Responsável'],['pastor','Pastor(a)']],members:[['admin','Administrador'],['leader','Líder de GC'],['member','Membro'],['pastor','Pastor(a)']],ministries:[['admin','Administrador'],['leader','Líder de Ministério'],['volunteer','Voluntário'],['pastor','Pastor(a)']],finance:[['admin','Administrador'],['editor','Tesoureiro / Operador'],['viewer','Visualizador'],['pastor','Pastor(a)']]};
+ return `<section class="permissions" id="permissions-section"><div class="permissions-header"><h2>Usuários e acessos</h2><label>Buscar<input id="user-filter-input" value="${e(userSearch)}" placeholder="Nome ou e-mail" maxlength="100"></label></div><details class="panel"><summary>+ Novo usuário</summary><form id="create-identity" class="create-identity"><label>Nome<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label><label>E-mail<input name="email" type="email" required maxlength="200" autocomplete="email"></label><p class="subtle">A pessoa define a própria senha por um link individual.</p><p class="error" role="alert"></p><button>Criar usuário</button></form></details>${filteredUsers.map(u=>{
+ const own=u.id===identity.user.id,editable=identity.platform_admin||!u.platform_admin;
+ const button=(kind,label,extra='')=>`<button type="button" class="secondary" data-user-patch="${kind}" data-uid="${u.id}" ${extra}>${label}</button>`;
+ const actions=!editable?'<p class="subtle">Conta protegida: gerenciamento exclusivo de TI.</p>':u.archived?button('restore-user','Restaurar conta'):button('reset-pwd','Redefinir senha')+(!own?button('toggle-active',u.active?'Bloquear':'Reativar',`data-active="${u.active}"`)+button('toggle-pastor',u.pastor?'Remover Pastor(a)':'Definir Pastor(a)',`data-pastor="${Boolean(u.pastor)}"`)+(identity.platform_admin?button('toggle-admin',u.platform_admin?'Remover Admin TI':'Tornar Admin TI',`data-admin="${Boolean(u.platform_admin)}"`):'')+(!u.platform_admin?button('delete-user','Excluir conta'):''):'<span class="subtle">Sua conta</span>');
+ const grants=!editable||u.platform_admin||u.archived?'':u.pastor?'<p class="subtle">O perfil pastoral permite acesso a todos os setores, exceto TI. Para limitar os setores, remova primeiro o perfil pastoral.</p>':Object.entries(names).filter(([id])=>rolesByModule[id]).map(([id,name])=>{
+  const g=(u.grants||[]).find(g=>g.module===id);
+  let scopes=[];try{scopes=g?.scope?.startsWith('[')?JSON.parse(g.scope):g?.scope?[g.scope]:[];}catch{}
+  const current=u.pastor?'pastor':g?.role||({kids:'parent',members:'member',ministries:'volunteer',finance:'viewer'}[id]);
+  return `<form class="grant" data-user="${u.id}" data-grant="${id}"><label class="check"><input name="enabled" type="checkbox" ${g?.enabled||u.pastor?'checked':''}>${e(name)}</label><label>Perfil<select name="role">${rolesByModule[id].map(([value,label])=>`<option value="${value}" ${value===current?'selected':''}>${label}</option>`).join('')}</select></label>${id==='ministries'?`<label>Ministérios<select name="scope" multiple size="4"><option value="" ${!scopes.length?'selected':''}>Todos os ministérios</option>${MINISTRY_CATALOG.map(m=>`<option value="${e(m)}" ${scopes.includes(m)?'selected':''}>${e(m)}</option>`).join('')}</select></label>`:''}<button>Salvar</button><p role="alert" class="error"></p></form>`;
+ }).join('');
+ return `<details class="panel"><summary><span class="avatar mini">${e(initials(u.name))}</span><strong>${e(u.name)}</strong><span>${e(u.email)}</span><span class="badge">${u.archived?'Excluído':u.platform_admin?'Admin TI':u.pastor?'Pastor(a)':u.active?'Ativo':'Bloqueado'}</span></summary><div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0">${actions}</div>${grants}</details>`;
+ }).join('')}</section>`;
 }
 
 function auditSection(){

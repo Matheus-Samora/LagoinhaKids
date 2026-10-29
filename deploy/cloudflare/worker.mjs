@@ -801,7 +801,7 @@ export default {
       const isRoot = admins.has(user.id);
       const isPastor = pastors.has(user.id) || ['pastor', 'pastora'].includes(String(user.staff_role || '').toLowerCase());
       const isGlobal = isRoot || isPastor;
-      if((path.startsWith('/api/paging')||path==='/api/devices/token')&&['POST','PUT','DELETE','PATCH'].includes(method)&&!request.headers.get('authorization')?.startsWith('Bearer ')){
+      if((path.startsWith('/api/paging')||path.startsWith('/api/platform/users')||path==='/api/devices/token')&&['POST','PUT','DELETE','PATCH'].includes(method)&&!request.headers.get('authorization')?.startsWith('Bearer ')){
         const given=Buffer.from(request.headers.get('x-csrf-token')||'');const expected=Buffer.from(user.csrf||'');
         if(given.length!==expected.length||!expected.length||!timingSafeEqual(given,expected))fail('csrf','Sessão inválida. Atualize a página.',403);
       }
@@ -926,6 +926,7 @@ export default {
       }
 
       if (path === '/api/platform/users' && method === 'GET') {
+        if(!isGlobal)fail('forbidden','Acesso permitido somente a TI e Pastores.',403);
         const rows = await db.all('SELECT * FROM users ORDER BY name');
         const grantsRows = await db.all('SELECT * FROM module_access');
         const scopesRows = await db.all('SELECT * FROM module_scopes');
@@ -937,13 +938,15 @@ export default {
         }
         const scByUser = {};
         for (const s of scopesRows) (scByUser[s.user_id] ||= {})[s.module] = s.scope;
+        const archived=new Set((await db.all('SELECT user_id FROM user_archives')).map(r=>Number(r.user_id)));
         return jsonResp(rows.map(r => ({
           ...buildPublicUser(r, admins, pastors),
+          archived:archived.has(Number(r.id)),
           modules: byUser[r.id] || {},
           scopes: scByUser[r.id] || {},
           grants: (grantsList[r.id] || []).map(g => ({
             ...g,
-            ...(g.module === 'kids' ? { role: r.role } : {}),
+            ...(g.module === 'kids' ? { role: r.staff_role==='monitor'?'monitor':r.role } : {}),
             scope: (scByUser[r.id] || {})[g.module] || ''
           }))
         })));
@@ -2360,15 +2363,44 @@ export default {
       }
 
       // === PLATFORM USERS, PERMISSIONS, ANNOUNCEMENTS & ARCHIVES ===
+      const managementTarget=async(uid)=>{
+        if(!isGlobal)fail('forbidden','Acesso permitido somente a TI e Pastores.',403);
+        if(!Number.isSafeInteger(uid)||uid<=0)fail('user','Usuário inválido.');
+        const target=await db.first('SELECT * FROM users WHERE id=?',[uid]);
+        if(!target)fail('not_found','Usuário não encontrado.',404);
+        if(!isRoot&&admins.has(uid))fail('forbidden','Somente TI pode alterar contas de Administrador TI.',403);
+        return target;
+      };
+      if(/^\/api\/platform\/users\/\d+$/.test(path)&&method==='DELETE'||/^\/api\/platform\/users\/\d+\/restore$/.test(path)&&method==='POST'){
+        const uid=Number(path.split('/')[4]);await managementTarget(uid);
+        if(uid===user.id)fail('self','Não é possível excluir ou restaurar sua própria conta.');
+        if(admins.has(uid))fail('protected','Remova o privilégio de TI antes de excluir esta conta.',403);
+        if(method==='DELETE'){
+          await db.run('UPDATE users SET active=0 WHERE id=?',[uid]);
+          await db.run('INSERT OR IGNORE INTO user_archives(user_id,deleted_at,deleted_by) VALUES(?,?,?)',[uid,nowIso(),user.id]);
+          await db.run('DELETE FROM sessions WHERE user_id=?',[uid]);
+          await writeAudit(db,user.id,`user_archived:${uid}`,null,ip);
+        }else{
+          if(!await db.first('SELECT user_id FROM user_archives WHERE user_id=?',[uid]))fail('archive','Esta conta não está excluída.');
+          await db.run('DELETE FROM user_archives WHERE user_id=?',[uid]);
+          await db.run('UPDATE users SET active=1 WHERE id=?',[uid]);
+          await writeAudit(db,user.id,`user_restored:${uid}`,null,ip);
+        }
+        return jsonResp({ok:true});
+      }
       if (path.startsWith('/api/platform/users/') && path.includes('/modules/') && method === 'PUT') {
-        if (!isRoot) fail('forbidden', 'Acesso exclusivo de TI.', 403);
         const parts = path.split('/');
         const uid = Number(parts[4]);
+        await managementTarget(uid);
+        if(await db.first('SELECT user_id FROM user_archives WHERE user_id=?',[uid]))fail('archive','Restaure a conta antes de alterar acessos.');
         const mod = parts[6];
         const body = await request.json();
         const role = String(body.role || 'viewer');
+        if(typeof body.enabled!=='boolean')fail('permission','Informe se o acesso está habilitado.');
         const enabled = body.enabled ? 1 : 0;
-        const scope = String(body.scope || '').trim();
+        const validRoles={kids:['admin','teacher','monitor','parent','pastor'],members:['admin','leader','member','pastor'],ministries:['admin','leader','volunteer','pastor'],finance:['admin','editor','viewer','pastor']};
+        if(parts.length!==7||!validRoles[mod]?.includes(role))fail('permission','Setor ou perfil inválido.');
+        const scope = Array.isArray(body.scopes)?JSON.stringify(body.scopes.map(String).filter(Boolean)):String(body.scope || '').trim();
         await db.run(
           'INSERT INTO module_access(user_id,module,role,enabled) VALUES(?,?,?,?) ON CONFLICT(user_id,module) DO UPDATE SET role=excluded.role, enabled=excluded.enabled',
           [uid, mod, role, enabled]
@@ -2395,9 +2427,14 @@ export default {
       }
 
       if (path.startsWith('/api/platform/users/') && path.split('/').length === 5 && method === 'PATCH') {
-        if (!isRoot) fail('forbidden', 'Acesso exclusivo de TI.', 403);
         const uid = Number(path.split('/')[4]);
+        await managementTarget(uid);
         const body = await request.json();
+        if(!isRoot&&body.platform_admin!==undefined)fail('forbidden','Somente TI pode conceder ou remover acesso de TI.',403);
+        for(const field of ['active','pastor','platform_admin'])if(body[field]!==undefined&&typeof body[field]!=='boolean')fail('user','Valor de permissão inválido.');
+        if(body.password!==undefined&&(typeof body.password!=='string'||body.password.length<12||body.password.length>128))fail('password','Use uma senha de 12 a 128 caracteres.');
+        if(uid===user.id&&(body.active===false||body.pastor!==undefined||body.platform_admin===false))fail('self','Não é possível remover seu próprio acesso.');
+        if(await db.first('SELECT user_id FROM user_archives WHERE user_id=?',[uid]))fail('archive','Restaure a conta antes de alterar acessos.');
         if (body.active !== undefined) {
           await db.run('UPDATE users SET active=? WHERE id=?', [body.active ? 1 : 0, uid]);
           if (!body.active) await db.run('DELETE FROM sessions WHERE user_id=?', [uid]);
@@ -2418,6 +2455,7 @@ export default {
         if (body.password) {
           if (String(body.password).length < 12) fail('password', 'Use pelo menos 12 caracteres.');
           await db.run('UPDATE users SET password=? WHERE id=?', [passwordHash(String(body.password)), uid]);
+          await db.run('DELETE FROM sessions WHERE user_id=?',[uid]);
         }
         await writeAudit(db, user.id, `user_updated:${uid}`, null, ip);
         return jsonResp({ ok: true });
