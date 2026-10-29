@@ -1,0 +1,8 @@
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/app-release.json
+  Cache-Control: no-store
+
+/sw.js
+  Cache-Control: no-store

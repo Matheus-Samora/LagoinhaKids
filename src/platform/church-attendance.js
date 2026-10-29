@@ -1,5 +1,3 @@
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {guardForm} from '../form-lifecycle.js';
 import {uiIcon} from '../ui/icons.js';
 import './church-attendance.css';
@@ -190,9 +188,11 @@ export function churchAttendanceUI({api,e}){
   const form=d.querySelector('form');
 
   // Initialize Leaflet Map
-  setTimeout(()=>{
+  setTimeout(async()=>{
    const mapContainer=d.querySelector('#ca-edit-map');
    if(!mapContainer)return;
+   let L;try{({L}=await import('./map-library.js'));}catch{mapContainer.textContent='O mapa não carregou. Você ainda pode informar endereço, latitude e longitude nos campos abaixo.';return;}
+   if(!d.isConnected||!d.open)return;
 
    const map=L.map(mapContainer,{center:[initLat,initLon],zoom:16,attributionControl:false});
 
@@ -219,6 +219,7 @@ export function churchAttendanceUI({api,e}){
    const circle=L.circle([initLat,initLon],{radius:initRad,color:'#e11d48',fillColor:'#f43f5e',fillOpacity:0.18,weight:2}).addTo(map);
 
    let revTimer=null;
+   d.addEventListener('close',()=>{clearTimeout(revTimer);map.remove();},{once:true});
    function updateCoords(lat,lon,shouldReverse=true){
     marker.setLatLng([lat,lon]);
     circle.setLatLng([lat,lon]);
@@ -233,6 +234,7 @@ export function churchAttendanceUI({api,e}){
     if(shouldReverse){
      clearTimeout(revTimer);
      revTimer=setTimeout(async()=>{
+      if(!d.isConnected||!d.open)return;
       try{
        const rev=await api(base+'/reverse-geocode?lat='+lat+'&lon='+lon);
        if(rev){
@@ -331,6 +333,7 @@ export function churchAttendanceUI({api,e}){
      centerBtn.disabled=true;
      try{
       const p=await locate();
+      if(!d.isConnected||!d.open)return;
       map.setView([p.coords.latitude,p.coords.longitude],17);
       updateCoords(p.coords.latitude,p.coords.longitude,true);
      }catch(err){

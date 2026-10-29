@@ -201,6 +201,7 @@ function login(message='',prefillEmail=''){
 
 
 let pagingWatcherTimer = null;
+let pagingCheckBusy=false;
 const silencedCalls = new Set();
 
 function isMobileClientDevice() {
@@ -214,7 +215,7 @@ function isMobileClientDevice() {
 }
 
 async function checkActiveEmergencyPaging() {
-  if (!identity?.user) return;
+  if (!identity?.user||document.hidden||navigator.onLine===false||pagingCheckBusy) return;
 
   // Sync user info with native Android Background Service
   if (window.AndroidNativeApp) {
@@ -232,8 +233,10 @@ async function checkActiveEmergencyPaging() {
     return;
   }
 
+  pagingCheckBusy=true;const uid=identity.user.id;
   try {
     const list = await api('/paging/active');
+    if(identity?.user?.id!==uid||document.hidden)return;
     if (!Array.isArray(list)) return;
     const myUserId = Number(identity.user.id || 0);
     const isAdmin = Boolean(identity.platform_admin || identity.user.role === 'admin' || identity.pastor);
@@ -270,7 +273,7 @@ async function checkActiveEmergencyPaging() {
         }
       }
     }
-  } catch {}
+  } catch {} finally {pagingCheckBusy=false;}
 }
 
 function startPagingWatcher() {
@@ -1177,6 +1180,7 @@ async function refreshNoticeBadge(){
 }
 let lastBadgeSync=Date.now();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastBadgeSync>=300000){lastBadgeSync=Date.now();void refreshNoticeBadge();}});
+setInterval(()=>{if(identity&&!document.hidden&&navigator.onLine!==false){lastBadgeSync=Date.now();void refreshNoticeBadge();}},60000);
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',event=>{
  if(event.data?.type==='NEW_NOTICE'){void refreshNoticeBadge();noticeCenter.notify();}
 });

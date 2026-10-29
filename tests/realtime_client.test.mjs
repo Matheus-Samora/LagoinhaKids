@@ -12,6 +12,13 @@ globalThis.EventSource = class extends EventTarget {
 };
 const {RealtimeClient, realtime} = await import('../src/platform/realtime.js');
 
+test('polling-only server does not open or repeatedly reconnect an empty SSE stream',async()=>{
+ let requests=0;globalThis.fetch=async()=>{requests++;return {ok:true,status:200,json:async()=>({enabled:false,mode:'polling'})};};
+ const client=new RealtimeClient();const previous=sources.length;
+ await client.connect('csrf');window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));
+ assert.equal(client.mode,'polling');assert.equal(client.enabled,false);assert.equal(client.es,null);assert.equal(client.reconnectTimer,null);assert.equal(sources.length,previous);assert.equal(requests,1);client.disconnect();
+});
+
  test('stream uses a scoped ticket, preserves native bearer only in request header', async () => {
   let request;
   globalThis.fetch=async (url,options) => {request={url,options};return {ok:true,status:200,json:async()=>({ticket:'short-ticket'})};};

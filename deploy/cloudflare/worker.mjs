@@ -1247,18 +1247,19 @@ export default {
       // REALTIME SYNC & SNAPSHOT PIPELINE
       // ==========================================
       if (path === '/api/sync' && method === 'GET') {
-        const maxAudit = await db.scalar('SELECT coalesce(max(id), 0) FROM audit');
-        const noticeInfo = await db.first('SELECT coalesce(max(id), 0) as max_id, coalesce(max(read_at), "") as read_stamp FROM notifications WHERE user_id=?', [user.id]);
-        const activePagingCount = await db.scalar("SELECT count(*) FROM paging_requests WHERE status IN ('active','on_my_way')");
-        const activePagingMax = await db.scalar("SELECT coalesce(max(id), 0) FROM paging_requests WHERE status IN ('active','on_my_way')");
+        const state=await db.first(`SELECT (SELECT coalesce(max(id),0) FROM audit) max_audit,
+          (SELECT coalesce(max(id),0) FROM notifications WHERE user_id=?) notice_id,
+          (SELECT coalesce(max(read_at),'') FROM notifications WHERE user_id=?) read_stamp,
+          count(*) paging_count,coalesce(max(id),0) paging_max FROM paging_requests WHERE status IN ('active','on_my_way')`,[user.id,user.id]);
         const currentMinute = Math.floor(Date.now() / 60000);
-        const raw = `${maxAudit}|${noticeInfo?.max_id || 0}|${noticeInfo?.read_stamp || ''}|${activePagingCount}|${activePagingMax}|${currentMinute}`;
+        const raw = `${state.max_audit}|${state.notice_id}|${state.read_stamp}|${state.paging_count}|${state.paging_max}|${currentMinute}`;
         const revision = sha256Hex(raw);
         return jsonResp({ revision });
       }
 
       if (path === '/api/snapshot' && method === 'GET') {
         const day = todayStr();
+        const parentOnly=user.role==='parent'&&!isGlobal;
         const childRows = await db.all(`
           SELECT ch.*, r.name as room_name, r.color as room_color, u.name as parent_name, u.phone as parent_phone, u.email as parent_email,
             a.status as attendance_status, a.in_at, a.out_at, a.guardian, a.claim_code, a.checkout_guardian
@@ -1266,9 +1267,9 @@ export default {
           LEFT JOIN rooms r ON r.id=ch.room_id
           LEFT JOIN users u ON u.id=ch.parent_id
           LEFT JOIN attendance a ON a.child_id=ch.id AND a.day=?
-          WHERE ch.archived=0
+          WHERE ch.archived=0 ${parentOnly?'AND ch.parent_id=?':''}
           ORDER BY ch.name
-        `, [day]);
+        `, [day,...(parentOnly?[user.id]:[])]);
 
         const filteredChildren = user.role === 'parent' && !isGlobal
           ? childRows.filter(r => Number(r.parent_id) === user.id)
@@ -4605,10 +4606,10 @@ export default {
       }
 
       if (path === '/api/realtime/status' && method === 'GET') {
-        return jsonResp({ status: 'ok', low_cost_mode: true });
+        return jsonResp({ status: 'ok', low_cost_mode: true, streaming:false });
       }
       if (path === '/api/realtime/ticket' && method === 'POST') {
-        return jsonResp({ ticket: 'cloudflare-d1', expires_in: 60 });
+        return jsonResp({ enabled:false, mode:'polling' });
       }
       if (path === '/api/realtime/stream' && method === 'GET') {
         return new Response('event: connected\ndata: {"status":"connected","mode":"cloudflare-d1"}\n\n', {

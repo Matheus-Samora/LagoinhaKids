@@ -92,6 +92,7 @@ export class RealtimeClient {
     this.apiOrigin = '';
     this.bearerToken = '';
     this.enabled = false;
+    this.mode = 'stream';
     this.generation = 0;
     this._listeners = new Map();
     this.lastEventTime = Date.now();
@@ -125,8 +126,12 @@ export class RealtimeClient {
       if (generation !== this.generation) return;
       if (response.status === 401 || response.status === 403) { this.disconnect(); return; }
       if (!response.ok) throw new Error('Realtime unavailable');
-      const {ticket} = await response.json();
+      const config = await response.json();
       if (generation !== this.generation) return;
+      if(config.enabled===false){this.mode='polling';this.disconnect();return;}
+      this.mode='stream';
+      const {ticket}=config;
+      if(typeof ticket!=='string'||!ticket)throw new Error('Realtime unavailable');
       this.es = new EventSource(`${base}/api/realtime/stream?ticket=${encodeURIComponent(ticket)}`, { withCredentials: true });
     } catch {
       if (generation !== this.generation) return;
@@ -260,9 +265,9 @@ export class RealtimeClient {
   _updateStatusDOM(isConnected) {
     document.querySelectorAll('[data-realtime-status]').forEach(el => {
       el.classList.toggle('is-connected', isConnected);
-      el.setAttribute('title', isConnected ? 'Tempo real ativo (ao vivo)' : 'Reconectando em tempo real...');
+      el.setAttribute('title', this.mode==='polling'?'Atualização periódica, sem conexão persistente':isConnected ? 'Tempo real ativo (ao vivo)' : 'Reconectando em tempo real...');
       const text = el.querySelector('.realtime-text');
-      if (text) text.textContent = isConnected ? 'Ao vivo' : 'Conectando…';
+      if (text) text.textContent = this.mode==='polling'?'Atualização automática':isConnected ? 'Ao vivo' : 'Conectando…';
     });
   }
 }
