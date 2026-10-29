@@ -7,7 +7,7 @@
     <title>Lagoinha Kids · Cuidado que conecta</title>
     <meta name="description" content="Turmas, presença e comunicação com as famílias no Lagoinha Kids." />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/app-icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,21 +21,5 @@
     <div id="toast" role="status" aria-live="polite"></div>
     <dialog id="modal"><div id="modal-content"></div></dialog>
     <script type="module" src="/src/main.js"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-            navigator.serviceWorker.getRegistrations().then((regs) => {
-              for (const r of regs) r.unregister();
-            });
-            if ('caches' in window) {
-              caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
-            }
-          } else {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-          }
-        });
-      }
-    </script>
   </body>
 </html>

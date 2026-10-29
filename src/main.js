@@ -1,4 +1,5 @@
 import {readApiResponse} from './api-response.js';
+import {installHelp} from './install-help.js';
 import {startAppUpdates} from './app-updates.js';
 startAppUpdates();
 import {presentNativeCall,updateNativeCallReadiness} from './native-call-alerts.js';
@@ -14,6 +15,9 @@ import {generateQR, openScannerModal, initUSBScannerListener} from './scanner.js
 import './style.css';
 import './mobile.css';
 import './auth.css';
+import './device-compat.css';
+import {initializeDeviceRuntime} from './device-runtime.js';
+initializeDeviceRuntime();
 import {Capacitor} from '@capacitor/core';
 import {Camera,CameraResultType,CameraSource,CameraDirection} from '@capacitor/camera';
 import {App} from '@capacitor/app';
@@ -472,7 +476,7 @@ async function privacyModal(){
 async function installModal(){
  const appUrl=S.apiOrigin||location.origin;
  const installQr=await generateQR(appUrl);
- showModal('Baixar ou Instalar o App','Tenha o aplicativo no seu celular com acesso rápido e notificações.',`<div class="install-guide">
+ showModal('Baixar ou Instalar o App','Acesso rápido no celular e no computador.',`<p class="install-guidance">${escape(installHelp({userAgent:navigator.userAgent,platform:navigator.platform,touchPoints:navigator.maxTouchPoints,native:NATIVE}))}</p><p class="install-guidance">Chamados nativos com toque e tela de atendimento estão disponíveis no APK Android. O portal web não oferece esse mesmo recurso no iPhone ou computador.</p><div class="install-guide">
   <div class="install-option-card" style="text-align:center;background:#09090b;color:#ffffff;border:1px solid #27272a;">
    <div class="install-option-head" style="justify-content:center;"><h3 style="color:#ffffff;">📱 Aponte a Câmera do Celular</h3></div>
    <p style="color:#d4d4d8;font-size:13px;margin:4px 0 12px;">Escaneie o QR Code abaixo com a câmera do seu celular para abrir e instalar o aplicativo:</p>
@@ -1937,6 +1941,11 @@ function promptPushPermissionModal(){
 
 async function requestNotificationPermission(explicit=true){
   if(NATIVE){await enablePush();return hasPushPermission();}
+
+  try{
+    const config=await api('/web-push/config');
+    if(!config.enabled){toast('Avisos externos do portal ainda não estão disponíveis neste servidor. Consulte a central de notificações dentro do aplicativo.',true);return false;}
+  }catch(err){toast(err.message,true);return false;}
 
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
   const isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;

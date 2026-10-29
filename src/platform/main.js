@@ -1,4 +1,6 @@
 import {readApiResponse} from '../api-response.js';
+import {Capacitor} from '@capacitor/core';
+import {App} from '@capacitor/app';
 import {startAppUpdates} from '../app-updates.js';
 startAppUpdates();
 import {updateNativeCallReadiness} from '../native-call-alerts.js';
@@ -15,6 +17,9 @@ import {uiIcon} from '../ui/icons.js';
 import {recoveryScreen} from './recovery.js';
 if(location.pathname==='/'&&['overview','children','rooms','attendance','events','lessons','notifications','settings','users','team'].includes(location.hash.slice(1)))location.replace('/kids'+location.hash);
 import './style.css';
+import '../device-compat.css';
+import {initializeDeviceRuntime} from '../device-runtime.js';
+initializeDeviceRuntime();
 import {subscribeWebPush} from '../web-push.js';
 import {createSectors} from './sectors.js';
 import {sectorEmblem,ministryEmblem,MINISTRY_META,openAppDownloadQrModal} from './emblems.js';
@@ -1138,7 +1143,6 @@ const resetToken=new URLSearchParams(location.search).get('reset')||new URLSearc
 if(resetToken){history.replaceState(null,'',location.pathname);recoveryScreen({root,api,e,login,token:resetToken});}
 else {try{const me=await api('/me');csrf=me.csrf;await load();}catch{login();}}
 
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 function updateTopBadge(count){
  const button=root.querySelector('#topbar-notif-btn');if(!button)return;
@@ -1191,6 +1195,21 @@ realtime.on('ministries:my_schedule',()=>void communityRefresh.request());
 realtime.on('announcement:new',()=>void communityRefresh.request());
 
 window.addEventListener('hashchange',()=>{if(!identity)return;activeSectionTab=location.hash.slice(1).split('/')[0]||'all';render();});
+
+// Android Back must close a dialog before leaving the current screen.
+if(Capacitor.isNativePlatform()){
+ let previousBack=0;
+ App.addListener('backButton',()=>{
+  const dialog=[...document.querySelectorAll('dialog[open]')].at(-1);
+  if(dialog){dialog.close();return;}
+  if(document.getElementById('emergency-call-overlay'))return;
+  if(hasPendingForms()){showRealtimeToast({title:'Alterações pendentes',message:'Salve ou cancele as alterações antes de voltar.'});return;}
+  if(identity&&activeSectionTab!=='all'){activeSectionTab='all';history.replaceState({},'',location.pathname+location.search+'#all');render();return;}
+  const now=Date.now();
+  if(now-previousBack<2500){App.exitApp();return;}
+  previousBack=now;showRealtimeToast({title:'Sair do aplicativo',message:'Pressione voltar novamente para sair.'});
+ });
+}
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkActiveEmergencyPaging(); });
 window.addEventListener('focus', () => void checkActiveEmergencyPaging());

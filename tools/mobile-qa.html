@@ -1,0 +1,11 @@
+<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Teste local de perfil — dados sintéticos</title><body><main><h1>Perfil: teste local isolado</h1><button id="open">Abrir perfil de teste</button></main><script type="module">
+import '../src/platform/style.css';
+import '../src/device-compat.css';
+import {initializeDeviceRuntime} from '../src/device-runtime.js';
+import {accountProfileUI} from '../src/account-profile.js';
+initializeDeviceRuntime();
+const user={name:'Perfil de teste',email:'qa@example.test',phone:'',birthday:'',family_id:'',bio:'',profession:''};
+const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const editor=accountProfileUI({api:async(path,options)=>{if(path!=='/me/profile')throw new Error('Apenas o perfil sintético é permitido.');return {user,families:[]};},e:escape});
+document.getElementById('open').onclick=()=>editor.open();
+</script></body></html>

@@ -1,0 +1,26 @@
+/* Shared by Kids and Systems, including the installed WebView. */
+:root{--app-visible-height:100dvh}
+html{scroll-padding-top:calc(72px + env(safe-area-inset-top,0px))}
+body{overflow-wrap:break-word}
+button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid #d97706;outline-offset:3px}
+dialog{max-width:calc(100vw - 24px);max-height:calc(var(--app-visible-height) - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box}
+dialog.account-profile-dialog{height:min(870px,calc(var(--app-visible-height) - 24px));max-height:calc(var(--app-visible-height) - 24px)}
+.auth-screen{min-height:var(--app-visible-height);padding-top:calc(24px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.auth-footer a{display:inline-flex;align-items:center;min-height:44px}
+[data-theme="dark"] .auth-footer a{color:#fbbf24}
+#device-offline-banner{position:fixed;top:env(safe-area-inset-top,0px);left:12px;right:12px;z-index:10030;padding:12px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 4px 20px #0003;font:14px/1.5 system-ui;text-align:center;pointer-events:none}
+.install-guidance{line-height:1.6;font-size:14px;margin:12px 0;overflow-wrap:anywhere}
+@media(pointer:coarse){
+ button,a.button,.aux-btn,.aux-lang-select,input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select{min-height:44px}
+ input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}
+ .topbar .topbar-icon-btn,.topbar .topbar-action-pill{min-width:44px;min-height:44px}
+ input,select,textarea{scroll-margin-block:96px}
+}
+@media(max-width:768px){
+ input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}
+ .auth-card{box-sizing:border-box;max-width:100%}
+ .platform-bottom-nav,.mobile-bottom-nav{padding-bottom:env(safe-area-inset-bottom,0px)}
+}
+@media(max-height:550px){.auth-screen{align-items:start;place-items:start center}.auth-card{margin-block:0}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

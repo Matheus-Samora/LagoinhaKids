@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import {installHelp} from '../install-help.js';
 
 import {uiIcon} from '../ui/icons.js';
 
@@ -163,9 +164,11 @@ export async function openAppDownloadQrModal() {
   dlg.innerHTML = `
     <div class="sector-modal app-qr-modal-content">
       <div class="section-title" style="margin-bottom:12px;">
-        <h2 style="margin:0;">Instalar App no Celular</h2>
+        <h2 style="margin:0;">Instalar aplicativo</h2>
         <button type="button" class="secondary" id="close-app-qr-btn">Fechar</button>
       </div>
+      <p class="install-guidance">${installHelp({userAgent:navigator.userAgent,platform:navigator.platform,touchPoints:navigator.maxTouchPoints,native:Boolean(window.AndroidNativeApp)})}</p>
+      <p class="install-guidance">O portal funciona no celular e no computador. Chamados nativos com toque e tela de atendimento estão disponíveis no APK Android; o site instalado no iPhone não oferece esse mesmo recurso.</p>
       <div class="qr-cards-grid">
         <article class="qr-download-card">
           <span class="badge">🌐 App Web (iOS & Android)</span>
