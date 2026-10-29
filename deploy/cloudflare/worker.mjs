@@ -1448,6 +1448,7 @@ export default {
       }
 
       if (path === '/api/platform/audit' && method === 'GET') {
+        if(!isRoot)fail('forbidden','Acesso exclusivo de TI.',403);
         const security_logs = await db.all("SELECT a.id,a.action,a.created_at,coalesce(u.name,'Sistema') actor_name,coalesce(u.email,'') actor_email FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.id DESC LIMIT 120");
         const module_logs = await db.all("SELECT mc.id,mc.module,mc.record_id,mc.action,mc.created_at,coalesce(u.name,'Sistema') actor_name FROM module_changes mc LEFT JOIN users u ON u.id=mc.actor ORDER BY mc.created_at DESC LIMIT 120");
         return jsonResp({ security_logs, module_logs });
