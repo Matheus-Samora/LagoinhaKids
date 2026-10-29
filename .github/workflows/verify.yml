@@ -89,9 +89,10 @@ jobs:
       - run: python -m pip install -r backend/requirements.txt
       - run: python -m pytest -q
       - run: npm ci
-      - run: node --test tests/realtime_client.test.mjs tests/api_response.test.mjs tests/lockfile.test.mjs tests/church_attendance_client.test.mjs tests/cloudflare_paging.test.mjs tests/native_call_alerts.test.mjs
+      - run: node --test tests/realtime_client.test.mjs tests/api_response.test.mjs tests/lockfile.test.mjs tests/church_attendance_client.test.mjs tests/cloudflare_paging.test.mjs tests/native_call_alerts.test.mjs tests/app_updates.test.mjs
       - run: node tests/notification-behavior.mjs
       - run: node tests/material-upload.mjs
       - run: node tests/participants-modal.mjs
       - run: npm run build
       - run: npm audit --omit=dev
+

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "build:server": "vite build --mode server",
     "mobile:android": "npm run build && cap sync android",
     "mobile:ios": "npm run build && cap sync ios"
   },

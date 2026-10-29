@@ -1,4 +1,6 @@
 import {readApiResponse} from './api-response.js';
+import {startAppUpdates} from './app-updates.js';
+startAppUpdates();
 import {presentNativeCall,updateNativeCallReadiness} from './native-call-alerts.js';
 import {churchAttendanceUI} from './platform/church-attendance.js';
 import {hasPendingForms} from './form-lifecycle.js';
